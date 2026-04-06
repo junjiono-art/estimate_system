@@ -194,19 +194,24 @@ export default function UnitPricePage() {
                   className="h-7 w-48 pl-8 text-xs"
                 />
               </div>
-              <Select
-                value={category}
-                onValueChange={(v) => { setCategory(v as Category); resetPage() }}
-              >
-                <SelectTrigger className="h-7 w-40 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="すべて" className="text-xs">すべて</SelectItem>
-                  <SelectItem value="ランニングコスト" className="text-xs">ランニングコスト</SelectItem>
-                  <SelectItem value="投資コスト" className="text-xs">投資コスト</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  カテゴリ
+                </label>
+                <Select
+                  value={category}
+                  onValueChange={(v) => { setCategory(v as Category); resetPage() }}
+                >
+                  <SelectTrigger className="h-7 w-40 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="すべて" className="text-xs">すべて</SelectItem>
+                    <SelectItem value="ランニングコスト" className="text-xs">ランニングコスト</SelectItem>
+                    <SelectItem value="投資コスト" className="text-xs">投資コスト</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* テーブル */}
