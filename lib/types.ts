@@ -2,6 +2,17 @@
 // 試算アプリ共通の型定義（UIプロトタイプ用モックデータ含む）
 // ============================================================
 
+/** 単価マスタ */
+export interface UnitPrice {
+  id: string
+  category: "ランニングコスト" | "投資コスト"
+  label: string
+  unit: string        // 単位ラベル（例: "円/月", "円/台", "円/坪"）
+  defaultAmount: number
+  currentAmount: number
+  note: string
+}
+
 /** マシン種類マスタ */
 export interface MachineType {
   id: string
