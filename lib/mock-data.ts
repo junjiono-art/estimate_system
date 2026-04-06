@@ -8,8 +8,94 @@ import type {
 } from "./types"
 
 // ──────────────────────────────────────────────
-// マシン種類マスタ
+// 市区町村別 年齢・性別人口統計データ（モック）
+// 実際の実装では e-Stat API 等を利用する
 // ──────────────────────────────────────────────
+export interface AgeGenderPopulation {
+  ageGroup: string // 年齢帯ラベル（例: "20-24歳"）
+  male: number     // 男性人口（人）
+  female: number   // 女性人口（人）
+}
+
+export interface CityDemographics {
+  city: string    // 市区町村名
+  prefecture: string
+  totalPopulation: number
+  data: AgeGenderPopulation[]
+}
+
+const AGE_GROUPS = [
+  "0-4歳", "5-9歳", "10-14歳", "15-19歳",
+  "20-24歳", "25-29歳", "30-34歳", "35-39歳",
+  "40-44歳", "45-49歳", "50-54歳", "55-59歳",
+  "60-64歳", "65-69歳", "70-74歳", "75-79歳",
+  "80歳以上",
+]
+
+function makeDemographics(
+  city: string,
+  prefecture: string,
+  baseMale: number[],
+  baseFemale: number[],
+): CityDemographics {
+  const data: AgeGenderPopulation[] = AGE_GROUPS.map((ageGroup, i) => ({
+    ageGroup,
+    male: baseMale[i],
+    female: baseFemale[i],
+  }))
+  const totalPopulation = data.reduce((s, d) => s + d.male + d.female, 0)
+  return { city, prefecture, totalPopulation, data }
+}
+
+export const cityDemographicsData: CityDemographics[] = [
+  makeDemographics("渋谷区", "東京都",
+    [3200, 3100, 3300, 5800, 11200, 13500, 12800, 11600, 12100, 11800, 10200, 8900, 7500, 6400, 5800, 4100, 5200],
+    [3000, 2950, 3100, 5200, 12800, 14200, 13100, 11900, 12400, 12100, 10600, 9300, 7900, 7200, 7100, 5800, 9500],
+  ),
+  makeDemographics("新宿区", "東京都",
+    [4100, 4000, 4200, 7200, 14800, 16200, 15100, 13800, 14200, 13900, 12100, 10500, 8900, 7600, 6900, 4900, 6200],
+    [3900, 3800, 3900, 6600, 15500, 17100, 15800, 14200, 14700, 14400, 12800, 11200, 9600, 9000, 8800, 7200, 12100],
+  ),
+  makeDemographics("世田谷区", "東京都",
+    [15200, 15800, 15300, 13100, 19800, 21500, 22100, 21800, 22500, 21200, 18900, 16500, 14200, 13100, 12400, 8800, 11200],
+    [14500, 15100, 14700, 12600, 20500, 22400, 23200, 22800, 23500, 22100, 19800, 17400, 15200, 15000, 15600, 12500, 21800],
+  ),
+  makeDemographics("中央区", "大阪府",
+    [2800, 2700, 2900, 4500, 9800, 12100, 11500, 10800, 11200, 10900, 9500, 8200, 6900, 5800, 5200, 3700, 4700],
+    [2600, 2550, 2700, 4100, 10500, 12800, 12100, 11300, 11800, 11500, 10100, 8900, 7500, 6900, 6800, 5500, 9100],
+  ),
+  makeDemographics("北区", "大阪府",
+    [5800, 5700, 5900, 8200, 14500, 16800, 15900, 14600, 15100, 14700, 12800, 11200, 9500, 8200, 7400, 5200, 6700],
+    [5500, 5400, 5600, 7600, 15200, 17600, 16700, 15300, 15900, 15500, 13600, 12100, 10400, 9900, 9600, 7800, 13200],
+  ),
+  makeDemographics("名古屋市中区", "愛知県",
+    [2200, 2100, 2300, 3800, 8500, 10200, 9600, 8900, 9200, 8900, 7800, 6700, 5700, 4800, 4300, 3000, 3800],
+    [2100, 2000, 2100, 3400, 9100, 10800, 10100, 9400, 9700, 9400, 8300, 7200, 6200, 5900, 5700, 4600, 7600],
+  ),
+  makeDemographics("博多区", "福岡県",
+    [8200, 7900, 8100, 10500, 17800, 20500, 19200, 17800, 18400, 17900, 15600, 13600, 11500, 9900, 8900, 6300, 8100],
+    [7800, 7500, 7700, 9800, 18500, 21400, 20100, 18700, 19300, 18800, 16500, 14600, 12500, 12100, 12000, 9800, 16500],
+  ),
+  makeDemographics("札幌市中央区", "北海道",
+    [4500, 4400, 4600, 6500, 11200, 13100, 12400, 11500, 11900, 11600, 10100, 8800, 7500, 6400, 5800, 4100, 5200],
+    [4300, 4200, 4400, 6100, 11900, 13900, 13100, 12200, 12600, 12300, 10800, 9500, 8200, 8000, 8100, 6500, 11000],
+  ),
+]
+
+/** 市区町村名から人口統計データを検索（部分一致対応） */
+export function findCityDemographics(cityName: string): CityDemographics | null {
+  if (!cityName) return null
+  const normalized = cityName.trim()
+  // 完全一致を優先
+  const exact = cityDemographicsData.find((d) => d.city === normalized)
+  if (exact) return exact
+  // 部分一致
+  const partial = cityDemographicsData.find(
+    (d) => normalized.includes(d.city) || d.city.includes(normalized),
+  )
+  return partial ?? null
+}
+
 export const machineTypes: MachineType[] = [
   { id: "m1", name: "トレッドミル", category: "有酸素", unitPrice: 800000, monthlyMaintenance: 5000 },
   { id: "m2", name: "エアロバイク", category: "有酸素", unitPrice: 400000, monthlyMaintenance: 3000 },
@@ -106,6 +192,7 @@ function generateMonthlyProjection(
 interface DemoBase {
   id: string
   storeName: string
+  location?: string
   createdAt: string
   createdBy: string
   machinesCost: number
@@ -124,6 +211,7 @@ const demoBases: DemoBase[] = [
   {
     id: "sim-1",
     storeName: "FitGym 渋谷店",
+    location: "東京都渋谷区渋谷1-1-1 ○○ビル3F",
     createdAt: "2026-02-28T10:00:00Z",
     createdBy: "田中太郎",
     machinesCost: 12000000,
@@ -140,6 +228,7 @@ const demoBases: DemoBase[] = [
   {
     id: "sim-2",
     storeName: "FitGym 新宿店",
+    location: "東京都新宿区新宿3-2-1 ○○タワー5F",
     createdAt: "2026-02-20T14:30:00Z",
     createdBy: "鈴木花子",
     machinesCost: 10000000,
@@ -156,6 +245,7 @@ const demoBases: DemoBase[] = [
   {
     id: "sim-3",
     storeName: "FitGym 世田谷店",
+    location: "東京都世田谷区三軒茶屋1-5-2 ○○ビル2F",
     createdAt: "2026-01-15T09:00:00Z",
     createdBy: "田中太郎",
     machinesCost: 8000000,
@@ -180,6 +270,7 @@ function buildResult(base: DemoBase, scenario: ScenarioType): SimulationResult {
   return {
     id: `${base.id}-${scenario}`,
     storeName: base.storeName,
+    location: base.location,
     createdAt: base.createdAt,
     createdBy: base.createdBy,
     scenario,
