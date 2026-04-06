@@ -66,6 +66,8 @@ export type ScenarioType = "conservative" | "standard" | "aggressive"
 export interface SimulationResult {
   id: string
   storeName: string
+  /** 住所（市区町村の人口統計表示に使用） */
+  location?: string
   createdAt: string
   createdBy: string
   scenario: ScenarioType

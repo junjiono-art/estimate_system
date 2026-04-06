@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { KpiCards } from "./kpi-cards"
 import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
+import { DemographicsView } from "./demographics-view"
 import { StarRating } from "@/components/star-rating"
 import type { SimulationResult, ScenarioType } from "@/lib/types"
 import { SCENARIO_LABELS, getResultsByBaseId } from "@/lib/mock-data"
@@ -187,12 +188,18 @@ export function ResultTabs({ data: initialData }: ResultTabsProps) {
           <TabsTrigger value="dashboard" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             ダッシュボード
           </TabsTrigger>
+          <TabsTrigger value="demographics" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            エリア人口統計
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="chart" className="mt-4">
           <ChartTableView data={filteredData} />
         </TabsContent>
         <TabsContent value="dashboard" className="mt-4">
           <DashboardView data={filteredData} />
+        </TabsContent>
+        <TabsContent value="demographics" className="mt-4">
+          <DemographicsView data={currentData} />
         </TabsContent>
       </Tabs>
     </div>
