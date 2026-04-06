@@ -26,6 +26,35 @@ import { cn } from "@/lib/utils"
 
 interface SimulationFormProps {
   onSubmit?: () => void
+  onSubmitWithData?: (data: FormSubmitData) => void
+}
+
+export type FormSubmitData = {
+  storeInfo: {
+    storeName: string
+    address: string
+    floorArea: number
+    rentPerTsubo: number
+    memberCapacity: number
+  }
+  demographics?: {
+    municipality: {
+      prefecture: string
+      city: string
+      areaCode: string
+    }
+    bySex: {
+      male: number
+      female: number
+      total: number
+    }
+    byAgeGender: Array<{
+      ageGroup: string
+      male: number
+      female: number
+      total: number
+    }>
+  }
 }
 
 const TABS = [
@@ -38,10 +67,19 @@ type TabId = (typeof TABS)[number]["id"]
 
 const PAGE_SIZE = 5
 
+type DemographicRow = {
+  ageGroup: string
+  male: number
+  female: number
+  total: number
+}
+
 export function SimulationForm({ onSubmit }: SimulationFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState("")
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -114,9 +152,57 @@ export function SimulationForm({ onSubmit }: SimulationFormProps) {
   const isFirst = currentIndex === 0
   const isLast  = currentIndex === TABS.length - 1
 
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    setSubmitError("")
+
+    try {
+      const targetAddress = address.trim()
+      let demographics: FormSubmitData["demographics"] | undefined
+
+      if (targetAddress) {
+        const response = await fetch("/api/e-stat/demographics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: targetAddress }),
+        })
+
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(payload?.error || "人口統計データの取得に失敗しました。")
+        }
+
+        demographics = payload
+      }
+
+      const formData: FormSubmitData = {
+        storeInfo: {
+          storeName,
+          address,
+          floorArea: parseInt(floorArea) || 0,
+          rentPerTsubo: parseInt(rentPerTsubo) || 0,
+          memberCapacity: parseInt(memberCapacity) || 0,
+        },
+        demographics,
+      }
+
+      onSubmit?.()
+      // TODO: onSubmitWithData(formData) へ切り替え時に呼ぶ      
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "送信に失敗しました。")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+
+
+
+
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit?.() }}
+      onSubmit={handleFormSubmit}
       className="flex flex-col gap-5"
     >
       {/* ── タブナビ ── */}
