@@ -116,6 +116,12 @@ importers:
       input-otp:
         specifier: 1.4.2
         version: 1.4.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      jp-city-lookup:
+        specifier: ^0.2.6
+        version: 0.2.6
+      jp-pref-lookup:
+        specifier: ^0.2.10
+        version: 0.2.10
       lucide-react:
         specifier: ^0.564.0
         version: 0.564.0(react@19.2.4)
@@ -1415,6 +1421,12 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  jp-city-lookup@0.2.6:
+    resolution: {integrity: sha512-/eo0E8N9fdg5RJOoRmPvhHaQZC6pskEF0FNUFljhCA5S5XOSpXZqRgWLsIUSXGP1DUz/pwAthR22gG++Ijotyw==}
+
+  jp-pref-lookup@0.2.10:
+    resolution: {integrity: sha512-hJjcLob70X5cix0O19L4cqctLneE463q7n+Ymr6zyLmcU1GUHvHwWbH9LqcBTaKWkqEjnxtUXsezLNJfozj4Qw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -2878,6 +2890,10 @@ snapshots:
   internmap@2.0.3: {}
 
   jiti@2.6.1: {}
+
+  jp-city-lookup@0.2.6: {}
+
+  jp-pref-lookup@0.2.10: {}
 
   js-tokens@4.0.0: {}
 

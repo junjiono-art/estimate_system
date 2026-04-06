@@ -8,7 +8,18 @@ import {
 } from "recharts"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  PaginationEllipsis,
+} from "@/components/ui/pagination"
 import type { SimulationResult } from "@/lib/types"
+
+const ROWS_PER_PAGE = 12
 
 interface ChartTableViewProps {
   data: SimulationResult
@@ -28,6 +39,7 @@ type ViewMode = "monthly" | "yearly"
 
 export function ChartTableView({ data }: ChartTableViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("monthly")
+  const [currentPage, setCurrentPage] = useState(1)
 
   // 月次データ
   const monthlyChartData = data.monthlyProjection.map((m) => ({
@@ -71,12 +83,36 @@ export function ChartTableView({ data }: ChartTableViewProps) {
         cumulativeProfit: y.累積利益,
       }))
 
+  const totalPages = Math.ceil(tableData.length / ROWS_PER_PAGE)
+  const pagedTableData = tableData.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE,
+  )
+
+  // viewMode 切替時はページをリセット
+  function handleViewModeChange(v: ViewMode) {
+    setViewMode(v)
+    setCurrentPage(1)
+  }
+
+  function getPageNumbers(total: number, current: number): (number | "ellipsis")[] {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+    const pages: (number | "ellipsis")[] = [1]
+    if (current > 3) pages.push("ellipsis")
+    for (let p = Math.max(2, current - 1); p <= Math.min(total - 1, current + 1); p++) {
+      pages.push(p)
+    }
+    if (current < total - 2) pages.push("ellipsis")
+    pages.push(total)
+    return pages
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* 月次/年次切替 */}
       <div className="flex items-center gap-3">
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">表示単位</span>
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+        <Tabs value={viewMode} onValueChange={(v) => handleViewModeChange(v as ViewMode)}>
           <TabsList className="h-7 rounded-md border border-border bg-muted/40 p-0.5">
             <TabsTrigger value="monthly" className="h-6 rounded px-3 text-[11px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
               月次
@@ -126,12 +162,16 @@ export function ChartTableView({ data }: ChartTableViewProps) {
         </div>
       </div>
 
-      {/* テーブル */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="border-b border-border px-5 py-3">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {viewMode === "monthly" ? "月次" : "年次"}明細データ
           </p>
+          {totalPages > 1 && (
+            <p className="text-[11px] text-muted-foreground">
+              {(currentPage - 1) * ROWS_PER_PAGE + 1}–{Math.min(currentPage * ROWS_PER_PAGE, tableData.length)} / {tableData.length}件
+            </p>
+          )}
         </div>
         <div className="overflow-auto">
           <Table>
@@ -145,7 +185,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tableData.map((row) => (
+              {pagedTableData.map((row) => (
                 <TableRow key={row.label} className="border-b border-border/50">
                   <TableCell className="font-mono text-xs text-muted-foreground">{row.label}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{(row.revenue / 10000).toLocaleString()}万</TableCell>
@@ -161,6 +201,52 @@ export function ChartTableView({ data }: ChartTableViewProps) {
             </TableBody>
           </Table>
         </div>
+
+        {/* ページネーション */}
+        {totalPages > 1 && (
+          <div className="border-t border-border px-5 py-3">
+            <Pagination>
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); setCurrentPage((p) => Math.max(1, p - 1)) }}
+                    className={currentPage === 1 ? "pointer-events-none opacity-40" : "cursor-pointer"}
+                    aria-disabled={currentPage === 1}
+                  />
+                </PaginationItem>
+
+                {getPageNumbers(totalPages, currentPage).map((page, idx) =>
+                  page === "ellipsis" ? (
+                    <PaginationItem key={`ellipsis-${idx}`}>
+                      <PaginationEllipsis />
+                    </PaginationItem>
+                  ) : (
+                    <PaginationItem key={page}>
+                      <PaginationLink
+                        href="#"
+                        isActive={page === currentPage}
+                        onClick={(e) => { e.preventDefault(); setCurrentPage(page) }}
+                        className="cursor-pointer text-xs"
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                )}
+
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); setCurrentPage((p) => Math.min(totalPages, p + 1)) }}
+                    className={currentPage === totalPages ? "pointer-events-none opacity-40" : "cursor-pointer"}
+                    aria-disabled={currentPage === totalPages}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
+        )}
       </div>
     </div>
   )
