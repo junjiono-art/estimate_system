@@ -4,6 +4,7 @@ import type {
   SimulationResult,
   ScenarioType,
   MasterValue,
+  Store,
 } from "./types"
 
 // ──────────────────────────────────────────────
@@ -151,11 +152,61 @@ export const masterValues: MasterValue[] = [
 // 出店済み店舗マスタ
 // ──────────────────────────────────────────────
 export const stores: Store[] = [
-  { id: "s1", name: "FitGym 渋谷店",     address: "東京都渋谷区渋谷1-1-1 ○○ビル3F",       openedAt: "2022-04-01", note: "フラッグシップ店舗" },
-  { id: "s2", name: "FitGym 新宿店",     address: "東京都新宿区新宿3-2-1 ○○タワー5F",      openedAt: "2022-10-15", note: "" },
-  { id: "s3", name: "FitGym 世田谷店",   address: "東京都世田谷区三軒茶屋1-5-2 ○○ビル2F", openedAt: "2023-03-01", note: "独立経営" },
-  { id: "s4", name: "FitGym 梅田店",     address: "大阪府大阪市北区梅田2-4-9 ○○ビル4F",   openedAt: "2023-07-20", note: "FC契約" },
-  { id: "s5", name: "FitGym 名古屋栄店", address: "愛知県名古屋市中区栄3-15-1 ○○センター2F", openedAt: "2024-01-10", note: "" },
+  {
+    id: "s1",
+    name: "FitGym 渋谷店",
+    address: "東京都渋谷区渋谷1-1-1 ○○ビル3F",
+    prefecture: "東京都",
+    city: "渋谷区",
+    latitude: 35.658034,
+    longitude: 139.701636,
+    openedAt: "2022-04-01",
+    note: "フラッグシップ店舗",
+  },
+  {
+    id: "s2",
+    name: "FitGym 新宿店",
+    address: "東京都新宿区新宿3-2-1 ○○タワー5F",
+    prefecture: "東京都",
+    city: "新宿区",
+    latitude: 35.690921,
+    longitude: 139.700258,
+    openedAt: "2022-10-15",
+    note: "",
+  },
+  {
+    id: "s3",
+    name: "FitGym 世田谷店",
+    address: "東京都世田谷区三軒茶屋1-5-2 ○○ビル2F",
+    prefecture: "東京都",
+    city: "世田谷区",
+    latitude: 35.6435,
+    longitude: 139.669,
+    openedAt: "2023-03-01",
+    note: "独立経営",
+  },
+  {
+    id: "s4",
+    name: "FitGym 梅田店",
+    address: "大阪府大阪市北区梅田2-4-9 ○○ビル4F",
+    prefecture: "大阪府",
+    city: "大阪市北区",
+    latitude: 34.702485,
+    longitude: 135.495951,
+    openedAt: "2023-07-20",
+    note: "FC契約",
+  },
+  {
+    id: "s5",
+    name: "FitGym 名古屋栄店",
+    address: "愛知県名古屋市中区栄3-15-1 ○○センター2F",
+    prefecture: "愛知県",
+    city: "名古屋市中区",
+    latitude: 35.1689,
+    longitude: 136.9065,
+    openedAt: "2024-01-10",
+    note: "",
+  },
 ]
 
 // ──────────────────────────────────────────────

@@ -37,6 +37,10 @@ export interface Store {
   id: string
   name: string       // 店舗名
   address: string    // 住所（都道府県＋市区町村＋番地）
+  prefecture: string // 都道府県（検索用）
+  city: string       // 市区町村（表示・検索補助）
+  latitude: number   // 緯度
+  longitude: number  // 経度
   openedAt: string   // 出店日（ISO 8601 date string: "YYYY-MM-DD"）
   note: string       // 備考
 }

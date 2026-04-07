@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { PlusIcon, PencilIcon, TrashIcon, SearchIcon, StoreIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -21,12 +21,19 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { stores as initialStores } from "@/lib/mock-data"
 import type { Store } from "@/lib/types"
+import { getErrorMessage } from "@/lib/error-utils"
 
 const ROWS_PER_PAGE = 10
 
-const emptyStore = (): Omit<Store, "id"> => ({
+type StoreFormInput = {
+  name: string
+  address: string
+  openedAt: string
+  note: string
+}
+
+const emptyStore = (): StoreFormInput => ({
   name: "",
   address: "",
   openedAt: "",
@@ -46,14 +53,38 @@ function getPageNumbers(total: number, current: number): (number | "ellipsis")[]
 }
 
 export default function StoresPage() {
-  const [data, setData] = useState<Store[]>(initialStores)
+  const [data, setData] = useState<Store[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [pageError, setPageError] = useState("")
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add")
   const [editTarget, setEditTarget] = useState<Store | null>(null)
-  const [form, setForm] = useState<Omit<Store, "id">>(emptyStore())
+  const [form, setForm] = useState<StoreFormInput>(emptyStore())
+
+  async function loadStores() {
+    setIsLoading(true)
+    setPageError("")
+    try {
+      const response = await fetch("/api/stores", { cache: "no-store" })
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload, "店舗一覧の取得に失敗しました。"))
+      }
+      setData(Array.isArray(payload.stores) ? payload.stores : [])
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "店舗一覧の取得に失敗しました。")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadStores()
+  }, [])
 
   // 絞り込み
   const filtered = data.filter((s) =>
@@ -79,23 +110,57 @@ export default function StoresPage() {
     setDialogOpen(true)
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name || !form.address || !form.openedAt) return
-    if (dialogMode === "add") {
-      const newStore: Store = { id: `s${Date.now()}`, ...form }
-      setData((prev) => [newStore, ...prev])
+
+    setIsSaving(true)
+    setPageError("")
+    try {
+      if (dialogMode === "add") {
+        const response = await fetch("/api/stores", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        })
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(getErrorMessage(payload, "店舗の追加に失敗しました。"))
+        }
+      } else if (editTarget) {
+        const response = await fetch(`/api/stores/${editTarget.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        })
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(getErrorMessage(payload, "店舗の更新に失敗しました。"))
+        }
+      }
+
+      setDialogOpen(false)
+      await loadStores()
       setCurrentPage(1)
-    } else if (editTarget) {
-      setData((prev) =>
-        prev.map((s) => (s.id === editTarget.id ? { ...s, ...form } : s)),
-      )
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "保存に失敗しました。")
+    } finally {
+      setIsSaving(false)
     }
-    setDialogOpen(false)
   }
 
-  function handleDelete(id: string) {
-    setData((prev) => prev.filter((s) => s.id !== id))
-    resetPage()
+  async function handleDelete(id: string) {
+    setPageError("")
+    try {
+      const response = await fetch(`/api/stores/${id}`, { method: "DELETE" })
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload, "店舗の削除に失敗しました。"))
+      }
+      await loadStores()
+      resetPage()
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "店舗の削除に失敗しました。")
+    }
   }
 
   function formatDate(iso: string) {
@@ -124,6 +189,12 @@ export default function StoresPage() {
                 追加
               </Button>
             </div>
+
+            {pageError && (
+              <div className="border-b border-border bg-destructive/5 px-5 py-2 text-xs text-destructive">
+                {pageError}
+              </div>
+            )}
 
             {/* 検索 */}
             <div className="border-b border-border bg-muted/20 px-5 py-3">
@@ -160,7 +231,13 @@ export default function StoresPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paged.length === 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-xs text-muted-foreground">
+                      読み込み中...
+                    </TableCell>
+                  </TableRow>
+                ) : paged.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-12 text-center">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -320,9 +397,9 @@ export default function StoresPage() {
               size="sm"
               className="text-xs"
               onClick={handleSave}
-              disabled={!form.name || !form.address || !form.openedAt}
+              disabled={!form.name || !form.address || !form.openedAt || isSaving}
             >
-              保存
+              {isSaving ? "保存中..." : "保存"}
             </Button>
           </DialogFooter>
         </DialogContent>

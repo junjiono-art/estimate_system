@@ -15,6 +15,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -23,6 +32,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/error-utils"
 
 interface SimulationFormProps {
   onSubmit?: () => void
@@ -74,12 +84,14 @@ type DemographicRow = {
   total: number
 }
 
-export function SimulationForm({ onSubmit }: SimulationFormProps) {
+export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  const [nearbyDialogOpen, setNearbyDialogOpen] = useState(false)
+  const [nearbyStoresSummary, setNearbyStoresSummary] = useState("")
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -159,22 +171,59 @@ export function SimulationForm({ onSubmit }: SimulationFormProps) {
 
     try {
       const targetAddress = address.trim()
+      if (!targetAddress) {
+        throw new Error("住所は必須です。")
+      }
+
+      const geocodeResponse = await fetch("/api/geocoding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: targetAddress }),
+      })
+
+      const geocodePayload = await geocodeResponse.json()
+      if (!geocodeResponse.ok) {
+        throw new Error(getErrorMessage(geocodePayload, "住所の座標変換に失敗しました。"))
+      }
+
+      const nearbyResponse = await fetch("/api/stores/check-nearby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          latitude: geocodePayload.latitude,
+          longitude: geocodePayload.longitude,
+          prefecture: geocodePayload.prefecture,
+          radiusKm: 1,
+        }),
+      })
+
+      const nearbyPayload = await nearbyResponse.json()
+      if (!nearbyResponse.ok) {
+        throw new Error(getErrorMessage(nearbyPayload, "近隣店舗チェックに失敗しました。"))
+      }
+
+      if (nearbyPayload.hasNearbyStore) {
+        const nearest = (nearbyPayload.nearbyStores as Array<{ name: string; distanceKm: number }>).slice(0, 3)
+        const nearestText = nearest.map((s) => `${s.name}（${s.distanceKm}km）`).join("、")
+        setNearbyStoresSummary(nearestText)
+        setNearbyDialogOpen(true)
+        return
+      }
+
       let demographics: FormSubmitData["demographics"] | undefined
 
-      if (targetAddress) {
-        const response = await fetch("/api/e-stat/demographics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address: targetAddress }),
-        })
+      const response = await fetch("/api/e-stat/demographics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: targetAddress }),
+      })
 
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload?.error || "人口統計データの取得に失敗しました。")
-        }
-
-        demographics = payload
+      const payload = await response.json()
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload, "人口統計データの取得に失敗しました。"))
       }
+
+      demographics = payload
 
       const formData: FormSubmitData = {
         storeInfo: {
@@ -187,8 +236,8 @@ export function SimulationForm({ onSubmit }: SimulationFormProps) {
         demographics,
       }
 
+      onSubmitWithData?.(formData)
       onSubmit?.()
-      // TODO: onSubmitWithData(formData) へ切り替え時に呼ぶ      
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "送信に失敗しました。")
     } finally {
@@ -412,6 +461,12 @@ export function SimulationForm({ onSubmit }: SimulationFormProps) {
       </Card>
 
       {/* ── フッターナビ ── */}
+      {submitError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {submitError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Button
           type="button"
@@ -448,6 +503,21 @@ export function SimulationForm({ onSubmit }: SimulationFormProps) {
           </Button>
         )}
       </div>
+
+      <AlertDialog open={nearbyDialogOpen} onOpenChange={setNearbyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base">近隣店舗チェックで出店条件に抵触しました</AlertDialogTitle>
+            <AlertDialogDescription className="leading-relaxed">
+              同一都道府県内の1km圏内に既存店舗が見つかりました。
+              {nearbyStoresSummary ? ` 近隣店舗: ${nearbyStoresSummary}` : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction>確認</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   )
 }
