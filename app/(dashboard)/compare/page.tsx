@@ -166,10 +166,16 @@ export default function ComparePage() {
         <div className="mx-auto max-w-5xl px-8 py-7">
 
           {/* 比較元・比較先のフィルタとセレクタ */}
-          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-0">
-            {/* 比較元 */}
-            <div className="flex flex-1 flex-col gap-3">
+          <div className="mb-6 flex flex-col gap-3">
+            {/* フィルタ行：左右等幅、中央はボタン幅分のスペーサー */}
+            <div className="grid grid-cols-[1fr_2.25rem_1fr] items-start gap-3">
               <FilterPanel filter={leftFilter} setFilter={setLeftFilter} label="比較元 絞り込み" />
+              <div className="h-full" />
+              <FilterPanel filter={rightFilter} setFilter={setRightFilter} label="比較先 絞り込み" />
+            </div>
+
+            {/* セレクト行：左右等幅、中央に入れ替えボタン */}
+            <div className="grid grid-cols-[1fr_2.25rem_1fr] items-end gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較元を選択</Label>
                 <Select value={leftId} onValueChange={setLeftId}>
@@ -187,10 +193,8 @@ export default function ComparePage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            {/* 中央：入れ替えボタン */}
-            <div className="flex shrink-0 items-end justify-center pb-0.5 lg:mx-4">
+              {/* 入れ替えボタン */}
               <button
                 type="button"
                 onClick={() => {
@@ -198,16 +202,12 @@ export default function ComparePage() {
                   setLeftId(rightId)
                   setRightId(tmp)
                 }}
-                className="flex size-9 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground"
+                className="flex size-9 items-center justify-center self-end rounded-full border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground"
                 aria-label="比較元と比較先を入れ替え"
               >
                 <ArrowRightLeftIcon className="size-4" />
               </button>
-            </div>
 
-            {/* 比較先 */}
-            <div className="flex flex-1 flex-col gap-3">
-              <FilterPanel filter={rightFilter} setFilter={setRightFilter} label="比較先 絞り込み" />
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較先を選択</Label>
                 <Select value={rightId} onValueChange={setRightId}>
