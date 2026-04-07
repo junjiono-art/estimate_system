@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { ArrowRightLeftIcon, WalletIcon, BanknoteIcon, TrendingUpIcon, CalendarIcon, SearchIcon } from "lucide-react"
+import { ArrowRightLeftIcon, WalletIcon, BanknoteIcon, TrendingUpIcon, CalendarIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -9,7 +9,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StarRating } from "@/components/star-rating"
+import { CompareKpiSection } from "@/components/compare/compare-kpi-section"
+import { CompareChartView } from "@/components/compare/compare-chart-view"
+import { CompareDashboardView } from "@/components/compare/compare-dashboard-view"
 import { demoSimulationResults } from "@/lib/mock-data"
 import type { SimulationResult } from "@/lib/types"
 
@@ -51,7 +55,6 @@ function applyFilter(results: SimulationResult[], filter: FilterState): Simulati
 export default function ComparePage() {
   const results = demoSimulationResults
 
-  // 年月一覧
   const yearMonths = useMemo(() => {
     const set = new Set<string>()
     results.forEach((r) => {
@@ -61,16 +64,15 @@ export default function ComparePage() {
     return [...set].sort().reverse()
   }, [results])
 
-  // 比較元フィルタ
-  const [leftFilter, setLeftFilter] = useState<FilterState>({ yearMonth: "", createdBy: "", rating: undefined })
-  // 比較先フィルタ
+  const [leftFilter,  setLeftFilter]  = useState<FilterState>({ yearMonth: "", createdBy: "", rating: undefined })
   const [rightFilter, setRightFilter] = useState<FilterState>({ yearMonth: "", createdBy: "", rating: undefined })
 
-  const leftFiltered = useMemo(() => applyFilter(results, leftFilter), [results, leftFilter])
+  const leftFiltered  = useMemo(() => applyFilter(results, leftFilter),  [results, leftFilter])
   const rightFiltered = useMemo(() => applyFilter(results, rightFilter), [results, rightFilter])
 
   const [leftId,  setLeftId]  = useState(results[0]?.id ?? "")
   const [rightId, setRightId] = useState(results[1]?.id ?? "")
+  const [displayMonths, setDisplayMonths] = useState<number>(24)
 
   const left  = results.find((r) => r.id === leftId)
   const right = results.find((r) => r.id === rightId)
@@ -79,7 +81,7 @@ export default function ComparePage() {
     return key === "paybackMonths" ? `${val}ヶ月` : fmt(val)
   }
 
-  function diff(key: string, lv: number, rv: number) {
+  function diffBadge(key: string, lv: number, rv: number) {
     const d = rv - lv
     if (d === 0) return null
     const isBetter = COST_KEYS.has(key) ? d < 0 : (key === "paybackMonths" ? d < 0 : d > 0)
@@ -106,7 +108,6 @@ export default function ComparePage() {
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 p-4">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
         <div className="grid gap-3 sm:grid-cols-3">
-          {/* 作成時期 */}
           <div className="flex flex-col gap-1">
             <Label className="text-[10px] text-muted-foreground">作成時期（年月）</Label>
             <Select value={filter.yearMonth || "__all__"} onValueChange={(v) => setFilter((f) => ({ ...f, yearMonth: v === "__all__" ? "" : v }))}>
@@ -121,7 +122,6 @@ export default function ComparePage() {
               </SelectContent>
             </Select>
           </div>
-          {/* 作成者 */}
           <div className="flex flex-col gap-1">
             <Label className="text-[10px] text-muted-foreground">作成者</Label>
             <Input
@@ -132,7 +132,6 @@ export default function ComparePage() {
               className="h-8 text-xs"
             />
           </div>
-          {/* 評価 */}
           <div className="flex flex-col gap-1">
             <Label className="text-[10px] text-muted-foreground">評価</Label>
             <Select
@@ -167,10 +166,16 @@ export default function ComparePage() {
         <div className="mx-auto max-w-5xl px-8 py-7">
 
           {/* 比較元・比較先のフィルタとセレクタ */}
-          <div className="mb-6 grid gap-6 lg:grid-cols-2">
-            {/* 比較元 */}
-            <div className="flex flex-col gap-3">
+          <div className="mb-6 flex flex-col gap-3">
+            {/* フィルタ行：左右等幅、中央はボタン幅分のスペーサー */}
+            <div className="grid grid-cols-[1fr_2.25rem_1fr] items-start gap-3">
               <FilterPanel filter={leftFilter} setFilter={setLeftFilter} label="比較元 絞り込み" />
+              <div className="h-full" />
+              <FilterPanel filter={rightFilter} setFilter={setRightFilter} label="比較先 絞り込み" />
+            </div>
+
+            {/* セレクト行：左右等幅、中央に入れ替えボタン */}
+            <div className="grid grid-cols-[1fr_2.25rem_1fr] items-end gap-3">
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較元を選択</Label>
                 <Select value={leftId} onValueChange={setLeftId}>
@@ -188,11 +193,21 @@ export default function ComparePage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            {/* 比較先 */}
-            <div className="flex flex-col gap-3">
-              <FilterPanel filter={rightFilter} setFilter={setRightFilter} label="比較先 絞り込み" />
+              {/* 入れ替えボタン */}
+              <button
+                type="button"
+                onClick={() => {
+                  const tmp = leftId
+                  setLeftId(rightId)
+                  setRightId(tmp)
+                }}
+                className="flex size-9 items-center justify-center self-end rounded-full border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground"
+                aria-label="比較元と比較先を入れ替え"
+              >
+                <ArrowRightLeftIcon className="size-4" />
+              </button>
+
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較先を選択</Label>
                 <Select value={rightId} onValueChange={setRightId}>
@@ -213,70 +228,114 @@ export default function ComparePage() {
             </div>
           </div>
 
-          {/* 中央の矢印 */}
-          <div className="mb-6 flex justify-center">
-            <div className="flex size-10 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
-              <ArrowRightLeftIcon className="size-4" />
-            </div>
-          </div>
-
-          {/* 比較テーブル */}
+          {/* 比較表 + ダッシュボード/グラフタブ */}
           {left && right && (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
-              {/* ヘッダー */}
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border bg-muted/30">
-                <div className="px-5 py-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">項目</div>
-                <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-foreground/70">{left.storeName}</div>
-                <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-foreground/70">{right.storeName}</div>
-                <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">差分</div>
-              </div>
+            <div className="flex flex-col gap-5">
+              {/* KPI比較セクション（常時表示） */}
+              <CompareKpiSection left={left} right={right} />
 
-              {/* 作成者行 */}
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 bg-muted/10">
-                <div className="flex items-center gap-2 px-5 py-3">
-                  <span className="text-xs text-foreground">作成者</span>
-                </div>
-                <div className="px-4 py-3 text-right text-xs text-muted-foreground">{left.createdBy}</div>
-                <div className="px-4 py-3 text-right text-xs text-muted-foreground">{right.createdBy}</div>
-                <div className="px-4 py-3" />
-              </div>
+              <Tabs defaultValue="table">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <TabsList className="rounded-md border border-border bg-muted/40 p-0.5">
+                    <TabsTrigger value="table" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      比較表
+                    </TabsTrigger>
+                    <TabsTrigger value="dashboard" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      ダッシュボード
+                    </TabsTrigger>
+                    <TabsTrigger value="chart" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      グラフ + 表
+                    </TabsTrigger>
+                  </TabsList>
 
-              {/* 評価行 */}
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 bg-muted/20">
-                <div className="flex items-center gap-2 px-5 py-3">
-                  <span className="text-xs text-foreground">評価</span>
-                </div>
-                <div className="flex items-center justify-end px-4 py-3">
-                  {left.rating !== undefined
-                    ? <StarRating value={left.rating} readonly size="sm" />
-                    : <span className="text-xs text-muted-foreground">-</span>}
-                </div>
-                <div className="flex items-center justify-end px-4 py-3">
-                  {right.rating !== undefined
-                    ? <StarRating value={right.rating} readonly size="sm" />
-                    : <span className="text-xs text-muted-foreground">-</span>}
-                </div>
-                <div className="px-4 py-3" />
-              </div>
-
-              {comparisonItems.map((item, idx) => {
-                const lv = left[item.key]
-                const rv = right[item.key]
-                return (
-                  <div
-                    key={item.key}
-                    className={`grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 last:border-0 ${idx % 2 === 0 ? "" : "bg-muted/20"}`}
-                  >
-                    <div className="flex items-center gap-2 px-5 py-3">
-                      {item.icon && <item.icon className="size-3.5 text-muted-foreground/60" />}
-                      <span className="text-xs text-foreground">{item.label}</span>
-                    </div>
-                    <div className="px-4 py-3 text-right font-mono text-xs text-foreground">{fmtVal(item.key, lv)}</div>
-                    <div className="px-4 py-3 text-right font-mono text-xs text-foreground">{fmtVal(item.key, rv)}</div>
-                    <div className="flex items-center justify-end px-4 py-3">{diff(item.key, lv, rv)}</div>
+                  {/* 表示月数セレクタ（ダッシュボード/グラフタブで有効） */}
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[10px] text-muted-foreground whitespace-nowrap">表示月数</Label>
+                    <Select value={String(displayMonths)} onValueChange={(v) => setDisplayMonths(Number(v))}>
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="6"  className="text-xs">6ヶ月</SelectItem>
+                        <SelectItem value="12" className="text-xs">12ヶ月</SelectItem>
+                        <SelectItem value="24" className="text-xs">24ヶ月</SelectItem>
+                        <SelectItem value="36" className="text-xs">36ヶ月</SelectItem>
+                        <SelectItem value="60" className="text-xs">60ヶ月</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                )
-              })}
+                </div>
+
+                {/* ---- 比較表タブ ---- */}
+                <TabsContent value="table" className="mt-4">
+                  <div className="rounded-lg border border-border bg-card overflow-hidden">
+                    {/* ヘッダー */}
+                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border bg-muted/30">
+                      <div className="px-5 py-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">項目</div>
+                      <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-chart-1">{left.storeName}</div>
+                      <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-chart-2">{right.storeName}</div>
+                      <div className="px-4 py-3 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">差分</div>
+                    </div>
+
+                    {/* 作成者行 */}
+                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 bg-muted/10">
+                      <div className="flex items-center gap-2 px-5 py-3">
+                        <span className="text-xs text-foreground">作成者</span>
+                      </div>
+                      <div className="px-4 py-3 text-right text-xs text-muted-foreground">{left.createdBy}</div>
+                      <div className="px-4 py-3 text-right text-xs text-muted-foreground">{right.createdBy}</div>
+                      <div className="px-4 py-3" />
+                    </div>
+
+                    {/* 評価行 */}
+                    <div className="grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 bg-muted/20">
+                      <div className="flex items-center gap-2 px-5 py-3">
+                        <span className="text-xs text-foreground">評価</span>
+                      </div>
+                      <div className="flex items-center justify-end px-4 py-3">
+                        {left.rating !== undefined
+                          ? <StarRating value={left.rating} readonly size="sm" />
+                          : <span className="text-xs text-muted-foreground">-</span>}
+                      </div>
+                      <div className="flex items-center justify-end px-4 py-3">
+                        {right.rating !== undefined
+                          ? <StarRating value={right.rating} readonly size="sm" />
+                          : <span className="text-xs text-muted-foreground">-</span>}
+                      </div>
+                      <div className="px-4 py-3" />
+                    </div>
+
+                    {comparisonItems.map((item, idx) => {
+                      const lv = left[item.key]
+                      const rv = right[item.key]
+                      return (
+                        <div
+                          key={item.key}
+                          className={`grid grid-cols-[2fr_1fr_1fr_1fr] border-b border-border/50 last:border-0 ${idx % 2 === 0 ? "" : "bg-muted/20"}`}
+                        >
+                          <div className="flex items-center gap-2 px-5 py-3">
+                            {item.icon && <item.icon className="size-3.5 text-muted-foreground/60" />}
+                            <span className="text-xs text-foreground">{item.label}</span>
+                          </div>
+                          <div className="px-4 py-3 text-right font-mono text-xs text-foreground">{fmtVal(item.key, lv)}</div>
+                          <div className="px-4 py-3 text-right font-mono text-xs text-foreground">{fmtVal(item.key, rv)}</div>
+                          <div className="flex items-center justify-end px-4 py-3">{diffBadge(item.key, lv, rv)}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </TabsContent>
+
+                {/* ---- ダッシュボードタブ ---- */}
+                <TabsContent value="dashboard" className="mt-4">
+                  <CompareDashboardView left={left} right={right} displayMonths={displayMonths} />
+                </TabsContent>
+
+                {/* ---- グラフ+表タブ ---- */}
+                <TabsContent value="chart" className="mt-4">
+                  <CompareChartView left={left} right={right} displayMonths={displayMonths} />
+                </TabsContent>
+              </Tabs>
             </div>
           )}
         </div>
