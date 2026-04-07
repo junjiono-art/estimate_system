@@ -32,6 +32,15 @@ export interface FranchiseCost {
   note: string
 }
 
+/** 出店済み店舗マスタ */
+export interface Store {
+  id: string
+  name: string       // 店舗名
+  address: string    // 住所（都道府県＋市区町村＋番地）
+  openedAt: string   // 出店日（ISO 8601 date string: "YYYY-MM-DD"）
+  note: string       // 備考
+}
+
 /** 店舗入力データ */
 export interface StoreInput {
   storeName: string
