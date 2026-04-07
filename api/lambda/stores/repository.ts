@@ -3,6 +3,7 @@ import {
   DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb"
@@ -10,6 +11,7 @@ import { docClient } from "../../lambda-common/dynamo-client"
 import type { StoreInput, StoreRecord } from "./types"
 
 const tableName = process.env.STORES_TABLE_NAME || "Stores"
+const prefectureIndexName = process.env.STORES_PREFECTURE_INDEX_NAME || "prefecture-index"
 
 function normalizeStore(store: Partial<StoreRecord>): StoreRecord {
   return {
@@ -26,18 +28,35 @@ function normalizeStore(store: Partial<StoreRecord>): StoreRecord {
 }
 
 export async function listStores(prefecture?: string, query?: string): Promise<StoreRecord[]> {
-  const response = await docClient.send(
-    new ScanCommand({
-      TableName: tableName,
-    }),
-  )
+  const all = prefecture
+    ? await (async () => {
+        const response = await docClient.send(
+          new QueryCommand({
+            TableName: tableName,
+            IndexName: prefectureIndexName,
+            KeyConditionExpression: "#prefecture = :prefecture",
+            ExpressionAttributeNames: {
+              "#prefecture": "prefecture",
+            },
+            ExpressionAttributeValues: {
+              ":prefecture": prefecture,
+            },
+          }),
+        )
 
-  const all = (response.Items || []).map((item) => normalizeStore(item as StoreRecord))
+        return (response.Items || []).map((item) => normalizeStore(item as StoreRecord))
+      })()
+    : await (async () => {
+        const response = await docClient.send(
+          new ScanCommand({
+            TableName: tableName,
+          }),
+        )
+
+        return (response.Items || []).map((item) => normalizeStore(item as StoreRecord))
+      })()
 
   let filtered = all
-  if (prefecture) {
-    filtered = filtered.filter((store) => store.prefecture === prefecture)
-  }
 
   if (query) {
     const q = query.toLowerCase()
