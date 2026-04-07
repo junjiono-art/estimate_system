@@ -38,6 +38,7 @@ const navMain = [
       { title: "エリア賃料", href: "/master/area-rent", icon: DatabaseIcon },
       { title: "FC費用",    href: "/master/franchise",  icon: DatabaseIcon },
       { title: "単価",      href: "/master/unit-price", icon: DatabaseIcon },
+      { title: "出店済み店舗", href: "/master/stores",  icon: DatabaseIcon },
     ],
   },
 ]
