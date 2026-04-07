@@ -25,6 +25,7 @@ type ViewMode = "monthly" | "yearly"
 interface CompareChartViewProps {
   left: SimulationResult
   right: SimulationResult
+  displayMonths?: number
 }
 
 function buildChartData(
@@ -101,19 +102,23 @@ function buildTableData(
 
 const ROWS_PER_PAGE = 12
 
-export function CompareChartView({ left, right }: CompareChartViewProps) {
+export function CompareChartView({ left, right, displayMonths = 24 }: CompareChartViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("monthly")
   const [currentPage, setCurrentPage] = useState(1)
 
-  const chartData = buildChartData(left, right, viewMode)
-  const tableData = buildTableData(left, right, viewMode)
+  // displayMonths でデータをスライスした結果を各関数に渡す
+  const slicedLeft  = { ...left,  monthlyProjection: left.monthlyProjection.slice(0, displayMonths) }
+  const slicedRight = { ...right, monthlyProjection: right.monthlyProjection.slice(0, displayMonths) }
+
+  const chartData = buildChartData(slicedLeft, slicedRight, viewMode)
+  const tableData = buildTableData(slicedLeft, slicedRight, viewMode)
   const totalPages = Math.ceil(tableData.length / ROWS_PER_PAGE)
   const pagedData = tableData.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE)
 
-  const leftKey利益  = `${left.storeName}_利益`
-  const rightKey利益 = `${right.storeName}_利益`
-  const leftKey累積  = `${left.storeName}_累積`
-  const rightKey累積 = `${right.storeName}_累積`
+  const leftKey利益  = `${slicedLeft.storeName}_利益`
+  const rightKey利益 = `${slicedRight.storeName}_利益`
+  const leftKey累積  = `${slicedLeft.storeName}_累積`
+  const rightKey累積 = `${slicedRight.storeName}_累積`
 
   function handleViewModeChange(v: ViewMode) {
     setViewMode(v)
@@ -151,8 +156,8 @@ export function CompareChartView({ left, right }: CompareChartViewProps) {
               <Tooltip formatter={(v: number) => `${(v / 10000).toLocaleString()}万円`} contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
               <ReferenceLine y={0} stroke="var(--color-border)" />
-              <Bar dataKey={leftKey利益}  name={`${left.storeName} 利益`}  fill="var(--color-chart-1)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={rightKey利益} name={`${right.storeName} 利益`} fill="var(--color-chart-2)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={leftKey利益}  name={`${slicedLeft.storeName} 利益`}  fill="var(--color-chart-1)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={rightKey利益} name={`${slicedRight.storeName} 利益`} fill="var(--color-chart-2)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -170,8 +175,8 @@ export function CompareChartView({ left, right }: CompareChartViewProps) {
               <Tooltip formatter={(v: number) => `${(v / 10000).toLocaleString()}万円`} contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
               <ReferenceLine y={0} stroke="var(--color-border)" strokeDasharray="4 4" />
-              <Line type="monotone" dataKey={leftKey累積}  name={`${left.storeName} 累積利益`}  stroke="var(--color-chart-1)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-              <Line type="monotone" dataKey={rightKey累積} name={`${right.storeName} 累積利益`} stroke="var(--color-chart-2)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+              <Line type="monotone" dataKey={leftKey累積}  name={`${slicedLeft.storeName} 累積利益`}  stroke="var(--color-chart-1)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+              <Line type="monotone" dataKey={rightKey累積} name={`${slicedRight.storeName} 累積利益`} stroke="var(--color-chart-2)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -194,10 +199,10 @@ export function CompareChartView({ left, right }: CompareChartViewProps) {
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
                 <TableHead className="w-14 text-xs">{viewMode === "monthly" ? "月" : "年"}</TableHead>
-                <TableHead className="text-right text-xs text-chart-1">{left.storeName} 利益</TableHead>
-                <TableHead className="text-right text-xs text-chart-2">{right.storeName} 利益</TableHead>
-                <TableHead className="text-right text-xs text-chart-1">{left.storeName} 累積</TableHead>
-                <TableHead className="text-right text-xs text-chart-2">{right.storeName} 累積</TableHead>
+                <TableHead className="text-right text-xs text-chart-1">{slicedLeft.storeName} 利益</TableHead>
+                <TableHead className="text-right text-xs text-chart-2">{slicedRight.storeName} 利益</TableHead>
+                <TableHead className="text-right text-xs text-chart-1">{slicedLeft.storeName} 累積</TableHead>
+                <TableHead className="text-right text-xs text-chart-2">{slicedRight.storeName} 累積</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

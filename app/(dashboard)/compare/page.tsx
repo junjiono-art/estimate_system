@@ -72,6 +72,7 @@ export default function ComparePage() {
 
   const [leftId,  setLeftId]  = useState(results[0]?.id ?? "")
   const [rightId, setRightId] = useState(results[1]?.id ?? "")
+  const [displayMonths, setDisplayMonths] = useState<number>(24)
 
   const left  = results.find((r) => r.id === leftId)
   const right = results.find((r) => r.id === rightId)
@@ -165,8 +166,9 @@ export default function ComparePage() {
         <div className="mx-auto max-w-5xl px-8 py-7">
 
           {/* 比較元・比較先のフィルタとセレクタ */}
-          <div className="mb-6 grid gap-6 lg:grid-cols-2">
-            <div className="flex flex-col gap-3">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:gap-0">
+            {/* 比較元 */}
+            <div className="flex flex-1 flex-col gap-3">
               <FilterPanel filter={leftFilter} setFilter={setLeftFilter} label="比較元 絞り込み" />
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較元を選択</Label>
@@ -187,7 +189,24 @@ export default function ComparePage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
+            {/* 中央：入れ替えボタン */}
+            <div className="flex shrink-0 items-end justify-center pb-0.5 lg:mx-4">
+              <button
+                type="button"
+                onClick={() => {
+                  const tmp = leftId
+                  setLeftId(rightId)
+                  setRightId(tmp)
+                }}
+                className="flex size-9 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-foreground/20 hover:bg-muted hover:text-foreground"
+                aria-label="比較元と比較先を入れ替え"
+              >
+                <ArrowRightLeftIcon className="size-4" />
+              </button>
+            </div>
+
+            {/* 比較先 */}
+            <div className="flex flex-1 flex-col gap-3">
               <FilterPanel filter={rightFilter} setFilter={setRightFilter} label="比較先 絞り込み" />
               <div className="flex flex-col gap-1.5">
                 <Label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">比較先を選択</Label>
@@ -209,13 +228,6 @@ export default function ComparePage() {
             </div>
           </div>
 
-          {/* 中央の矢印 */}
-          <div className="mb-6 flex justify-center">
-            <div className="flex size-10 items-center justify-center rounded-full border border-border bg-muted/40 text-muted-foreground">
-              <ArrowRightLeftIcon className="size-4" />
-            </div>
-          </div>
-
           {/* 比較表 + ダッシュボード/グラフタブ */}
           {left && right && (
             <div className="flex flex-col gap-5">
@@ -223,17 +235,36 @@ export default function ComparePage() {
               <CompareKpiSection left={left} right={right} />
 
               <Tabs defaultValue="table">
-                <TabsList className="rounded-md border border-border bg-muted/40 p-0.5">
-                  <TabsTrigger value="table" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                    比較表
-                  </TabsTrigger>
-                  <TabsTrigger value="dashboard" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                    ダッシュボード
-                  </TabsTrigger>
-                  <TabsTrigger value="chart" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-                    グラフ + 表
-                  </TabsTrigger>
-                </TabsList>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <TabsList className="rounded-md border border-border bg-muted/40 p-0.5">
+                    <TabsTrigger value="table" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      比較表
+                    </TabsTrigger>
+                    <TabsTrigger value="dashboard" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      ダッシュボード
+                    </TabsTrigger>
+                    <TabsTrigger value="chart" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      グラフ + 表
+                    </TabsTrigger>
+                  </TabsList>
+
+                  {/* 表示月数セレクタ（ダッシュボード/グラフタブで有効） */}
+                  <div className="flex items-center gap-2">
+                    <Label className="text-[10px] text-muted-foreground whitespace-nowrap">表示月数</Label>
+                    <Select value={String(displayMonths)} onValueChange={(v) => setDisplayMonths(Number(v))}>
+                      <SelectTrigger className="h-7 w-24 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="6"  className="text-xs">6ヶ月</SelectItem>
+                        <SelectItem value="12" className="text-xs">12ヶ月</SelectItem>
+                        <SelectItem value="24" className="text-xs">24ヶ月</SelectItem>
+                        <SelectItem value="36" className="text-xs">36ヶ月</SelectItem>
+                        <SelectItem value="60" className="text-xs">60ヶ月</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
                 {/* ---- 比較表タブ ---- */}
                 <TabsContent value="table" className="mt-4">
@@ -297,12 +328,12 @@ export default function ComparePage() {
 
                 {/* ---- ダッシュボードタブ ---- */}
                 <TabsContent value="dashboard" className="mt-4">
-                  <CompareDashboardView left={left} right={right} />
+                  <CompareDashboardView left={left} right={right} displayMonths={displayMonths} />
                 </TabsContent>
 
                 {/* ---- グラフ+表タブ ---- */}
                 <TabsContent value="chart" className="mt-4">
-                  <CompareChartView left={left} right={right} />
+                  <CompareChartView left={left} right={right} displayMonths={displayMonths} />
                 </TabsContent>
               </Tabs>
             </div>
