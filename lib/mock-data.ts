@@ -6,6 +6,7 @@ import type {
   SimulationResult,
   ScenarioType,
   UnitPrice,
+  Store,
 } from "./types"
 
 // ──────────────────────────────────────────────
@@ -177,6 +178,17 @@ export const unitPrices: UnitPrice[] = [
 ]
 
 // ──────────────────────────────────────────────
+// 出店済み店舗マスタ
+// ──────────────────────────────────────────────
+export const stores: Store[] = [
+  { id: "s1", name: "FitGym 渋谷店",     address: "東京都渋谷区渋谷1-1-1 ○○ビル3F",       openedAt: "2022-04-01", note: "フラッグシップ店舗" },
+  { id: "s2", name: "FitGym 新宿店",     address: "東京都新宿区新宿3-2-1 ○○タワー5F",      openedAt: "2022-10-15", note: "" },
+  { id: "s3", name: "FitGym 世田谷店",   address: "東京都世田谷区三軒茶屋1-5-2 ○○ビル2F", openedAt: "2023-03-01", note: "独立経営" },
+  { id: "s4", name: "FitGym 梅田店",     address: "大阪府大阪市北区梅田2-4-9 ○○ビル4F",   openedAt: "2023-07-20", note: "FC契約" },
+  { id: "s5", name: "FitGym 名古屋栄店", address: "愛知県名古屋市中区栄3-15-1 ○○センター2F", openedAt: "2024-01-10", note: "" },
+]
+
+// ──────────────────────────────────────────────
 // シナリオ別係数
 // ──────────────────────────────────────────────
 const SCENARIO_FACTORS: Record<ScenarioType, { revenueMultiplier: number; growthSpeed: number }> = {
@@ -239,7 +251,7 @@ interface DemoBase {
 const demoBases: DemoBase[] = [
   {
     id: "sim-1",
-    storeName: "FitGym 渋谷店",
+    storeName: "FitGym 渋��店",
     location: "東京都渋谷区渋谷1-1-1 ○○ビル3F",
     createdAt: "2026-02-28T10:00:00Z",
     createdBy: "田中太郎",
