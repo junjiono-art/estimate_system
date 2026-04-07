@@ -1,11 +1,9 @@
 import type {
-  MachineType,
-  AreaRent,
   RunningCostTemplate,
   FranchiseCost,
   SimulationResult,
   ScenarioType,
-  UnitPrice,
+  MasterValue,
 } from "./types"
 
 // ──────────────────────────────────────────────
@@ -97,33 +95,6 @@ export function findCityDemographics(cityName: string): CityDemographics | null 
   return partial ?? null
 }
 
-export const machineTypes: MachineType[] = [
-  { id: "m1", name: "トレッドミル", category: "有酸素", unitPrice: 800000, monthlyMaintenance: 5000 },
-  { id: "m2", name: "エアロバイク", category: "有酸素", unitPrice: 400000, monthlyMaintenance: 3000 },
-  { id: "m3", name: "エリプティカル", category: "有酸素", unitPrice: 600000, monthlyMaintenance: 4000 },
-  { id: "m4", name: "チェストプレス", category: "筋トレ", unitPrice: 500000, monthlyMaintenance: 3500 },
-  { id: "m5", name: "レッグプレス", category: "筋トレ", unitPrice: 550000, monthlyMaintenance: 3500 },
-  { id: "m6", name: "ラットプルダウン", category: "筋トレ", unitPrice: 480000, monthlyMaintenance: 3000 },
-  { id: "m7", name: "スミスマシン", category: "筋トレ", unitPrice: 700000, monthlyMaintenance: 4500 },
-  { id: "m8", name: "ケーブルマシン", category: "筋トレ", unitPrice: 650000, monthlyMaintenance: 4000 },
-  { id: "m9", name: "ストレッチポール台", category: "ストレッチ", unitPrice: 150000, monthlyMaintenance: 1000 },
-  { id: "m10", name: "フリーウェイトセット", category: "その他", unitPrice: 300000, monthlyMaintenance: 2000 },
-]
-
-// ──────────────────────────────────────────────
-// エリア賃料相場マスタ
-// ──────────────────────────────────────────────
-export const areaRents: AreaRent[] = [
-  { id: "a1", prefecture: "東京都", city: "渋谷区", averageRentPerTsubo: 35000 },
-  { id: "a2", prefecture: "東京都", city: "新宿区", averageRentPerTsubo: 32000 },
-  { id: "a3", prefecture: "東京都", city: "世田谷区", averageRentPerTsubo: 22000 },
-  { id: "a4", prefecture: "大阪府", city: "中央区", averageRentPerTsubo: 25000 },
-  { id: "a5", prefecture: "大阪府", city: "北区", averageRentPerTsubo: 23000 },
-  { id: "a6", prefecture: "愛知県", city: "名古屋市中区", averageRentPerTsubo: 20000 },
-  { id: "a7", prefecture: "福岡県", city: "博多区", averageRentPerTsubo: 18000 },
-  { id: "a8", prefecture: "北海道", city: "札幌市中央区", averageRentPerTsubo: 15000 },
-]
-
 // ──────────────────────────────────────────────
 // ランニングコスト デフォルト値（入力フォーム初期値として使用）
 // ──────────────────────────────────────────────
@@ -151,7 +122,7 @@ export const franchiseCosts: FranchiseCost[] = [
 // ──────────────────────────────────────────────
 // 単価マスタ
 // ──────────────────────────────────────────────
-export const unitPrices: UnitPrice[] = [
+export const masterValues: MasterValue[] = [
   // ランニングコスト
   { id: "up-r1", category: "ランニングコスト", label: "水道光熱費",   unit: "円/月", defaultAmount: 150000, currentAmount: 150000, note: "50坪あたりの目安" },
   { id: "up-r2", category: "ランニングコスト", label: "水道代",       unit: "円/月", defaultAmount:  30000, currentAmount:  30000, note: "水道代込みの場合は0円に" },

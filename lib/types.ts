@@ -3,7 +3,7 @@
 // ============================================================
 
 /** 単価マスタ */
-export interface UnitPrice {
+export interface MasterValue {
   id: string
   category: "ランニングコスト" | "投資コスト"
   label: string
@@ -13,22 +13,7 @@ export interface UnitPrice {
   note: string
 }
 
-/** マシン種類マスタ */
-export interface MachineType {
-  id: string
-  name: string
-  category: "有酸素" | "筋トレ" | "ストレッチ" | "その他"
-  unitPrice: number // 1台あたりの購入価格
-  monthlyMaintenance: number // 月間メンテナンス費
-}
-
-/** エリア賃料相場マスタ */
-export interface AreaRent {
-  id: string
-  prefecture: string
-  city: string
-  averageRentPerTsubo: number // 坪単価
-}
+export type UnitPrice = MasterValue
 
 /** ランニングコストマスタ */
 export interface RunningCostTemplate {
@@ -56,12 +41,6 @@ export interface StoreInput {
   isFranchise: boolean
   floorAreaTsubo: number
   rentPerTsubo: number
-  machines: {
-    machineTypeId: string
-    machineTypeName: string
-    quantity: number
-    unitPrice: number
-  }[]
   memberCapacity: number
   monthlyFee: number       // 月会費
   enrollmentFee: number    // 入会金

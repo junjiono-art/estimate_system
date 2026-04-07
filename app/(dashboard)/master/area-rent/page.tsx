@@ -1,74 +1,30 @@
 "use client"
 
 import { PageHeader } from "@/components/page-header"
-import { MasterTable } from "@/components/master/master-table"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { areaRents } from "@/lib/mock-data"
-import type { AreaRent } from "@/lib/types"
-
-const columns = [
-  {
-    key: "prefecture",
-    label: "都道府県",
-    render: (row: AreaRent) => (
-      <span className="font-medium text-foreground">{row.prefecture}</span>
-    ),
-  },
-  {
-    key: "city",
-    label: "市区町村",
-    render: (row: AreaRent) => <span className="text-foreground">{row.city}</span>,
-  },
-  {
-    key: "rent",
-    label: "坪単価",
-    className: "text-right" as const,
-    render: (row: AreaRent) => (
-      <span className="font-mono text-sm">
-        {row.averageRentPerTsubo.toLocaleString()}円/坪
-      </span>
-    ),
-  },
-]
-
-function AreaRentForm() {
-  return (
-    <>
-      <div className="flex flex-col gap-1.5">
-        <Label>都道府県</Label>
-        <Input placeholder="例: 東京都" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>市区町村</Label>
-        <Input placeholder="例: 渋谷区" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>坪単価（円）</Label>
-        <Input type="number" placeholder="35000" />
-      </div>
-    </>
-  )
-}
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
 export default function AreaRentPage() {
   return (
     <>
       <PageHeader
-        title="エリア賃料マスタ"
-        description="地域ごとの坪単価を管理します。試算時の賃料自動入力に使用されます。"
+        title="エリア統計連携"
+        description="地域別賃料相場はマスタ管理せず、試算実行時に外部APIから取得する方針です。"
       />
       <div className="overflow-auto">
         <div className="mx-auto max-w-4xl px-8 py-7">
-          <MasterTable
-            title="エリア賃料相場"
-            description="地域ごとの坪単価目安を管理します。試算時の賃料自動入力に使用されます。"
-            data={areaRents}
-            columns={columns}
-            searchPlaceholder="都道府県・市区町村で検索..."
-            searchKey={(row) => `${row.prefecture} ${row.city}`}
-            renderForm={() => <AreaRentForm />}
-          />
+          <Card className="border-border shadow-none">
+            <CardHeader>
+              <CardTitle>現在の仕様</CardTitle>
+              <CardDescription>
+                エリア賃料相場のDynamoDBマスタは作成せず、住所をもとに統計APIを呼び出して試算時に必要な値を取得します。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-muted-foreground">
+              <p>この画面は旧「エリア賃料マスタ」運用の名残です。現在は固定マスタの登録・編集は行いません。</p>
+              <p>保存対象はAPIレスポンスそのものではなく、試算に使用した賃料単価のみです。</p>
+              <p>将来的にAPI制限やレスポンス速度が課題になった場合のみ、キャッシュ用テーブルの追加を検討します。</p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>

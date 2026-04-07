@@ -48,8 +48,8 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination"
-import { unitPrices as initialData } from "@/lib/mock-data"
-import type { UnitPrice } from "@/lib/types"
+import { masterValues as initialData } from "@/lib/mock-data"
+import type { MasterValue } from "@/lib/types"
 
 const ROWS_PER_PAGE = 10
 type SortDir = "asc" | "desc" | null
@@ -67,7 +67,7 @@ function getPageNumbers(total: number, current: number): (number | "ellipsis")[]
   return pages
 }
 
-const EMPTY_FORM: Omit<UnitPrice, "id"> = {
+const EMPTY_FORM: Omit<MasterValue, "id"> = {
   category: "ランニングコスト",
   label: "",
   unit: "",
@@ -77,7 +77,7 @@ const EMPTY_FORM: Omit<UnitPrice, "id"> = {
 }
 
 export default function UnitPricePage() {
-  const [rows, setRows] = useState<UnitPrice[]>(initialData)
+  const [rows, setRows] = useState<MasterValue[]>(initialData)
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<Category>("すべて")
   const [sortDir, setSortDir] = useState<SortDir>(null)
@@ -85,8 +85,8 @@ export default function UnitPricePage() {
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add")
-  const [editTarget, setEditTarget] = useState<UnitPrice | null>(null)
-  const [form, setForm] = useState<Omit<UnitPrice, "id">>(EMPTY_FORM)
+  const [editTarget, setEditTarget] = useState<MasterValue | null>(null)
+  const [form, setForm] = useState<Omit<MasterValue, "id">>(EMPTY_FORM)
 
   // フィルタ・ソート・ページ計算
   const processed = useMemo(() => {
@@ -117,7 +117,7 @@ export default function UnitPricePage() {
     setDialogOpen(true)
   }
 
-  function openEdit(row: UnitPrice) {
+  function openEdit(row: MasterValue) {
     setDialogMode("edit")
     setEditTarget(row)
     setForm({
@@ -362,7 +362,7 @@ export default function UnitPricePage() {
                 <Label className="text-xs">カテゴリ</Label>
                 <Select
                   value={form.category}
-                  onValueChange={(v) => setForm((f) => ({ ...f, category: v as UnitPrice["category"] }))}
+                  onValueChange={(v) => setForm((f) => ({ ...f, category: v as MasterValue["category"] }))}
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="選択" />
