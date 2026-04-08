@@ -51,7 +51,16 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [createdBy, setCreatedBy]        = useState("")
   const [isSaving, setIsSaving]          = useState(false)
 
-  const currentData = scenarioResults[scenario] ?? initialData
+  const scenarioData = scenarioResults[scenario]
+  const currentData = scenarioData
+    ? {
+        ...scenarioData,
+        // Keep user-input display fields from the latest submitted data.
+        id: initialData.id,
+        storeName: initialData.storeName,
+        location: initialData.location,
+      }
+    : initialData
   const yearMonths  = parseInt(selectedYear) * 12
 
   const filteredData: SimulationResult = {

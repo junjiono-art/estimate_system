@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useState, useMemo } from "react"
 import {
   PlusIcon,
   PencilIcon,
@@ -48,7 +48,6 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination"
-import { masterValues as initialData } from "@/lib/mock-data"
 import type { MasterValue } from "@/lib/types"
 
 const ROWS_PER_PAGE = 10
@@ -77,7 +76,8 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
 }
 
 export default function UnitPricePage() {
-  const [rows, setRows] = useState<MasterValue[]>(initialData)
+  const [rows, setRows] = useState<MasterValue[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<Category>("すべて")
   const [sortDir, setSortDir] = useState<SortDir>(null)
@@ -87,6 +87,39 @@ export default function UnitPricePage() {
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add")
   const [editTarget, setEditTarget] = useState<MasterValue | null>(null)
   const [form, setForm] = useState<Omit<MasterValue, "id">>(EMPTY_FORM)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadMasterValues() {
+      setIsLoading(true)
+      try {
+        const response = await fetch("/api/master/values", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+
+        if (!mounted) return
+
+        if (!response.ok) {
+          setRows([])
+          return
+        }
+
+        const values = Array.isArray(payload?.values) ? payload.values : []
+        setRows(values as MasterValue[])
+      } catch {
+        if (!mounted) return
+        setRows([])
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    void loadMasterValues()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // フィルタ・ソート・ページ計算
   const processed = useMemo(() => {
@@ -248,7 +281,7 @@ export default function UnitPricePage() {
                 {paged.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
-                      データがありません
+                      {isLoading ? "読み込み中..." : "データがありません"}
                     </TableCell>
                   </TableRow>
                 ) : (

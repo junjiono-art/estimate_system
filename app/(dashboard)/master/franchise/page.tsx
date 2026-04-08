@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { PageHeader } from "@/components/page-header"
 import { MasterTable, Badge } from "@/components/master/master-table"
 import { Label } from "@/components/ui/label"
@@ -12,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { franchiseCosts } from "@/lib/mock-data"
 import type { FranchiseCost } from "@/lib/types"
 
 const columns = [
@@ -83,6 +83,38 @@ function FranchiseCostForm() {
 }
 
 export default function FranchisePage() {
+  const [rows, setRows] = useState<FranchiseCost[]>([])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadFranchiseCosts() {
+      try {
+        const response = await fetch("/api/master/franchise-costs", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+
+        if (!mounted) return
+
+        if (!response.ok) {
+          setRows([])
+          return
+        }
+
+        const costs = Array.isArray(payload?.costs) ? payload.costs : []
+        setRows(costs as FranchiseCost[])
+      } catch {
+        if (!mounted) return
+        setRows([])
+      }
+    }
+
+    void loadFranchiseCosts()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   return (
     <>
       <PageHeader
@@ -94,7 +126,7 @@ export default function FranchisePage() {
           <MasterTable
             title="FC費用"
             description="フランチャイズ契約に伴う初期費用・月額費用を管理します。"
-            data={franchiseCosts}
+            data={rows}
             columns={columns}
             searchPlaceholder="費目名で検索..."
             searchKey={(row) => row.label}
