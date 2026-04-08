@@ -123,7 +123,7 @@ export async function POST(request: Request) {
   }
 
   // 2020国勢調査 人口等基本集計（男女・年齢階級）に対応する statsDataId を環境変数で切替可能にする
-  const statsDataId = process.env.ESTAT_STATS_DATA_ID ?? "0003448237"
+  const statsDataId = process.env.ESTAT_STATS_DATA_ID ?? "00200521"
 
   const params = new URLSearchParams({
     appId,
