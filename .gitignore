@@ -11,3 +11,4 @@ node_modules/
 doc/
 lambda/
 amplify.yml
+.env.production
