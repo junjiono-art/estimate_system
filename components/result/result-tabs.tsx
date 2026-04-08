@@ -83,7 +83,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       const city = extractCity(location)
 
       const payload = {
-        userId: `local-${Date.now()}`,
         resultId: currentData.id,
         storeName: currentData.storeName,
         username: createdBy.trim(),

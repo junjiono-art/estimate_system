@@ -3,15 +3,11 @@ import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
 const lambdaHistoryPath = process.env.LAMBDA_HISTORY_PATH?.trim() || "/api/history"
+const defaultHistoryUserId = process.env.DEFAULT_HISTORY_USER_ID?.trim() || "anonymous"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const userId = searchParams.get("userId")?.trim()
   const limit = searchParams.get("limit") || undefined
-
-  if (!userId) {
-    return errorResponse(ErrorCode.VALIDATION_ERROR, "userId クエリは必須です。", 400)
-  }
 
   try {
     if (!hasLambdaGatewayConfigured()) {
@@ -22,7 +18,7 @@ export async function GET(request: Request) {
       method: "GET",
       path: lambdaHistoryPath,
       query: {
-        userId,
+        userId: defaultHistoryUserId,
         limit,
       },
     })
