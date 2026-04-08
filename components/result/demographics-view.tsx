@@ -31,11 +31,36 @@ const tooltipStyle = {
   boxShadow: "0 4px 12px rgba(0,0,0,.08)",
 }
 
-// フィットネス適齢期（20〜59歳）の年齢帯
-const FITNESS_AGE_GROUPS = [
-  "20-24歳", "25-29歳", "30-34歳", "35-39歳",
-  "40-44歳", "45-49歳", "50-54歳", "55-59歳",
-]
+function normalizeAgeLabel(label: string): string {
+  return label
+    .replace(/\s+/g, "")
+    .replace(/[〜～−―ー]/g, "-")
+}
+
+function shouldDisplayAgeLabel(label: string): boolean {
+  const normalized = normalizeAgeLabel(label)
+  return !/(再掲|不詳|総数|合計|計)/.test(normalized)
+}
+
+function isFitnessAgeGroup(label: string): boolean {
+  if (!shouldDisplayAgeLabel(label)) return false
+
+  const normalized = normalizeAgeLabel(label)
+  const rangeMatch = normalized.match(/(\d+)-(\d+)歳/)
+  if (rangeMatch) {
+    const start = Number(rangeMatch[1])
+    const end = Number(rangeMatch[2])
+    return Number.isFinite(start) && Number.isFinite(end) && start >= 20 && end <= 59
+  }
+
+  const overMatch = normalized.match(/(\d+)歳以上/)
+  if (overMatch) {
+    const start = Number(overMatch[1])
+    return Number.isFinite(start) && start >= 20 && start <= 59
+  }
+
+  return false
+}
 
 const fmtPopulation = (n: number) =>
   n >= 10000
@@ -100,9 +125,11 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
     )
   }
 
+  const displayData = demographics.data.filter((d) => shouldDisplayAgeLabel(d.ageGroup))
+
   // フィットネス適齢期の合計
-  const fitnessPopulation = demographics.data
-    .filter((d) => FITNESS_AGE_GROUPS.includes(d.ageGroup))
+  const fitnessPopulation = displayData
+    .filter((d) => isFitnessAgeGroup(d.ageGroup))
     .reduce((s, d) => s + d.male + d.female, 0)
 
   const fitnessRate = demographics.totalPopulation > 0
@@ -110,16 +137,16 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
     : 0
 
   // 男女合計グラフ用データ
-  const totalChartData = demographics.data.map((d) => ({
+  const totalChartData = displayData.map((d) => ({
     ageGroup: d.ageGroup,
     male: d.male,
     female: d.female,
     total: d.male + d.female,
-    isFitness: FITNESS_AGE_GROUPS.includes(d.ageGroup),
+    isFitness: isFitnessAgeGroup(d.ageGroup),
   }))
 
   // 人口ピラミッド用データ（男性を負値に）
-  const pyramidData = demographics.data.map((d) => ({
+  const pyramidData = displayData.map((d) => ({
     ageGroup: d.ageGroup,
     male: -d.male,
     female: d.female,
@@ -301,8 +328,8 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
               </tr>
             </thead>
             <tbody>
-              {demographics.data
-                .filter((d) => FITNESS_AGE_GROUPS.includes(d.ageGroup))
+              {displayData
+                .filter((d) => isFitnessAgeGroup(d.ageGroup))
                 .map((d) => {
                   const total = d.male + d.female
                   const maleRate = total > 0 ? Math.round((d.male / total) * 100) : 50
@@ -332,14 +359,14 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
               <tr className="bg-muted/30">
                 <td className="px-4 py-2.5 text-xs font-semibold text-foreground">合計</td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs font-bold text-foreground">
-                  {demographics.data
-                    .filter((d) => FITNESS_AGE_GROUPS.includes(d.ageGroup))
+                  {displayData
+                    .filter((d) => isFitnessAgeGroup(d.ageGroup))
                     .reduce((s, d) => s + d.male, 0)
                     .toLocaleString()}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono text-xs font-bold text-foreground">
-                  {demographics.data
-                    .filter((d) => FITNESS_AGE_GROUPS.includes(d.ageGroup))
+                  {displayData
+                    .filter((d) => isFitnessAgeGroup(d.ageGroup))
                     .reduce((s, d) => s + d.female, 0)
                     .toLocaleString()}
                 </td>
