@@ -144,11 +144,22 @@ export async function POST(request: Request) {
   }
 
   const payload = await response.json()
+  const result = payload?.GET_STATS_DATA?.RESULT
+  const upstreamStatus = Number(result?.STATUS)
+  const upstreamMessage = typeof result?.ERROR_MSG === "string" ? result.ERROR_MSG : undefined
   const statisticalData = payload?.GET_STATS_DATA?.STATISTICAL_DATA
   const values = asArray<EStatValue>(statisticalData?.DATA_INF?.VALUE)
 
   if (!values.length) {
-    return NextResponse.json({ error: "e-Stat APIのレスポンスに統計データがありません。", requestUrl: endpoint }, { status: 502 })
+    return NextResponse.json(
+      {
+        error: "e-Stat APIのレスポンスに統計データがありません。",
+        requestUrl: endpoint,
+        upstreamStatus,
+        upstreamMessage,
+      },
+      { status: 502 },
+    )
   }
 
   const classObjects = asArray(statisticalData?.CLASS_INF?.CLASS_OBJ)
@@ -214,6 +225,8 @@ export async function POST(request: Request) {
       title: statisticalData?.TABLE_INF?.TITLE || "e-Stat 統計データ",
       statsDataId,
       requestUrl: endpoint,
+      upstreamStatus,
+      upstreamMessage,
     },
     lastUpdated: new Date().toISOString(),
   })
