@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   CalendarIcon, ArrowRightIcon, TrendingUpIcon,
@@ -12,17 +12,56 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { StarRating } from "@/components/star-rating"
-import { demoSimulationResults } from "@/lib/mock-data"
+import { getErrorMessage } from "@/lib/error-utils"
+import type { SimulationResult } from "@/lib/types"
+import { mapHistoryItemsToResults } from "@/lib/simulation-result-mapper"
 
 const fmt = (n: number) =>
   `${(n / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万円`
 
 export default function HistoryPage() {
-  const results = demoSimulationResults
+  const [results, setResults] = useState<SimulationResult[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [searchName,     setSearchName]     = useState("")
   const [searchDateFrom, setSearchDateFrom] = useState("")
   const [searchDateTo,   setSearchDateTo]   = useState("")
   const [filterRating,   setFilterRating]   = useState<number | undefined>(undefined)
+
+  useEffect(() => {
+    let active = true
+
+    async function loadHistory() {
+      try {
+        setIsLoading(true)
+        setLoadError("")
+
+        const response = await fetch("/api/history?limit=100", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(getErrorMessage(payload, "試算履歴の取得に失敗しました。"))
+        }
+
+        const items = Array.isArray(payload?.items) ? payload.items : []
+        const mapped = mapHistoryItemsToResults(items)
+
+        if (!active) return
+        setResults(mapped)
+      } catch (error) {
+        if (!active) return
+        setResults([])
+        setLoadError(error instanceof Error ? error.message : "試算履歴の取得に失敗しました。")
+      } finally {
+        if (!active) return
+        setIsLoading(false)
+      }
+    }
+
+    void loadHistory()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const filtered = useMemo(() => {
     return results.filter((sim) => {
@@ -101,12 +140,20 @@ export default function HistoryPage() {
             <p className="mb-4 text-xs text-muted-foreground">{filtered.length} 件の結果</p>
           )}
 
-          {filtered.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 py-16">
+              <ClockIcon className="size-8 animate-pulse text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">試算履歴を読み込み中です...</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 py-16">
               <ClockIcon className="size-8 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 {hasFilter ? "検索条件に一致する試算履歴がありません" : "まだ試算履歴がありません"}
               </p>
+              {loadError && (
+                <p className="text-xs text-destructive">{loadError}</p>
+              )}
               {!hasFilter && (
                 <Button asChild size="sm" className="text-xs">
                   <Link href="/">新規試算を開始</Link>
