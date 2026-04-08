@@ -136,10 +136,11 @@ export async function POST(request: Request) {
   })
 
   const endpoint = `https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData?${params.toString()}`
+  console.info("[e-stat] requestUrl:", endpoint)
   const response = await fetch(endpoint, { cache: "no-store" })
 
   if (!response.ok) {
-    return NextResponse.json({ error: "e-Stat APIへの接続に失敗しました。" }, { status: 502 })
+    return NextResponse.json({ error: "e-Stat APIへの接続に失敗しました。", requestUrl: endpoint }, { status: 502 })
   }
 
   const payload = await response.json()
@@ -147,7 +148,7 @@ export async function POST(request: Request) {
   const values = asArray<EStatValue>(statisticalData?.DATA_INF?.VALUE)
 
   if (!values.length) {
-    return NextResponse.json({ error: "e-Stat APIのレスポンスに統計データがありません。" }, { status: 502 })
+    return NextResponse.json({ error: "e-Stat APIのレスポンスに統計データがありません。", requestUrl: endpoint }, { status: 502 })
   }
 
   const classObjects = asArray(statisticalData?.CLASS_INF?.CLASS_OBJ)
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
       {
         error:
           "男女・年齢別データの抽出に失敗しました。ESTAT_STATS_DATA_ID が対象統計（男女・年齢階級）になっているか確認してください。",
+        requestUrl: endpoint,
       },
       { status: 502 },
     )
@@ -211,6 +213,7 @@ export async function POST(request: Request) {
     source: {
       title: statisticalData?.TABLE_INF?.TITLE || "e-Stat 統計データ",
       statsDataId,
+      requestUrl: endpoint,
     },
     lastUpdated: new Date().toISOString(),
   })
