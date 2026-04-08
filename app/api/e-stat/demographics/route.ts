@@ -109,35 +109,37 @@ function readDimensionCode(row: EStatValue, classId: string): string {
 }
 
 export async function POST(request: Request) {
-  const { address } = (await request.json()) as { address?: string }
+  const reqBody = await request.json();
+  const { address } = reqBody as { address?: string };
   if (!address?.trim()) {
-    return NextResponse.json({ error: "住所を入力してください。" }, { status: 400 })
+    return NextResponse.json({ error: "住所を入力してください。", requestBody: reqBody }, { status: 400 });
   }
 
-  const municipality = extractMunicipality(address)
+  const municipality = extractMunicipality(address);
   if (!municipality) {
     return NextResponse.json(
-      { error: "住所から都道府県・市区町村を判定できませんでした。『東京都渋谷区...』の形式で入力してください。" },
+      { error: "住所から都道府県・市区町村を判定できませんでした。『東京都渋谷区...』の形式で入力してください。", requestBody: reqBody },
       { status: 400 },
-    )
+    );
   }
 
-  const areaCode = resolveAreaCode(municipality.prefecture, municipality.city)
+  const areaCode = resolveAreaCode(municipality.prefecture, municipality.city);
   if (!areaCode) {
     return NextResponse.json(
       {
         error: `市区町村コードを解決できませんでした: ${municipality.prefecture}${municipality.city}。住所表記を見直してください。`,
+        requestBody: reqBody,
       },
       { status: 400 },
-    )
+    );
   }
 
-  const appId = process.env.ESTAT_APP_ID
+  const appId = process.env.ESTAT_APP_ID;
   if (!appId) {
     return NextResponse.json(
-      { error: "ESTAT_APP_ID が未設定です。.env.local に e-Stat アプリIDを設定してください。" },
+      { error: "ESTAT_APP_ID が未設定です。.env.local に e-Stat アプリIDを設定してください。", requestBody: reqBody },
       { status: 500 },
-    )
+    );
   }
 
   // 市区町村粒度の男女・年齢（5歳階級）人口に対応する statsDataId を環境変数で切替可能にする
