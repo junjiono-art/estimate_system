@@ -186,28 +186,30 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         throw new Error(getErrorMessage(geocodePayload, "住所の座標変換に失敗しました。"))
       }
 
-      const nearbyResponse = await fetch("/api/stores/check-nearby", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          latitude: geocodePayload.latitude,
-          longitude: geocodePayload.longitude,
-          prefecture: geocodePayload.prefecture,
-          radiusKm: 1,
-        }),
-      })
+      try {
+        const nearbyResponse = await fetch("/api/stores/check-nearby", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            latitude: geocodePayload.latitude,
+            longitude: geocodePayload.longitude,
+            prefecture: geocodePayload.prefecture,
+            radiusKm: 1,
+          }),
+        })
 
-      const nearbyPayload = await nearbyResponse.json()
-      if (!nearbyResponse.ok) {
-        throw new Error(getErrorMessage(nearbyPayload, "近隣店舗チェックに失敗しました。"))
-      }
-
-      if (nearbyPayload.hasNearbyStore) {
-        const nearest = (nearbyPayload.nearbyStores as Array<{ name: string; distanceKm: number }>).slice(0, 3)
-        const nearestText = nearest.map((s) => `${s.name}（${s.distanceKm}km）`).join("、")
-        setNearbyStoresSummary(nearestText)
-        setNearbyDialogOpen(true)
-        return
+        const nearbyPayload = await nearbyResponse.json()
+        if (!nearbyResponse.ok) {
+          console.warn(getErrorMessage(nearbyPayload, "近隣店舗チェックに失敗しました。試算を続行します。"))
+        } else if (nearbyPayload?.hasNearbyStore) {
+          const nearest = (nearbyPayload.nearbyStores as Array<{ name: string; distanceKm: number }>).slice(0, 3)
+          const nearestText = nearest.map((s) => `${s.name}（${s.distanceKm}km）`).join("、")
+          setNearbyStoresSummary(nearestText)
+          setNearbyDialogOpen(true)
+          return
+        }
+      } catch (nearbyError) {
+        console.warn(nearbyError instanceof Error ? nearbyError.message : "近隣店舗チェックに失敗しました。試算を続行します。")
       }
 
       let demographics: FormSubmitData["demographics"] | undefined
