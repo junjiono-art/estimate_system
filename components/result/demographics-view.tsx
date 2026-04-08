@@ -208,7 +208,7 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={totalChartData}
-                margin={{ top: 4, right: 4, left: 4, bottom: 40 }}
+                margin={{ top: 4, right: 4, left: 4, bottom: 56 }}
                 barSize={10}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -236,22 +236,23 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
                 />
                 <Legend
                   formatter={(value) => value === "male" ? "男性" : "女性"}
-                  wrapperStyle={{ fontSize: 10 }}
+                  wrapperStyle={{ fontSize: 10, paddingTop: 8, bottom: 0 }}
+                  verticalAlign="bottom"
                 />
-                <Bar dataKey="male" name="male" stackId="a">
+                <Bar dataKey="male" name="male" stackId="a" fill="#3b82f6">
                   {totalChartData.map((entry, i) => (
                     <Cell
                       key={i}
-                      fill={entry.isFitness ? "var(--color-chart-1)" : "var(--color-chart-1)"}
+                      fill="#3b82f6"
                       fillOpacity={entry.isFitness ? 1 : 0.35}
                     />
                   ))}
                 </Bar>
-                <Bar dataKey="female" name="female" stackId="a">
+                <Bar dataKey="female" name="female" stackId="a" fill="#ef4444">
                   {totalChartData.map((entry, i) => (
                     <Cell
                       key={i}
-                      fill={entry.isFitness ? "var(--color-chart-3)" : "var(--color-chart-3)"}
+                      fill="#ef4444"
                       fillOpacity={entry.isFitness ? 1 : 0.35}
                     />
                   ))}
@@ -301,8 +302,8 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
                   ]}
                   contentStyle={tooltipStyle}
                 />
-                <Bar dataKey="male" name="male" fill="var(--color-chart-1)" fillOpacity={0.8} radius={[3, 0, 0, 3]} />
-                <Bar dataKey="female" name="female" fill="var(--color-chart-3)" fillOpacity={0.8} radius={[0, 3, 3, 0]} />
+                <Bar dataKey="male" name="male" fill="#3b82f6" fillOpacity={0.8} radius={[3, 0, 0, 3]} />
+                <Bar dataKey="female" name="female" fill="#ef4444" fillOpacity={0.8} radius={[0, 3, 3, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -341,14 +342,14 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
                       <td className="px-4 py-2.5 text-right font-mono font-medium text-foreground">{total.toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-[10px] text-chart-1">{maleRate}%</span>
-                          <div className="flex h-1.5 w-16 overflow-hidden rounded-full bg-chart-3/30">
+                          <span className="text-[10px]" style={{ color: "#3b82f6" }}>{maleRate}%</span>
+                          <div className="flex h-1.5 w-16 overflow-hidden rounded-full" style={{ backgroundColor: "rgba(239,68,68,0.3)" }}>
                             <div
-                              className="h-full bg-chart-1"
-                              style={{ width: `${maleRate}%` }}
+                              className="h-full"
+                              style={{ width: `${maleRate}%`, backgroundColor: "#3b82f6" }}
                             />
                           </div>
-                          <span className="text-[10px] text-chart-3">{100 - maleRate}%</span>
+                          <span className="text-[10px]" style={{ color: "#ef4444" }}>{100 - maleRate}%</span>
                         </div>
                       </td>
                     </tr>
