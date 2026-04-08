@@ -11,6 +11,13 @@ type EStatValue = {
   "@cat01"?: string
   "@cat02"?: string
   "$"?: string | number
+  [key: string]: string | number | undefined
+}
+
+type EStatClassObject = {
+  "@id"?: string
+  "@name"?: string
+  CLASS?: EStatClass | EStatClass[]
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] {
@@ -90,6 +97,17 @@ function toNumber(value: string | number | undefined): number {
   return Number.isFinite(num) ? num : 0
 }
 
+function pickDimensionClassId(classObjects: EStatClassObject[], pattern: RegExp): string | null {
+  const matched = classObjects.find((obj) => obj?.["@id"]?.startsWith("cat") && pattern.test(obj?.["@name"] || ""))
+  return matched?.["@id"] || null
+}
+
+function readDimensionCode(row: EStatValue, classId: string): string {
+  const key = `@${classId}`
+  const value = row[key]
+  return typeof value === "string" ? value : ""
+}
+
 export async function POST(request: Request) {
   const { address } = (await request.json()) as { address?: string }
   if (!address?.trim()) {
@@ -122,8 +140,8 @@ export async function POST(request: Request) {
     )
   }
 
-  // 2020国勢調査 人口等基本集計（男女・年齢階級）に対応する statsDataId を環境変数で切替可能にする
-  const statsDataId = process.env.ESTAT_STATS_DATA_ID ?? "00200521"
+  // 市区町村粒度の男女・年齢（5歳階級）人口に対応する statsDataId を環境変数で切替可能にする
+  const statsDataId = process.env.ESTAT_STATS_DATA_ID ?? "0003445162"
 
   const params = new URLSearchParams({
     appId,
@@ -162,18 +180,55 @@ export async function POST(request: Request) {
     )
   }
 
-  const classObjects = asArray(statisticalData?.CLASS_INF?.CLASS_OBJ)
-  const sexClasses = asArray<EStatClass>(classObjects.find((obj: { "@id"?: string }) => obj?.["@id"] === "cat01")?.CLASS)
-  const ageClasses = asArray<EStatClass>(classObjects.find((obj: { "@id"?: string }) => obj?.["@id"] === "cat02")?.CLASS)
+  const classObjects = asArray<EStatClassObject>(statisticalData?.CLASS_INF?.CLASS_OBJ)
+
+  const sexClassId = pickDimensionClassId(classObjects, /(男女|性別)/)
+  const ageClassId = pickDimensionClassId(classObjects, /年齢/)
+
+  if (!sexClassId || !ageClassId) {
+    return NextResponse.json(
+      {
+        error: "男女・年齢の分類軸を判定できませんでした。ESTAT_STATS_DATA_ID の統計表定義を確認してください。",
+        requestUrl: endpoint,
+        upstreamStatus,
+        upstreamMessage,
+      },
+      { status: 502 },
+    )
+  }
+
+  const sexClasses = asArray<EStatClass>(classObjects.find((obj) => obj?.["@id"] === sexClassId)?.CLASS)
+  const ageClasses = asArray<EStatClass>(classObjects.find((obj) => obj?.["@id"] === ageClassId)?.CLASS)
 
   const sexMap = new Map(sexClasses.map((item) => [item["@code"], item["@name"]]))
   const ageMap = new Map(ageClasses.map((item) => [item["@code"], item["@name"]]))
 
+  const fixedDimensionCodes = new Map<string, string>()
+  for (const obj of classObjects) {
+    const classId = obj?.["@id"]
+    if (!classId || !classId.startsWith("cat") || classId === sexClassId || classId === ageClassId) continue
+
+    const classes = asArray<EStatClass>(obj.CLASS)
+    const totalClass = classes.find((entry) => /(総数|計)/.test(entry?.["@name"] || ""))
+    if (totalClass?.["@code"]) {
+      fixedDimensionCodes.set(classId, totalClass["@code"])
+    }
+  }
+
   const byAge = new Map<string, { male: number; female: number }>()
 
   for (const row of values) {
-    const sexName = sexMap.get(row["@cat01"] || "") || ""
-    const ageName = ageMap.get(row["@cat02"] || "") || ""
+    let shouldSkip = false
+    for (const [classId, expectedCode] of fixedDimensionCodes.entries()) {
+      if (readDimensionCode(row, classId) !== expectedCode) {
+        shouldSkip = true
+        break
+      }
+    }
+    if (shouldSkip) continue
+
+    const sexName = sexMap.get(readDimensionCode(row, sexClassId)) || ""
+    const ageName = ageMap.get(readDimensionCode(row, ageClassId)) || ""
     const population = toNumber(row["$"])
 
     if (!ageName || /総数|不詳/.test(ageName)) continue
@@ -224,6 +279,8 @@ export async function POST(request: Request) {
     source: {
       title: statisticalData?.TABLE_INF?.TITLE || "e-Stat 統計データ",
       statsDataId,
+      sexClassId,
+      ageClassId,
       requestUrl: endpoint,
       upstreamStatus,
       upstreamMessage,
