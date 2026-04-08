@@ -3,7 +3,6 @@ import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
 const lambdaHistoryPath = process.env.LAMBDA_HISTORY_PATH?.trim() || "/api/history"
-const defaultHistoryUserId = process.env.DEFAULT_HISTORY_USER_ID?.trim() || "anonymous"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -18,7 +17,6 @@ export async function GET(request: Request) {
       method: "GET",
       path: lambdaHistoryPath,
       query: {
-        userId: defaultHistoryUserId,
         limit,
       },
     })

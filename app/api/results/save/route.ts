@@ -3,7 +3,6 @@ import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
 const lambdaResultsSavePath = process.env.LAMBDA_RESULTS_SAVE_PATH?.trim() || "/api/results/save"
-const defaultSaveUserId = process.env.DEFAULT_SAVE_USER_ID?.trim() || "anonymous"
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
@@ -30,11 +29,6 @@ export async function POST(request: Request) {
       return errorResponse(ErrorCode.EXTERNAL_API_ERROR, "LAMBDA_API_BASE_URL が未設定です。", 500)
     }
 
-    const bodyForUpstream = {
-      ...body,
-      userId: defaultSaveUserId,
-    }
-
     const result = await invokeLambdaGateway<{
       message: string
       resultId: string
@@ -42,7 +36,7 @@ export async function POST(request: Request) {
     }>({
       method: "POST",
       path: lambdaResultsSavePath,
-      body: bodyForUpstream,
+      body,
     })
 
     if (!result.ok || !result.data) {
