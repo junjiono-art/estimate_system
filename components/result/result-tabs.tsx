@@ -21,6 +21,8 @@ import { StarRating } from "@/components/star-rating"
 import type { SimulationResult, ScenarioType } from "@/lib/types"
 import { SCENARIO_LABELS, getResultsByBaseId } from "@/lib/mock-data"
 import type { FormSubmitData } from "@/components/simulation-form"
+import { getErrorMessage } from "@/lib/error-utils"
+import { extractCity } from "@/lib/utils"
 
 interface ResultTabsProps {
   data: SimulationResult
@@ -50,6 +52,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [createdBy, setCreatedBy]        = useState("")
   const [isSaving, setIsSaving]          = useState(false)
+  const [saveError, setSaveError]        = useState("")
 
   const scenarioData = scenarioResults[scenario]
   const currentData = scenarioData
@@ -68,16 +71,57 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     monthlyProjection: currentData.monthlyProjection.slice(0, yearMonths),
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!createdBy.trim()) return
     setIsSaving(true)
-    // 実際の保存処理はDB連携時に実装
-    setTimeout(() => {
-      setIsSaving(false)
+    setSaveError("")
+
+    try {
+      const location = currentData.location ?? ""
+      const prefMatch = location.match(/(東京都|北海道|(?:京都|大阪)府|..県)/)
+      const prefecture = prefMatch?.[1] ?? ""
+      const city = extractCity(location)
+
+      const payload = {
+        userId: `local-${Date.now()}`,
+        resultId: currentData.id,
+        storeName: currentData.storeName,
+        username: createdBy.trim(),
+        scenario,
+        input: {
+          storeName: currentData.storeName,
+          location,
+          prefecture,
+          city,
+        },
+        result: {
+          ...currentData,
+          rating,
+        },
+      }
+
+      const response = await fetch("/api/results/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const responsePayload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(getErrorMessage(responsePayload, "試算結果の保存に失敗しました。"))
+      }
+
+      const message = typeof responsePayload?.message === "string" ? responsePayload.message : "試算結果を保存しました。"
+      const savedResultId = typeof responsePayload?.resultId === "string" ? responsePayload.resultId : currentData.id
+
       setSaveDialogOpen(false)
       setCreatedBy("")
-      alert(`担当者「${createdBy}」で保存しました。（実際の保存はDB連携後に有効になります）`)
-    }, 500)
+      alert(`${message}（担当者: ${createdBy.trim()} / resultId: ${savedResultId}）`)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "試算結果の保存に失敗しました。")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -134,9 +178,12 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
                 placeholder="例: 田中太郎"
                 value={createdBy}
                 onChange={(e) => setCreatedBy(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleSave() }}
+                onKeyDown={(e) => { if (e.key === "Enter") void handleSave() }}
               />
             </div>
+            {saveError && (
+              <p className="text-xs text-destructive">{saveError}</p>
+            )}
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               <p><span className="font-medium text-foreground">試算名:</span> {currentData.storeName}</p>
               <p><span className="font-medium text-foreground">シナリオ:</span> {SCENARIO_LABELS[scenario]}</p>
