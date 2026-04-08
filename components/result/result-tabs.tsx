@@ -19,7 +19,6 @@ import { DashboardView } from "./dashboard-view"
 import { DemographicsView } from "./demographics-view"
 import { StarRating } from "@/components/star-rating"
 import type { SimulationResult, ScenarioType } from "@/lib/types"
-import { SCENARIO_LABELS, getResultsByBaseId } from "@/lib/mock-data"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { extractCity } from "@/lib/utils"
@@ -42,10 +41,13 @@ const SCENARIO_COLORS: Record<ScenarioType, string> = {
   aggressive:   "bg-chart-2/15 text-chart-2 border-chart-2/30",
 }
 
-export function ResultTabs({ data: initialData, demographicsData, demographicsError }: ResultTabsProps) {
-  const baseId = initialData.id.replace(/-(?:conservative|standard|aggressive)$/, "")
-  const scenarioResults = getResultsByBaseId(baseId)
+const SCENARIO_LABELS: Record<ScenarioType, string> = {
+  conservative: "保守シナリオ",
+  standard: "標準シナリオ",
+  aggressive: "強気シナリオ",
+}
 
+export function ResultTabs({ data: initialData, demographicsData, demographicsError }: ResultTabsProps) {
   const [scenario, setScenario]         = useState<ScenarioType>(initialData.scenario ?? "standard")
   const [selectedYear, setSelectedYear]  = useState("3")
   const [rating, setRating]              = useState<number | undefined>(initialData.rating)
@@ -54,16 +56,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [isSaving, setIsSaving]          = useState(false)
   const [saveError, setSaveError]        = useState("")
 
-  const scenarioData = scenarioResults[scenario]
-  const currentData = scenarioData
-    ? {
-        ...scenarioData,
-        // Keep user-input display fields from the latest submitted data.
-        id: initialData.id,
-        storeName: initialData.storeName,
-        location: initialData.location,
-      }
-    : initialData
+  const currentData = initialData
   const yearMonths  = parseInt(selectedYear) * 12
 
   const filteredData: SimulationResult = {
@@ -204,16 +197,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">シナリオ</span>
-          <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
-            <SelectTrigger className="h-7 w-44 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(SCENARIO_LABELS) as [ScenarioType, string][]).map(([key, label]) => (
-                <SelectItem key={key} value={key} className="text-xs">{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <span className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground">
+            {SCENARIO_LABELS[scenario]}
+          </span>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">

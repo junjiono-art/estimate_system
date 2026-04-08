@@ -12,8 +12,6 @@ import {
   Cell,
 } from "recharts"
 import { MapPinIcon, UsersIcon, AlertCircleIcon } from "lucide-react"
-import { extractCity } from "@/lib/utils"
-import { findCityDemographics } from "@/lib/mock-data"
 import type { SimulationResult } from "@/lib/types"
 import type { FormSubmitData } from "@/components/simulation-form"
 
@@ -68,8 +66,6 @@ const fmtPopulation = (n: number) =>
     : `${n.toLocaleString()}人`
 
 export function DemographicsView({ data, demographicsData, demographicsError }: DemographicsViewProps) {
-  const city = extractCity(data.location ?? "")
-  const fallbackDemographics = findCityDemographics(city)
   const demographics = demographicsData
     ? {
         city: demographicsData.municipality.city,
@@ -81,7 +77,7 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
           female: row.female,
         })),
       }
-    : fallbackDemographics
+    : undefined
 
   if (!data.location) {
     return (
@@ -115,10 +111,10 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
         <MapPinIcon className="size-8 text-muted-foreground/50" />
         <div>
           <p className="text-sm font-medium text-foreground">
-            「{city}」の統計データが見つかりません
+            人口統計データは未取得です
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            入力住所: {data.location}
+            新規試算で住所を入力して実行すると、e-Stat API から人口統計を取得して表示します。
           </p>
         </div>
       </div>

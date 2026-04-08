@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { ArrowRightLeftIcon, WalletIcon, BanknoteIcon, TrendingUpIcon, CalendarIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
+import { Button } from "@/components/ui/button"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
@@ -14,8 +16,9 @@ import { StarRating } from "@/components/star-rating"
 import { CompareKpiSection } from "@/components/compare/compare-kpi-section"
 import { CompareChartView } from "@/components/compare/compare-chart-view"
 import { CompareDashboardView } from "@/components/compare/compare-dashboard-view"
-import { demoSimulationResults } from "@/lib/mock-data"
 import type { SimulationResult } from "@/lib/types"
+import { getErrorMessage } from "@/lib/error-utils"
+import { mapHistoryItemsToResults } from "@/lib/simulation-result-mapper"
 
 const fmt = (n: number) =>
   `${(n / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万円`
@@ -53,7 +56,43 @@ function applyFilter(results: SimulationResult[], filter: FilterState): Simulati
 }
 
 export default function ComparePage() {
-  const results = demoSimulationResults
+  const [results, setResults] = useState<SimulationResult[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    let active = true
+
+    async function loadResults() {
+      try {
+        setIsLoading(true)
+        setLoadError("")
+
+        const response = await fetch("/api/history?limit=100", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(getErrorMessage(payload, "比較用データの取得に失敗しました。"))
+        }
+
+        const items = Array.isArray(payload?.items) ? payload.items : []
+        const mapped = mapHistoryItemsToResults(items)
+        if (!active) return
+        setResults(mapped)
+      } catch (error) {
+        if (!active) return
+        setResults([])
+        setLoadError(error instanceof Error ? error.message : "比較用データの取得に失敗しました。")
+      } finally {
+        if (!active) return
+        setIsLoading(false)
+      }
+    }
+
+    void loadResults()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const yearMonths = useMemo(() => {
     const set = new Set<string>()
@@ -70,9 +109,24 @@ export default function ComparePage() {
   const leftFiltered  = useMemo(() => applyFilter(results, leftFilter),  [results, leftFilter])
   const rightFiltered = useMemo(() => applyFilter(results, rightFilter), [results, rightFilter])
 
-  const [leftId,  setLeftId]  = useState(results[0]?.id ?? "")
-  const [rightId, setRightId] = useState(results[1]?.id ?? "")
+  const [leftId,  setLeftId]  = useState("")
+  const [rightId, setRightId] = useState("")
   const [displayMonths, setDisplayMonths] = useState<number>(24)
+
+  useEffect(() => {
+    if (!results.length) {
+      setLeftId("")
+      setRightId("")
+      return
+    }
+
+    setLeftId((prev) => (prev && results.some((r) => r.id === prev) ? prev : results[0]?.id ?? ""))
+    setRightId((prev) => {
+      if (prev && results.some((r) => r.id === prev)) return prev
+      if (results.length > 1) return results[1].id
+      return results[0]?.id ?? ""
+    })
+  }, [results])
 
   const left  = results.find((r) => r.id === leftId)
   const right = results.find((r) => r.id === rightId)
@@ -229,7 +283,19 @@ export default function ComparePage() {
           </div>
 
           {/* 比較表 + ダッシュボード/グラフタブ */}
-          {left && right && (
+          {isLoading ? (
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+              比較データを読み込み中です...
+            </div>
+          ) : !results.length ? (
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-12 text-center">
+              <p className="text-sm text-muted-foreground">比較できる試算結果がありません</p>
+              {loadError && <p className="mt-2 text-xs text-destructive">{loadError}</p>}
+              <Button asChild size="sm" className="mt-4 text-xs">
+                <Link href="/">新規試算を開始</Link>
+              </Button>
+            </div>
+          ) : left && right ? (
             <div className="flex flex-col gap-5">
               {/* KPI比較セクション（常時表示） */}
               <CompareKpiSection left={left} right={right} />
@@ -336,6 +402,10 @@ export default function ComparePage() {
                   <CompareChartView left={left} right={right} displayMonths={displayMonths} />
                 </TabsContent>
               </Tabs>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 px-6 py-12 text-center text-sm text-muted-foreground">
+              比較元と比較先を選択してください。
             </div>
           )}
         </div>

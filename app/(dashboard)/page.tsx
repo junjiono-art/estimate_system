@@ -1,23 +1,67 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeftIcon, CalculatorIcon, SparklesIcon } from "lucide-react"
+import { ArrowLeftIcon, SparklesIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { SimulationForm } from "@/components/simulation-form"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
-import { demoSimulationResults } from "@/lib/mock-data"
+import type { SimulationResult } from "@/lib/types"
+
+function buildPreviewResult(submittedData: FormSubmitData | null): SimulationResult {
+  const now = new Date().toISOString()
+  const storeName = submittedData?.storeInfo.storeName?.trim() || "試算結果"
+  const location = submittedData?.storeInfo.address?.trim() || ""
+  const floorArea = submittedData?.storeInfo.floorArea ?? 0
+  const rentPerTsubo = submittedData?.storeInfo.rentPerTsubo ?? 0
+  const memberCapacity = submittedData?.storeInfo.memberCapacity ?? 0
+
+  const monthlyRevenue = Math.max(0, memberCapacity * 8000)
+  const monthlyRent = Math.max(0, floorArea * rentPerTsubo)
+  const monthlyRunningCost = Math.round(monthlyRent * 0.6)
+  const monthlyProfit = monthlyRevenue - monthlyRent - monthlyRunningCost
+  const totalInitialInvestment = Math.max(0, floorArea * 300000 + 10000000)
+  const paybackMonths = monthlyProfit > 0 ? Math.ceil(totalInitialInvestment / monthlyProfit) : 999
+
+  const monthlyProjection = Array.from({ length: 120 }, (_, index) => {
+    const month = index + 1
+    const cumulativeProfit = monthlyProfit * month - totalInitialInvestment
+    return {
+      month,
+      revenue: monthlyRevenue,
+      cost: monthlyRent + monthlyRunningCost,
+      profit: monthlyProfit,
+      cumulativeProfit,
+    }
+  })
+
+  return {
+    id: `preview-${Date.now()}`,
+    storeName,
+    location,
+    createdAt: now,
+    createdBy: "未保存",
+    scenario: "standard",
+    totalInitialInvestment,
+    machinesCost: Math.round(totalInitialInvestment * 0.55),
+    interiorCost: Math.round(totalInitialInvestment * 0.35),
+    franchiseInitialCost: 0,
+    otherInitialCost: Math.round(totalInitialInvestment * 0.1),
+    monthlyRevenue,
+    monthlyRent,
+    monthlyRunningCost,
+    monthlyFranchiseCost: 0,
+    monthlyProfit,
+    paybackMonths,
+    monthlyProjection,
+  }
+}
 
 export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
-  const data = demoSimulationResults[0]
-  const resultData = {
-    ...data,
-    storeName: submittedData?.storeInfo.storeName?.trim() || data.storeName,
-    location: submittedData?.storeInfo.address?.trim() || data.location,
-  }
+  const resultData = buildPreviewResult(submittedData)
 
   if (showResult) {
     return (
