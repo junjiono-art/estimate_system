@@ -65,6 +65,7 @@ export type FormSubmitData = {
       total: number
     }>
   }
+  demographicsError?: string
 }
 
 const TABS = [
@@ -213,19 +214,28 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       }
 
       let demographics: FormSubmitData["demographics"] | undefined
+      let demographicsError: string | undefined
 
-      const response = await fetch("/api/e-stat/demographics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: targetAddress }),
-      })
+      try {
+        const response = await fetch("/api/e-stat/demographics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: targetAddress }),
+        })
 
-      const payload = await response.json()
-      if (!response.ok) {
-        throw new Error(getErrorMessage(payload, "人口統計データの取得に失敗しました。"))
+        const payload = await response.json()
+        if (!response.ok) {
+          demographicsError = getErrorMessage(payload, "人口統計データの取得に失敗しました。")
+          console.warn(demographicsError)
+        } else {
+          demographics = payload
+        }
+      } catch (demographicsFetchError) {
+        demographicsError = demographicsFetchError instanceof Error
+          ? demographicsFetchError.message
+          : "人口統計データの取得に失敗しました。"
+        console.warn(demographicsError)
       }
-
-      demographics = payload
 
       const formData: FormSubmitData = {
         storeInfo: {
@@ -236,6 +246,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           memberCapacity: parseInt(memberCapacity) || 0,
         },
         demographics,
+        demographicsError,
       }
 
       onSubmitWithData?.(formData)

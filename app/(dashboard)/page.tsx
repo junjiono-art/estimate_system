@@ -4,13 +4,20 @@ import { useState } from "react"
 import { ArrowLeftIcon, CalculatorIcon, SparklesIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { SimulationForm } from "@/components/simulation-form"
+import type { FormSubmitData } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
 import { demoSimulationResults } from "@/lib/mock-data"
 
 export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
+  const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
   const data = demoSimulationResults[0]
+  const resultData = {
+    ...data,
+    storeName: submittedData?.storeInfo.storeName?.trim() || data.storeName,
+    location: submittedData?.storeInfo.address?.trim() || data.location,
+  }
 
   if (showResult) {
     return (
@@ -32,7 +39,11 @@ export default function NewSimulationPage() {
         />
         <div className="overflow-auto">
           <div className="mx-auto max-w-6xl px-8 py-7">
-            <ResultTabs data={data} />
+            <ResultTabs
+              data={resultData}
+              demographicsData={submittedData?.demographics}
+              demographicsError={submittedData?.demographicsError}
+            />
           </div>
         </div>
       </>
@@ -54,7 +65,10 @@ export default function NewSimulationPage() {
               各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。
             </p>
           </div>
-          <SimulationForm onSubmit={() => setShowResult(true)} />
+          <SimulationForm
+            onSubmit={() => setShowResult(true)}
+            onSubmitWithData={setSubmittedData}
+          />
         </div>
       </div>
     </>

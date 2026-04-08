@@ -20,9 +20,12 @@ import { DemographicsView } from "./demographics-view"
 import { StarRating } from "@/components/star-rating"
 import type { SimulationResult, ScenarioType } from "@/lib/types"
 import { SCENARIO_LABELS, getResultsByBaseId } from "@/lib/mock-data"
+import type { FormSubmitData } from "@/components/simulation-form"
 
 interface ResultTabsProps {
   data: SimulationResult
+  demographicsData?: FormSubmitData["demographics"]
+  demographicsError?: string
 }
 
 const YEAR_OPTIONS = Array.from({ length: 10 }, (_, i) => ({
@@ -37,7 +40,7 @@ const SCENARIO_COLORS: Record<ScenarioType, string> = {
   aggressive:   "bg-chart-2/15 text-chart-2 border-chart-2/30",
 }
 
-export function ResultTabs({ data: initialData }: ResultTabsProps) {
+export function ResultTabs({ data: initialData, demographicsData, demographicsError }: ResultTabsProps) {
   const baseId = initialData.id.replace(/-(?:conservative|standard|aggressive)$/, "")
   const scenarioResults = getResultsByBaseId(baseId)
 
@@ -199,7 +202,11 @@ export function ResultTabs({ data: initialData }: ResultTabsProps) {
           <DashboardView data={filteredData} />
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
-          <DemographicsView data={currentData} />
+          <DemographicsView
+            data={currentData}
+            demographicsData={demographicsData}
+            demographicsError={demographicsError}
+          />
         </TabsContent>
       </Tabs>
     </div>

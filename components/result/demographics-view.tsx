@@ -15,9 +15,12 @@ import { MapPinIcon, UsersIcon, AlertCircleIcon } from "lucide-react"
 import { extractCity } from "@/lib/utils"
 import { findCityDemographics } from "@/lib/mock-data"
 import type { SimulationResult } from "@/lib/types"
+import type { FormSubmitData } from "@/components/simulation-form"
 
 interface DemographicsViewProps {
   data: SimulationResult
+  demographicsData?: FormSubmitData["demographics"]
+  demographicsError?: string
 }
 
 const tooltipStyle = {
@@ -39,9 +42,21 @@ const fmtPopulation = (n: number) =>
     ? `${(n / 10000).toFixed(1)}万人`
     : `${n.toLocaleString()}人`
 
-export function DemographicsView({ data }: DemographicsViewProps) {
+export function DemographicsView({ data, demographicsData, demographicsError }: DemographicsViewProps) {
   const city = extractCity(data.location ?? "")
-  const demographics = findCityDemographics(city)
+  const fallbackDemographics = findCityDemographics(city)
+  const demographics = demographicsData
+    ? {
+        city: demographicsData.municipality.city,
+        prefecture: demographicsData.municipality.prefecture,
+        totalPopulation: demographicsData.bySex.total,
+        data: demographicsData.byAgeGender.map((row) => ({
+          ageGroup: row.ageGroup,
+          male: row.male,
+          female: row.female,
+        })),
+      }
+    : fallbackDemographics
 
   if (!data.location) {
     return (
@@ -52,6 +67,18 @@ export function DemographicsView({ data }: DemographicsViewProps) {
           <p className="mt-1 text-xs text-muted-foreground">
             試算フォームの「住所」欄を入力することで、エリア人口統計が表示されます。
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (demographicsError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 py-16 text-center">
+        <AlertCircleIcon className="size-8 text-muted-foreground/50" />
+        <div>
+          <p className="text-sm font-medium text-foreground">人口統計データの取得に失敗しました</p>
+          <p className="mt-1 text-xs text-muted-foreground">e-Stat API のエラーのため、人口グラフは表示できません。</p>
         </div>
       </div>
     )
@@ -329,7 +356,9 @@ export function DemographicsView({ data }: DemographicsViewProps) {
       </div>
 
       <p className="text-[10px] text-muted-foreground text-right">
-        ※ 人口データはデモ用モックデータです。実際のデータは国勢調査・e-Stat等を参照してください。
+        {demographicsData
+          ? "※ 人口データは e-Stat API 取得値です。"
+          : "※ 人口データはデモ用モックデータです。実際のデータは国勢調査・e-Stat等を参照してください。"}
       </p>
     </div>
   )
