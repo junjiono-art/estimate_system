@@ -265,6 +265,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   return (
     <form
       onSubmit={handleFormSubmit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault() }}
       className="flex flex-col gap-5"
     >
       {/* ── タブナビ ── */}
