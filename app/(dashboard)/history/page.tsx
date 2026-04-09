@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   CalendarIcon, ArrowRightIcon, TrendingUpIcon,
-  WalletIcon, BanknoteIcon, TrashIcon, SearchIcon, ClockIcon,
+  WalletIcon, BanknoteIcon, TrashIcon, SearchIcon, ClockIcon, UsersIcon,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
@@ -231,6 +231,13 @@ export default function HistoryPage() {
                       <span className="text-muted-foreground">回収</span>
                       <span className="font-mono font-semibold text-foreground">{sim.paybackMonths}ヶ月</span>
                     </div>
+                    {sim.breakevenMembers !== undefined && (
+                      <div className="flex items-center gap-1.5">
+                        <UsersIcon className="size-3 text-chart-3" />
+                        <span className="text-muted-foreground">損益分岐</span>
+                        <span className="font-mono font-semibold text-foreground">{sim.breakevenMembers}人</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* 右: アクション */}

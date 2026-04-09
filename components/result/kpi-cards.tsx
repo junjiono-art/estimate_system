@@ -1,6 +1,6 @@
 "use client"
 
-import { BanknoteIcon, TrendingUpIcon, CalendarIcon, WalletIcon } from "lucide-react"
+import { BanknoteIcon, TrendingUpIcon, CalendarIcon, WalletIcon, UsersIcon } from "lucide-react"
 import type { SimulationResult } from "@/lib/types"
 
 interface KpiCardsProps {
@@ -40,10 +40,17 @@ export function KpiCards({ data }: KpiCardsProps) {
       accent: "bg-chart-4/10 text-chart-4",
       border: "border-chart-4/20",
     },
+    {
+      label: "損益分岐点（会員数）",
+      value: data.breakevenMembers !== undefined ? `${data.breakevenMembers} 人` : "－",
+      icon: UsersIcon,
+      accent: "bg-chart-3/10 text-chart-3",
+      border: "border-chart-3/20",
+    },
   ]
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       {cards.map((c) => (
         <div
           key={c.label}
