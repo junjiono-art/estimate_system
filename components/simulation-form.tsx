@@ -45,7 +45,6 @@ export type FormSubmitData = {
     address: string
     floorArea: number
     rentPerTsubo: number
-    franchiseRate: number
   }
   demographics?: {
     municipality: {
@@ -97,7 +96,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
   const [address,        setAddress]        = useState("")
-  const [franchiseRate,  setFranchiseRate]  = useState("")
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
 
@@ -241,7 +239,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           address,
           floorArea: parseInt(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
-          franchiseRate: parseInt(franchiseRate) || 0,
         },
         demographics,
         demographicsError,
@@ -303,24 +300,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           {/* 店舗基本情報 */}
           {activeTab === "store" && (
             <div className="flex flex-col gap-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="storeName" className="text-xs font-medium">試算名</Label>
-                  <Input id="storeName" placeholder="例: FitGym 渋谷店" value={storeName} onChange={(e) => setStoreName(e.target.value)} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="franchiseRate" className="text-xs font-medium">FC（フランチャイズ）契約</Label>
-                  <Select value={franchiseRate} onValueChange={setFranchiseRate}>
-                    <SelectTrigger id="franchiseRate">
-                      <SelectValue placeholder="選択してください" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">直営</SelectItem>
-                      <SelectItem value="10">10%</SelectItem>
-                      <SelectItem value="15">15%</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="flex flex-col gap-1.5 sm:w-96">
+                <Label htmlFor="storeName" className="text-xs font-medium">試算名</Label>
+                <Input id="storeName" placeholder="例: FitGym 渋谷店" value={storeName} onChange={(e) => setStoreName(e.target.value)} />
               </div>
 
               <Separator />

@@ -15,13 +15,14 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const location = submittedData?.storeInfo.address?.trim() || ""
   const floorArea = submittedData?.storeInfo.floorArea ?? 0
   const rentPerTsubo = submittedData?.storeInfo.rentPerTsubo ?? 0
-  const franchiseRate = submittedData?.storeInfo.franchiseRate ?? 0
 
   // 簡易的な収益計算（床面積ベース）
   const monthlyRevenue = Math.max(0, floorArea * 50000)
   const monthlyRent = Math.max(0, floorArea * rentPerTsubo)
   const monthlyRunningCost = Math.round(monthlyRent * 0.6)
-  const monthlyFranchiseCost = franchiseRate > 0 ? Math.round(monthlyRevenue * (franchiseRate / 100)) : 0
+  // デフォルトは直営（0%）、試算結果画面で変更可能
+  const franchiseRate = 0
+  const monthlyFranchiseCost = 0
   const monthlyProfit = monthlyRevenue - monthlyRent - monthlyRunningCost - monthlyFranchiseCost
   const totalInitialInvestment = Math.max(0, floorArea * 300000 + 10000000)
   const paybackMonths = monthlyProfit > 0 ? Math.ceil(totalInitialInvestment / monthlyProfit) : 999
