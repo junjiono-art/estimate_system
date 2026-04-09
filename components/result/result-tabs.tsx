@@ -57,9 +57,20 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [isSaving, setIsSaving]          = useState(false)
   const [saveError, setSaveError]        = useState("")
 
+  // シナリオ係数
+  const SCENARIO_FACTORS: Record<ScenarioType, { revenueMultiplier: number; growthSpeed: number }> = {
+    conservative: { revenueMultiplier: 0.8, growthSpeed: 0.03 },
+    standard: { revenueMultiplier: 1.0, growthSpeed: 0.05 },
+    aggressive: { revenueMultiplier: 1.25, growthSpeed: 0.07 },
+  }
+
+  const scenarioFactor = SCENARIO_FACTORS[scenario]
   const franchiseRateNum = parseInt(franchiseRate) || 0
-  const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(initialData.monthlyRevenue * (franchiseRateNum / 100)) : 0
-  const adjustedMonthlyProfit = initialData.monthlyRevenue - initialData.monthlyRent - initialData.monthlyRunningCost - monthlyFranchiseCost
+  
+  // シナリオに応じて収益を調整
+  const adjustedMonthlyRevenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier)
+  const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(adjustedMonthlyRevenue * (franchiseRateNum / 100)) : 0
+  const adjustedMonthlyProfit = adjustedMonthlyRevenue - initialData.monthlyRent - initialData.monthlyRunningCost - monthlyFranchiseCost
   const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(initialData.totalInitialInvestment / adjustedMonthlyProfit) : 999
   
   // 損益分岐点（会員数）の再計算
@@ -69,7 +80,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   const currentData: SimulationResult = {
     ...initialData,
+    scenario,
     franchiseRate: franchiseRateNum,
+    monthlyRevenue: adjustedMonthlyRevenue,
     monthlyFranchiseCost,
     monthlyProfit: adjustedMonthlyProfit,
     paybackMonths: adjustedPaybackMonths,
@@ -80,14 +93,19 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   const filteredData: SimulationResult = {
     ...currentData,
-    monthlyProjection: currentData.monthlyProjection.slice(0, yearMonths).map((item, index) => {
+    monthlyProjection: Array.from({ length: yearMonths }, (_, index) => {
       const month = index + 1
-      const monthlyFC = monthlyFranchiseCost
-      const profit = initialData.monthlyRevenue - (initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFC)
-      const cumulativeProfit = profit * month - initialData.totalInitialInvestment
+      const growthFactor = Math.min(1, 0.5 + month * scenarioFactor.growthSpeed)
+      const revenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier * growthFactor)
+      const cost = initialData.monthlyRent + initialData.monthlyRunningCost + (franchiseRateNum > 0 ? Math.round(revenue * (franchiseRateNum / 100)) : 0)
+      const profit = revenue - cost
+      const cumulativeProfit = index === 0 
+        ? profit - initialData.totalInitialInvestment 
+        : (filteredData.monthlyProjection?.[index - 1]?.cumulativeProfit ?? -initialData.totalInitialInvestment) + profit
       return {
-        ...item,
-        cost: initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFC,
+        month,
+        revenue,
+        cost,
         profit,
         cumulativeProfit,
       }
@@ -224,9 +242,16 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">シナリオ</span>
-          <span className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground">
-            {SCENARIO_LABELS[scenario]}
-          </span>
+          <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
+            <SelectTrigger className="h-7 w-36 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="conservative" className="text-xs">保守</SelectItem>
+              <SelectItem value="standard" className="text-xs">スタンダード</SelectItem>
+              <SelectItem value="aggressive" className="text-xs">アグレッシブ</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">
