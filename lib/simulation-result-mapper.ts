@@ -1,4 +1,4 @@
-import type { ScenarioType, SimulationResult } from "@/lib/types"
+import type { AreaDemographics, ScenarioType, SimulationResult } from "@/lib/types"
 
 export type HistoryApiResult = {
   resultId?: string
@@ -28,6 +28,24 @@ export type HistoryApiResult = {
       profit?: number
       cumulativeProfit?: number
     }>
+    demographics?: {
+      municipality?: {
+        prefecture?: string
+        city?: string
+        areaCode?: string
+      }
+      bySex?: {
+        male?: number
+        female?: number
+        total?: number
+      }
+      byAgeGender?: Array<{
+        ageGroup?: string
+        male?: number
+        female?: number
+        total?: number
+      }>
+    }
   }
   rating?: number
 }
@@ -35,6 +53,37 @@ export type HistoryApiResult = {
 function toNumber(value: unknown): number {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
+}
+
+function mapDemographics(value: HistoryApiResult["result"] extends { demographics?: infer T } ? T : never): AreaDemographics | undefined {
+  if (!value || typeof value !== "object") return undefined
+
+  const municipality = (value as { municipality?: unknown }).municipality
+  const bySex = (value as { bySex?: unknown }).bySex
+  const byAgeGender = (value as { byAgeGender?: unknown }).byAgeGender
+
+  if (!municipality || typeof municipality !== "object") return undefined
+  if (!bySex || typeof bySex !== "object") return undefined
+  if (!Array.isArray(byAgeGender)) return undefined
+
+  return {
+    municipality: {
+      prefecture: String((municipality as { prefecture?: unknown }).prefecture ?? ""),
+      city: String((municipality as { city?: unknown }).city ?? ""),
+      areaCode: String((municipality as { areaCode?: unknown }).areaCode ?? ""),
+    },
+    bySex: {
+      male: toNumber((bySex as { male?: unknown }).male),
+      female: toNumber((bySex as { female?: unknown }).female),
+      total: toNumber((bySex as { total?: unknown }).total),
+    },
+    byAgeGender: byAgeGender.map((row) => ({
+      ageGroup: String((row as { ageGroup?: unknown }).ageGroup ?? ""),
+      male: toNumber((row as { male?: unknown }).male),
+      female: toNumber((row as { female?: unknown }).female),
+      total: toNumber((row as { total?: unknown }).total),
+    })),
+  }
 }
 
 export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult | null {
@@ -62,6 +111,7 @@ export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult
     monthlyProfit: toNumber(item.result.monthlyProfit),
     paybackMonths: toNumber(item.result.paybackMonths),
     rating: typeof item.rating === "number" ? item.rating : undefined,
+    demographics: mapDemographics(item.result.demographics),
     monthlyProjection: Array.isArray(item.result.monthlyProjection)
       ? item.result.monthlyProjection.map((row, index) => ({
           month: toNumber(row.month) || index + 1,

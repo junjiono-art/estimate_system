@@ -65,6 +65,25 @@ export interface StoreInput {
 /** シナリオ種別 */
 export type ScenarioType = "conservative" | "standard" | "aggressive"
 
+export interface AreaDemographics {
+  municipality: {
+    prefecture: string
+    city: string
+    areaCode: string
+  }
+  bySex: {
+    male: number
+    female: number
+    total: number
+  }
+  byAgeGender: Array<{
+    ageGroup: string
+    male: number
+    female: number
+    total: number
+  }>
+}
+
 /** 試算結果 */
 export interface SimulationResult {
   id: string
@@ -90,6 +109,8 @@ export interface SimulationResult {
   paybackMonths: number
   // 評価（1〜5、未評価は undefined）
   rating?: number
+  // エリア人口統計（試算時に取得できた場合のみ）
+  demographics?: AreaDemographics
   // 月次推移（最大120ヶ月 = 10年分）
   monthlyProjection: {
     month: number

@@ -89,6 +89,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         result: {
           ...currentData,
           rating,
+          demographics: demographicsData ?? currentData.demographics,
         },
       }
 

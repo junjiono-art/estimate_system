@@ -77,7 +77,18 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
           female: row.female,
         })),
       }
-    : undefined
+    : data.demographics
+      ? {
+          city: data.demographics.municipality.city,
+          prefecture: data.demographics.municipality.prefecture,
+          totalPopulation: data.demographics.bySex.total,
+          data: data.demographics.byAgeGender.map((row) => ({
+            ageGroup: row.ageGroup,
+            male: row.male,
+            female: row.female,
+          })),
+        }
+      : undefined
 
   if (!data.location) {
     return (
