@@ -75,7 +75,7 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"]
 
-const PAGE_SIZE = 5
+const PAGE_SIZE = 10
 
 type DemographicRow = {
   ageGroup: string
@@ -314,16 +314,17 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                     <Label htmlFor="address" className="text-xs font-medium">住所</Label>
                     <Input id="address" placeholder="例: 東京都渋谷区渋谷1-1-1 ○○ビル3F" value={address} onChange={(e) => setAddress(e.target.value)} />
                   </div>
-                  <div className="flex flex-col gap-1.5 sm:w-48">
-                    <Label htmlFor="rentPerTsubo" className="text-xs font-medium">家賃（円）</Label>
-                    <Input id="rentPerTsubo" type="number" placeholder="例: 300000" value={rentPerTsubo} onChange={(e) => setRentPerTsubo(e.target.value)} />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="rentPerTsubo" className="text-xs font-medium">家賃（円）</Label>
+                      <Input id="rentPerTsubo" type="number" placeholder="例: 300000" value={rentPerTsubo} onChange={(e) => setRentPerTsubo(e.target.value)} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="floorArea" className="text-xs font-medium">床面積（坪）</Label>
+                      <Input id="floorArea" type="number" placeholder="例: 50" value={floorArea} onChange={(e) => setFloorArea(e.target.value)} />
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5 sm:w-48">
-                <Label htmlFor="floorArea" className="text-xs font-medium">床面積（坪）</Label>
-                <Input id="floorArea" type="number" placeholder="例: 50" value={floorArea} onChange={(e) => setFloorArea(e.target.value)} />
               </div>
             </div>
           )}
@@ -366,7 +367,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   onClick={() => setRcPage((p) => p - 1)}
                 >
                   <ChevronLeftIcon className="size-3.5" />
-                  前の5件
+                  前の10件
                 </Button>
                 <span className="text-[11px] text-muted-foreground">
                   {rcPage + 1} / {rcTotalPages} ページ（{rcPage * PAGE_SIZE + 1}〜{Math.min((rcPage + 1) * PAGE_SIZE, RC_ITEMS.length)} 件目）
@@ -379,7 +380,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   disabled={rcPage >= rcTotalPages - 1}
                   onClick={() => setRcPage((p) => p + 1)}
                 >
-                  次の5件
+                  次の10件
                   <ChevronRightIcon className="size-3.5" />
                 </Button>
               </div>
@@ -424,7 +425,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   onClick={() => setCostPage((p) => p - 1)}
                 >
                   <ChevronLeftIcon className="size-3.5" />
-                  前の5件
+                  前の10件
                 </Button>
                 <span className="text-[11px] text-muted-foreground">
                   {costPage + 1} / {costTotalPages} ページ（{costPage * PAGE_SIZE + 1}〜{Math.min((costPage + 1) * PAGE_SIZE, COST_ITEMS.length)} 件目）
@@ -437,7 +438,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   disabled={costPage >= costTotalPages - 1}
                   onClick={() => setCostPage((p) => p + 1)}
                 >
-                  次の5件
+                  次の10件
                   <ChevronRightIcon className="size-3.5" />
                 </Button>
               </div>
