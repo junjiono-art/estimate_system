@@ -26,7 +26,7 @@ export async function GET(request: Request) {
         ErrorCode.INTERNAL_ERROR,
         result.errorMessage || "試算履歴の取得に失敗しました。",
         result.status || 502,
-        { upstreamCode: result.errorCode },
+        { upstreamCode: result.errorCode, upstreamDetails: result.errorDetails },
       )
     }
 

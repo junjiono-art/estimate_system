@@ -22,6 +22,7 @@ export async function invokeLambdaGateway<T>(options: LambdaRequestOptions): Pro
   data: T | null
   errorCode?: string
   errorMessage?: string
+  errorDetails?: unknown
 }> {
   const baseUrl = getBaseUrl()
   if (!baseUrl) {
@@ -79,12 +80,23 @@ export async function invokeLambdaGateway<T>(options: LambdaRequestOptions): Pro
         ? payload.error.message
         : "Lambda API呼び出しに失敗しました。"
 
+    const errorDetails =
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      typeof payload.error === "object" &&
+      payload.error !== null &&
+      "details" in payload.error
+        ? (payload.error as { details?: unknown }).details
+        : undefined
+
     return {
       ok: false,
       status: response.status,
       data: null,
       errorCode,
       errorMessage,
+      errorDetails,
     }
   }
 
