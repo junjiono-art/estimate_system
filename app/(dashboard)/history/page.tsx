@@ -23,10 +23,37 @@ export default function HistoryPage() {
   const [results, setResults] = useState<SimulationResult[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
+  const [deleteError, setDeleteError] = useState("")
+  const [deletingIds, setDeletingIds] = useState<string[]>([])
   const [searchName,     setSearchName]     = useState("")
   const [searchDateFrom, setSearchDateFrom] = useState("")
   const [searchDateTo,   setSearchDateTo]   = useState("")
   const [filterRating,   setFilterRating]   = useState<number | undefined>(undefined)
+
+  async function handleDelete(sim: SimulationResult) {
+    const shouldDelete = window.confirm(`「${sim.storeName}」の試算履歴を削除します。よろしいですか？`)
+    if (!shouldDelete) return
+
+    setDeleteError("")
+    setDeletingIds((prev) => [...prev, sim.id])
+
+    try {
+      const response = await fetch(`/api/results/${sim.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload, "試算履歴の削除に失敗しました。"))
+      }
+
+      setResults((prev) => prev.filter((item) => item.id !== sim.id))
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "試算履歴の削除に失敗しました。")
+    } finally {
+      setDeletingIds((prev) => prev.filter((id) => id !== sim.id))
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -140,6 +167,10 @@ export default function HistoryPage() {
             <p className="mb-4 text-xs text-muted-foreground">{filtered.length} 件の結果</p>
           )}
 
+          {deleteError && (
+            <p className="mb-4 text-xs text-destructive">{deleteError}</p>
+          )}
+
           {isLoading ? (
             <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 py-16">
               <ClockIcon className="size-8 animate-pulse text-muted-foreground/40" />
@@ -204,9 +235,16 @@ export default function HistoryPage() {
 
                   {/* 右: アクション */}
                   <div className="flex items-center gap-1.5">
+                    {deletingIds.includes(sim.id) && (
+                      <span className="text-[10px] text-muted-foreground">削除中...</span>
+                    )}
                     <button
+                      type="button"
+                      disabled={deletingIds.includes(sim.id)}
                       className="flex size-7 items-center justify-center rounded text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => alert("削除機能は実装後に利用可能になります。")}
+                      onClick={() => {
+                        void handleDelete(sim)
+                      }}
                     >
                       <TrashIcon className="size-3.5" />
                     </button>

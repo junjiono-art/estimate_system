@@ -104,12 +104,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         throw new Error(getErrorMessage(responsePayload, "試算結果の保存に失敗しました。"))
       }
 
-      const message = typeof responsePayload?.message === "string" ? responsePayload.message : "試算結果を保存しました。"
-      const savedResultId = typeof responsePayload?.resultId === "string" ? responsePayload.resultId : currentData.id
-
       setSaveDialogOpen(false)
       setCreatedBy("")
-      alert(`${message}（担当者: ${createdBy.trim()} / resultId: ${savedResultId}）`)
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "試算結果の保存に失敗しました。")
     } finally {
