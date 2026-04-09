@@ -61,6 +61,11 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(initialData.monthlyRevenue * (franchiseRateNum / 100)) : 0
   const adjustedMonthlyProfit = initialData.monthlyRevenue - initialData.monthlyRent - initialData.monthlyRunningCost - monthlyFranchiseCost
   const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(initialData.totalInitialInvestment / adjustedMonthlyProfit) : 999
+  
+  // 損益分岐点（会員数）の再計算
+  const monthlyMemberFee = 8000
+  const totalMonthlyCost = initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFranchiseCost
+  const adjustedBreakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
 
   const currentData: SimulationResult = {
     ...initialData,
@@ -68,6 +73,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     monthlyFranchiseCost,
     monthlyProfit: adjustedMonthlyProfit,
     paybackMonths: adjustedPaybackMonths,
+    breakevenMembers: adjustedBreakevenMembers,
   }
 
   const yearMonths  = parseInt(selectedYear) * 12

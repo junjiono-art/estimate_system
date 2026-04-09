@@ -26,6 +26,12 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const monthlyProfit = monthlyRevenue - monthlyRent - monthlyRunningCost - monthlyFranchiseCost
   const totalInitialInvestment = Math.max(0, floorArea * 300000 + 10000000)
   const paybackMonths = monthlyProfit > 0 ? Math.ceil(totalInitialInvestment / monthlyProfit) : 999
+  
+  // 損益分岐点（会員数）の計算
+  // 月額会員費を8,000円と仮定
+  const monthlyMemberFee = 8000
+  const totalMonthlyCost = monthlyRent + monthlyRunningCost + monthlyFranchiseCost
+  const breakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
 
   const monthlyProjection = Array.from({ length: 120 }, (_, index) => {
     const month = index + 1
@@ -58,6 +64,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     monthlyFranchiseCost,
     monthlyProfit,
     paybackMonths,
+    breakevenMembers,
     monthlyProjection,
   }
 }

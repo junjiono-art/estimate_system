@@ -109,6 +109,8 @@ export interface SimulationResult {
   monthlyProfit: number
   // 回収
   paybackMonths: number
+  // 損益分岐点
+  breakevenMembers?: number
   // 評価（1〜5、未評価は undefined）
   rating?: number
   // エリア人口統計（試算時に取得できた場合のみ）

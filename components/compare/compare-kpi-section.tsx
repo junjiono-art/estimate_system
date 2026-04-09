@@ -1,6 +1,6 @@
 "use client"
 
-import { BanknoteIcon, TrendingUpIcon, CalendarIcon, WalletIcon } from "lucide-react"
+import { BanknoteIcon, TrendingUpIcon, CalendarIcon, WalletIcon, UsersIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import type { SimulationResult } from "@/lib/types"
 
@@ -20,7 +20,7 @@ interface KpiItem {
   icon: React.ElementType
   accent: string
   border: string
-  format: (v: number) => string
+  format: (v: number | undefined) => string
   lowerIsBetter?: boolean
 }
 
@@ -31,7 +31,7 @@ const kpiItems: KpiItem[] = [
     icon: WalletIcon,
     accent: "bg-chart-1/10 text-chart-1",
     border: "border-chart-1/20",
-    format: fmt,
+    format: (v) => fmt(v ?? 0),
     lowerIsBetter: true,
   },
   {
@@ -40,7 +40,7 @@ const kpiItems: KpiItem[] = [
     icon: BanknoteIcon,
     accent: "bg-chart-2/10 text-chart-2",
     border: "border-chart-2/20",
-    format: fmt,
+    format: (v) => fmt(v ?? 0),
     lowerIsBetter: false,
   },
   {
@@ -49,7 +49,7 @@ const kpiItems: KpiItem[] = [
     icon: TrendingUpIcon,
     accent: "bg-accent/10 text-accent",
     border: "border-accent/20",
-    format: fmt,
+    format: (v) => fmt(v ?? 0),
     lowerIsBetter: false,
   },
   {
@@ -58,7 +58,16 @@ const kpiItems: KpiItem[] = [
     icon: CalendarIcon,
     accent: "bg-chart-4/10 text-chart-4",
     border: "border-chart-4/20",
-    format: (v) => `${v} ヶ月`,
+    format: (v) => `${v ?? 0} ヶ月`,
+    lowerIsBetter: true,
+  },
+  {
+    label: "損益分岐点（会員数）",
+    key: "breakevenMembers",
+    icon: UsersIcon,
+    accent: "bg-chart-3/10 text-chart-3",
+    border: "border-chart-3/20",
+    format: (v) => v !== undefined ? `${v} 人` : "－",
     lowerIsBetter: true,
   },
 ]
@@ -69,15 +78,17 @@ export function CompareKpiSection({ left, right }: CompareKpiSectionProps) {
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
         KPI 比較
       </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {kpiItems.map((item) => {
-          const lv = left[item.key] as number
-          const rv = right[item.key] as number
+          const lv = (left[item.key] as number | undefined) ?? 0
+          const rv = (right[item.key] as number | undefined) ?? 0
           const diff = rv - lv
           const isBetter = item.lowerIsBetter ? diff < 0 : diff > 0
           const diffLabel =
             item.key === "paybackMonths"
               ? `${diff > 0 ? "+" : ""}${diff}ヶ月`
+              : item.key === "breakevenMembers"
+              ? `${diff > 0 ? "+" : ""}${diff}人`
               : `${diff > 0 ? "+" : ""}${fmt(diff)}`
 
           return (
