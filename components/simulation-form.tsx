@@ -165,8 +165,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const isFirst = currentIndex === 0
   const isLast  = currentIndex === TABS.length - 1
 
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const handleSimulate = async () => {
     setIsSubmitting(true)
     setSubmitError("")
 
@@ -264,8 +263,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   return (
     <form
-      onSubmit={handleFormSubmit}
-      onKeyDown={(e) => { if (e.key === "Enter") e.preventDefault() }}
+      onSubmit={(e) => e.preventDefault()}
       className="flex flex-col gap-5"
     >
       {/* ── タブナビ ── */}
@@ -506,9 +504,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         </div>
 
         {isLast ? (
-          <Button type="submit" className="gap-1.5 text-xs">
+          <Button type="button" onClick={() => { void handleSimulate() }} disabled={isSubmitting} className="gap-1.5 text-xs">
             <CalculatorIcon className="size-3.5" />
-            試算を実行する
+            {isSubmitting ? "試算中..." : "試算を実行する"}
           </Button>
         ) : (
           <Button type="button" onClick={() => setActiveTab(TABS[currentIndex + 1].id)} className="gap-1.5 text-xs">
