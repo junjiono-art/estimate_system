@@ -93,6 +93,8 @@ export interface SimulationResult {
   createdAt: string
   createdBy: string
   scenario: ScenarioType
+  // FC契約
+  franchiseRate?: number
   // 初期投資
   totalInitialInvestment: number
   machinesCost: number

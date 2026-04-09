@@ -51,17 +51,41 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenario, setScenario]         = useState<ScenarioType>(initialData.scenario ?? "standard")
   const [selectedYear, setSelectedYear]  = useState("3")
   const [rating, setRating]              = useState<number | undefined>(initialData.rating)
+  const [franchiseRate, setFranchiseRate] = useState<string>(String(initialData.franchiseRate ?? 0))
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [createdBy, setCreatedBy]        = useState("")
   const [isSaving, setIsSaving]          = useState(false)
   const [saveError, setSaveError]        = useState("")
 
-  const currentData = initialData
+  const franchiseRateNum = parseInt(franchiseRate) || 0
+  const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(initialData.monthlyRevenue * (franchiseRateNum / 100)) : 0
+  const adjustedMonthlyProfit = initialData.monthlyRevenue - initialData.monthlyRent - initialData.monthlyRunningCost - monthlyFranchiseCost
+  const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(initialData.totalInitialInvestment / adjustedMonthlyProfit) : 999
+
+  const currentData: SimulationResult = {
+    ...initialData,
+    franchiseRate: franchiseRateNum,
+    monthlyFranchiseCost,
+    monthlyProfit: adjustedMonthlyProfit,
+    paybackMonths: adjustedPaybackMonths,
+  }
+
   const yearMonths  = parseInt(selectedYear) * 12
 
   const filteredData: SimulationResult = {
     ...currentData,
-    monthlyProjection: currentData.monthlyProjection.slice(0, yearMonths),
+    monthlyProjection: currentData.monthlyProjection.slice(0, yearMonths).map((item, index) => {
+      const month = index + 1
+      const monthlyFC = monthlyFranchiseCost
+      const profit = initialData.monthlyRevenue - (initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFC)
+      const cumulativeProfit = profit * month - initialData.totalInitialInvestment
+      return {
+        ...item,
+        cost: initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFC,
+        profit,
+        cumulativeProfit,
+      }
+    }),
   }
 
   async function handleSave() {
@@ -197,6 +221,20 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <span className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground">
             {SCENARIO_LABELS[scenario]}
           </span>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">FC契約</span>
+          <Select value={franchiseRate} onValueChange={setFranchiseRate}>
+            <SelectTrigger className="h-7 w-28 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="0" className="text-xs">直営</SelectItem>
+              <SelectItem value="10" className="text-xs">10%</SelectItem>
+              <SelectItem value="15" className="text-xs">15%</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">

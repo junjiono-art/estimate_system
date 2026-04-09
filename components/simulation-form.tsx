@@ -45,7 +45,7 @@ export type FormSubmitData = {
     address: string
     floorArea: number
     rentPerTsubo: number
-    memberCapacity: number
+    franchiseRate: number
   }
   demographics?: {
     municipality: {
@@ -100,7 +100,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [franchiseRate,  setFranchiseRate]  = useState("")
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
-  const [memberCapacity, setMemberCapacity] = useState("")
 
   // 投資コスト
   const [fitnessMachineCost,  setFitnessMachineCost]  = useState("")
@@ -242,7 +241,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           address,
           floorArea: parseInt(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
-          memberCapacity: parseInt(memberCapacity) || 0,
+          franchiseRate: parseInt(franchiseRate) || 0,
         },
         demographics,
         demographicsError,
@@ -340,15 +339,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="floorArea" className="text-xs font-medium">床面積（坪）</Label>
-                  <Input id="floorArea" type="number" placeholder="例: 50" value={floorArea} onChange={(e) => setFloorArea(e.target.value)} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="memberCapacity" className="text-xs font-medium">想定会員数</Label>
-                  <Input id="memberCapacity" type="number" placeholder="例: 300" value={memberCapacity} onChange={(e) => setMemberCapacity(e.target.value)} />
-                </div>
+              <div className="flex flex-col gap-1.5 sm:w-48">
+                <Label htmlFor="floorArea" className="text-xs font-medium">床面積（坪）</Label>
+                <Input id="floorArea" type="number" placeholder="例: 50" value={floorArea} onChange={(e) => setFloorArea(e.target.value)} />
               </div>
             </div>
           )}
