@@ -91,25 +91,27 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   const yearMonths  = parseInt(selectedYear) * 12
 
+  // 自己参照（TDZ）を避けるため、monthlyProjection を独立して計算する
+  // Step1: 月あたりの売上・コスト・利益を算出
+  const rawProjection = Array.from({ length: yearMonths }, (_, index) => {
+    const month = index + 1
+    const growthFactor = Math.min(1, 0.5 + month * scenarioFactor.growthSpeed)
+    const revenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier * growthFactor)
+    const cost = initialData.monthlyRent + initialData.monthlyRunningCost + (franchiseRateNum > 0 ? Math.round(revenue * (franchiseRateNum / 100)) : 0)
+    const profit = revenue - cost
+    return { month, revenue, cost, profit }
+  })
+
+  // Step2: 累積利益を逐次加算（前月の値を変数で保持してフォワード参照を排除）
+  let runningCumulative = -initialData.totalInitialInvestment
+  const computedProjection = rawProjection.map((m) => {
+    runningCumulative += m.profit
+    return { ...m, cumulativeProfit: runningCumulative }
+  })
+
   const filteredData: SimulationResult = {
     ...currentData,
-    monthlyProjection: Array.from({ length: yearMonths }, (_, index) => {
-      const month = index + 1
-      const growthFactor = Math.min(1, 0.5 + month * scenarioFactor.growthSpeed)
-      const revenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier * growthFactor)
-      const cost = initialData.monthlyRent + initialData.monthlyRunningCost + (franchiseRateNum > 0 ? Math.round(revenue * (franchiseRateNum / 100)) : 0)
-      const profit = revenue - cost
-      const cumulativeProfit = index === 0 
-        ? profit - initialData.totalInitialInvestment 
-        : (filteredData.monthlyProjection?.[index - 1]?.cumulativeProfit ?? -initialData.totalInitialInvestment) + profit
-      return {
-        month,
-        revenue,
-        cost,
-        profit,
-        cumulativeProfit,
-      }
-    }),
+    monthlyProjection: computedProjection,
   }
 
   async function handleSave() {

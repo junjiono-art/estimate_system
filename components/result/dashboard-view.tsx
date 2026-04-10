@@ -49,7 +49,7 @@ export function DashboardView({ data }: DashboardViewProps) {
 
   const projLen = data.monthlyProjection.length
   const last = data.monthlyProjection[projLen - 1]
-  const recoveredAmount = data.totalInitialInvestment + last.cumulativeProfit
+  const recoveredAmount = data.totalInitialInvestment + (last?.cumulativeProfit ?? 0)
   const recoveryPercent = Math.max(0, Math.min(100, Math.round((recoveredAmount / data.totalInitialInvestment) * 100)))
 
   return (
