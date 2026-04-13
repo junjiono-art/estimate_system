@@ -11,18 +11,10 @@ import {
   ChevronsUpDownIcon,
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { Badge } from "@/components/master/master-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -52,7 +44,6 @@ import type { MasterValue } from "@/lib/types"
 
 const ROWS_PER_PAGE = 10
 type SortDir = "asc" | "desc" | null
-type Category = "すべて" | "ランニングコスト" | "投資コスト"
 
 function getPageNumbers(total: number, current: number): (number | "ellipsis")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
@@ -75,11 +66,10 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
   note: "",
 }
 
-export default function UnitPricePage() {
+export default function RunningCostPage() {
   const [rows, setRows] = useState<MasterValue[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [category, setCategory] = useState<Category>("すべて")
   const [sortDir, setSortDir] = useState<SortDir>(null)
   const [page, setPage] = useState(1)
 
@@ -91,21 +81,15 @@ export default function UnitPricePage() {
   useEffect(() => {
     let mounted = true
 
-    async function loadMasterValues() {
+    async function load() {
       setIsLoading(true)
       try {
         const response = await fetch("/api/master/values", { cache: "no-store" })
         const payload = await response.json().catch(() => null)
-
         if (!mounted) return
-
-        if (!response.ok) {
-          setRows([])
-          return
-        }
-
+        if (!response.ok) { setRows([]); return }
         const values = Array.isArray(payload?.values) ? payload.values : []
-        setRows(values as MasterValue[])
+        setRows((values as MasterValue[]).filter((v) => v.category === "ランニングコスト"))
       } catch {
         if (!mounted) return
         setRows([])
@@ -114,24 +98,18 @@ export default function UnitPricePage() {
       }
     }
 
-    void loadMasterValues()
-
-    return () => {
-      mounted = false
-    }
+    void load()
+    return () => { mounted = false }
   }, [])
 
-  // フィルタ・ソート・ページ計算
   const processed = useMemo(() => {
-    let result = rows.filter((r) => {
-      const matchSearch = `${r.category} ${r.label}`.toLowerCase().includes(search.toLowerCase())
-      const matchCategory = category === "すべて" || r.category === category
-      return matchSearch && matchCategory
-    })
+    let result = rows.filter((r) =>
+      r.label.toLowerCase().includes(search.toLowerCase()),
+    )
     if (sortDir === "asc") result = [...result].sort((a, b) => a.currentAmount - b.currentAmount)
     if (sortDir === "desc") result = [...result].sort((a, b) => b.currentAmount - a.currentAmount)
     return result
-  }, [rows, search, category, sortDir])
+  }, [rows, search, sortDir])
 
   const totalPages = Math.ceil(processed.length / ROWS_PER_PAGE)
   const paged = processed.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE)
@@ -153,50 +131,34 @@ export default function UnitPricePage() {
   function openEdit(row: MasterValue) {
     setDialogMode("edit")
     setEditTarget(row)
-    setForm({
-      category: row.category,
-      label: row.label,
-      unit: row.unit,
-      defaultAmount: row.defaultAmount,
-      currentAmount: row.currentAmount,
-      note: row.note,
-    })
+    setForm({ category: row.category, label: row.label, unit: row.unit, defaultAmount: row.defaultAmount, currentAmount: row.currentAmount, note: row.note })
     setDialogOpen(true)
   }
 
   function handleSave() {
     if (dialogMode === "add") {
-      setRows((prev) => [
-        ...prev,
-        { id: `up-${Date.now()}`, ...form },
-      ])
+      setRows((prev) => [...prev, { id: `rc-${Date.now()}`, ...form }])
     } else if (editTarget) {
-      setRows((prev) =>
-        prev.map((r) => (r.id === editTarget.id ? { ...r, ...form } : r)),
-      )
+      setRows((prev) => prev.map((r) => (r.id === editTarget.id ? { ...r, ...form } : r)))
     }
     setDialogOpen(false)
   }
 
   function handleDelete(id: string) {
-    if (confirm("この単価を削除しますか？")) {
+    if (confirm("この費目を削除しますか？")) {
       setRows((prev) => prev.filter((r) => r.id !== id))
       resetPage()
     }
   }
 
   const SortIcon =
-    sortDir === "asc"
-      ? ChevronUpIcon
-      : sortDir === "desc"
-        ? ChevronDownIcon
-        : ChevronsUpDownIcon
+    sortDir === "asc" ? ChevronUpIcon : sortDir === "desc" ? ChevronDownIcon : ChevronsUpDownIcon
 
   return (
     <>
       <PageHeader
-        title="単価マスタ"
-        description="ランニングコスト・投資コストの各費目の単価を管理します。試算時の初期値として使用されます。"
+        title="ランニングコストマスタ"
+        description="毎月発生する運営費（人件費・水道光熱費・消耗品費など）を管理します。試算時の初期値として使用されます。"
       />
       <div className="overflow-auto">
         <div className="mx-auto max-w-5xl px-8 py-7">
@@ -205,9 +167,9 @@ export default function UnitPricePage() {
             {/* ヘッダ */}
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div>
-                <p className="text-sm font-semibold text-foreground">費目単価</p>
+                <p className="text-sm font-semibold text-foreground">ランニングコスト費目</p>
                 <p className="text-xs text-muted-foreground">
-                  ランニングコスト・投資コストに使用する費目ごとの単価を管理します。
+                  毎月発生する運営費費目を管理します。
                 </p>
               </div>
               <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={openAdd}>
@@ -216,7 +178,7 @@ export default function UnitPricePage() {
               </Button>
             </div>
 
-            {/* 検索・絞り込みバー */}
+            {/* 検索バー */}
             <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/20 px-5 py-3">
               <div className="relative">
                 <SearchIcon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -227,33 +189,12 @@ export default function UnitPricePage() {
                   className="h-7 w-48 pl-8 text-xs"
                 />
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  カテゴリ
-                </label>
-                <Select
-                  value={category}
-                  onValueChange={(v) => { setCategory(v as Category); resetPage() }}
-                >
-                  <SelectTrigger className="h-7 w-40 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="すべて" className="text-xs">すべて</SelectItem>
-                    <SelectItem value="ランニングコスト" className="text-xs">ランニングコスト</SelectItem>
-                    <SelectItem value="投資コスト" className="text-xs">投資コスト</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             {/* テーブル */}
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-border bg-muted/10">
-                  <TableHead className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    カテゴリ
-                  </TableHead>
                   <TableHead className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     費目名
                   </TableHead>
@@ -280,21 +221,13 @@ export default function UnitPricePage() {
               <TableBody>
                 {paged.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={5} className="py-10 text-center text-xs text-muted-foreground">
                       {isLoading ? "読み込み中..." : "データがありません"}
                     </TableCell>
                   </TableRow>
                 ) : (
                   paged.map((row) => (
                     <TableRow key={row.id} className="border-b border-border/50 hover:bg-muted/20">
-                      <TableCell className="text-xs">
-                        <Badge
-                          variant={row.category === "ランニングコスト" ? "secondary" : "default"}
-                          className="text-xs whitespace-nowrap"
-                        >
-                          {row.category}
-                        </Badge>
-                      </TableCell>
                       <TableCell className="text-xs font-medium text-foreground">{row.label}</TableCell>
                       <TableCell className="text-right font-mono text-sm">
                         {row.currentAmount.toLocaleString()}
@@ -329,7 +262,7 @@ export default function UnitPricePage() {
               </TableBody>
             </Table>
 
-            {/* フッター：件数 + ページネーション */}
+            {/* フッター */}
             <div className="flex flex-col items-center gap-3 border-t border-border bg-muted/10 px-5 py-3 sm:flex-row sm:justify-between">
               <p className="text-[10px] text-muted-foreground">
                 {processed.length > 0
@@ -386,35 +319,18 @@ export default function UnitPricePage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">
-              {dialogMode === "add" ? "費目単価 — 新規追加" : "費目単価 — 編集"}
+              {dialogMode === "add" ? "ランニングコスト費目 — 新規追加" : "ランニングコスト費目 — 編集"}
             </DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">カテゴリ</Label>
-                <Select
-                  value={form.category}
-                  onValueChange={(v) => setForm((f) => ({ ...f, category: v as MasterValue["category"] }))}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="選択" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ランニングコスト" className="text-xs">ランニングコスト</SelectItem>
-                    <SelectItem value="投資コスト" className="text-xs">投資コスト</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">費目名</Label>
-                <Input
-                  className="h-8 text-xs"
-                  placeholder="例: 水道光熱費"
-                  value={form.label}
-                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
-                />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">費目名</Label>
+              <Input
+                className="h-8 text-xs"
+                placeholder="例: 水道光熱費"
+                value={form.label}
+                onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
