@@ -92,6 +92,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [submitError, setSubmitError] = useState("")
   const [nearbyDialogOpen, setNearbyDialogOpen] = useState(false)
   const [nearbyStoresSummary, setNearbyStoresSummary] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -165,6 +166,21 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const handleSimulate = async () => {
     setIsSubmitting(true)
     setSubmitError("")
+
+    // 必須項目チェック
+    const errors: Record<string, string> = {}
+    if (!storeName.trim())    errors.storeName    = "試算名は必須です。"
+    if (!address.trim())      errors.address      = "住所は必須です。"
+    if (!rentPerTsubo.trim()) errors.rentPerTsubo = "家賃は必須です。"
+    if (!floorArea.trim())    errors.floorArea    = "床面積は必須です。"
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      setActiveTab("store")
+      setIsSubmitting(false)
+      return
+    }
+    setFieldErrors({})
 
     try {
       const targetAddress = address.trim()
@@ -301,8 +317,20 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           {activeTab === "store" && (
             <div className="flex flex-col gap-5">
               <div className="flex flex-col gap-1.5 sm:w-96">
-                <Label htmlFor="storeName" className="text-xs font-medium">試算名</Label>
-                <Input id="storeName" placeholder="例: FitGym 渋谷店" value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+                <Label htmlFor="storeName" className="flex items-center gap-1.5 text-xs font-medium">
+                  試算名
+                  <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
+                </Label>
+                <Input
+                  id="storeName"
+                  placeholder="例: FitGym 渋谷店"
+                  value={storeName}
+                  onChange={(e) => { setStoreName(e.target.value); setFieldErrors((prev) => ({ ...prev, storeName: "" })) }}
+                  className={fieldErrors.storeName ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
+                {fieldErrors.storeName && (
+                  <p className="text-[11px] text-destructive">{fieldErrors.storeName}</p>
+                )}
               </div>
 
               <Separator />
@@ -311,17 +339,55 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">エリア情報</p>
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="address" className="text-xs font-medium">住所</Label>
-                    <Input id="address" placeholder="例: 東京都渋谷区渋谷1-1-1 ○○ビル3F" value={address} onChange={(e) => setAddress(e.target.value)} />
+                    <Label htmlFor="address" className="flex items-center gap-1.5 text-xs font-medium">
+                      住所
+                      <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
+                    </Label>
+                    <Input
+                      id="address"
+                      placeholder="例: 東京都渋谷区渋谷1-1-1 ○○ビル3F"
+                      value={address}
+                      onChange={(e) => { setAddress(e.target.value); setFieldErrors((prev) => ({ ...prev, address: "" })) }}
+                      className={fieldErrors.address ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                    {fieldErrors.address && (
+                      <p className="text-[11px] text-destructive">{fieldErrors.address}</p>
+                    )}
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="rentPerTsubo" className="text-xs font-medium">家賃（円）</Label>
-                      <Input id="rentPerTsubo" type="number" placeholder="例: 300000" value={rentPerTsubo} onChange={(e) => setRentPerTsubo(e.target.value)} />
+                      <Label htmlFor="rentPerTsubo" className="flex items-center gap-1.5 text-xs font-medium">
+                        家賃（円）
+                        <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
+                      </Label>
+                      <Input
+                        id="rentPerTsubo"
+                        type="number"
+                        placeholder="例: 300000"
+                        value={rentPerTsubo}
+                        onChange={(e) => { setRentPerTsubo(e.target.value); setFieldErrors((prev) => ({ ...prev, rentPerTsubo: "" })) }}
+                        className={fieldErrors.rentPerTsubo ? "border-destructive focus-visible:ring-destructive" : ""}
+                      />
+                      {fieldErrors.rentPerTsubo && (
+                        <p className="text-[11px] text-destructive">{fieldErrors.rentPerTsubo}</p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="floorArea" className="text-xs font-medium">床面積（坪）</Label>
-                      <Input id="floorArea" type="number" placeholder="例: 50" value={floorArea} onChange={(e) => setFloorArea(e.target.value)} />
+                      <Label htmlFor="floorArea" className="flex items-center gap-1.5 text-xs font-medium">
+                        床面積（坪）
+                        <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
+                      </Label>
+                      <Input
+                        id="floorArea"
+                        type="number"
+                        placeholder="例: 50"
+                        value={floorArea}
+                        onChange={(e) => { setFloorArea(e.target.value); setFieldErrors((prev) => ({ ...prev, floorArea: "" })) }}
+                        className={fieldErrors.floorArea ? "border-destructive focus-visible:ring-destructive" : ""}
+                      />
+                      {fieldErrors.floorArea && (
+                        <p className="text-[11px] text-destructive">{fieldErrors.floorArea}</p>
+                      )}
                     </div>
                   </div>
                 </div>
