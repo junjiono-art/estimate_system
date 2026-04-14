@@ -19,12 +19,19 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   // 簡易的な収益計算（床面積ベース）
   const monthlyRevenue = Math.max(0, floorArea * 50000)
   const monthlyRent = Math.max(0, floorArea * rentPerTsubo)
-  const monthlyRunningCost = Math.round(monthlyRent * 0.6)
+  const submittedRunningCost = submittedData?.runningCosts.total ?? 0
+  const monthlyRunningCost = Math.max(0, submittedRunningCost || Math.round(monthlyRent * 0.6))
   // デフォルトは直営（0%）、試算結果画面で変更可能
   const franchiseRate = 0
   const monthlyFranchiseCost = 0
   const monthlyProfit = monthlyRevenue - monthlyRent - monthlyRunningCost - monthlyFranchiseCost
-  const totalInitialInvestment = Math.max(0, floorArea * 300000 + 10000000)
+  const submittedInitialCost = submittedData?.investmentCosts.total ?? 0
+  const totalInitialInvestment = Math.max(0, submittedInitialCost || (floorArea * 300000 + 10000000))
+
+  const machinesCost = submittedData?.investmentCosts.byField.fitnessMachineCost ?? Math.round(totalInitialInvestment * 0.55)
+  const interiorCost = submittedData?.investmentCosts.byField.interiorCost ?? Math.round(totalInitialInvestment * 0.35)
+  const franchiseInitialCost = submittedData?.investmentCosts.byField.franchiseFeeCost ?? 0
+  const otherInitialCost = submittedData?.investmentCosts.byField.otherInitialCost ?? Math.round(totalInitialInvestment * 0.1)
   const paybackMonths = monthlyProfit > 0 ? Math.ceil(totalInitialInvestment / monthlyProfit) : 999
   
   // 損益分岐点（会員数）の計算
@@ -54,10 +61,10 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     scenario: "standard",
     franchiseRate,
     totalInitialInvestment,
-    machinesCost: Math.round(totalInitialInvestment * 0.55),
-    interiorCost: Math.round(totalInitialInvestment * 0.35),
-    franchiseInitialCost: 0,
-    otherInitialCost: Math.round(totalInitialInvestment * 0.1),
+    machinesCost,
+    interiorCost,
+    franchiseInitialCost,
+    otherInitialCost,
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Noto_Sans_JP, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const _notoSansJP = Noto_Sans_JP({ subsets: ["latin"], variable: "--font-sans" });
@@ -26,6 +27,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${_notoSansJP.variable} ${_geistMono.variable} font-sans antialiased`}>
         {children}
+        <Toaster richColors />
         <Analytics />
       </body>
     </html>

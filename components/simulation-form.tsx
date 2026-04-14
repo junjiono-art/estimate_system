@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   CalculatorIcon,
   BuildingIcon,
@@ -33,6 +33,12 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
+import type { MasterValue } from "@/lib/types"
+import { toast } from "sonner"
+import {
+  INVESTMENT_COST_CODE_TO_FIELD_ID,
+  RUNNING_COST_CODE_TO_FIELD_ID,
+} from "@/lib/master-value-mapping"
 
 interface SimulationFormProps {
   onSubmit?: () => void
@@ -45,6 +51,14 @@ export type FormSubmitData = {
     address: string
     floorArea: number
     rentPerTsubo: number
+  }
+  runningCosts: {
+    byField: Record<string, number>
+    total: number
+  }
+  investmentCosts: {
+    byField: Record<string, number>
+    total: number
   }
   demographics?: {
     municipality: {
@@ -93,6 +107,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [nearbyDialogOpen, setNearbyDialogOpen] = useState(false)
   const [nearbyStoresSummary, setNearbyStoresSummary] = useState("")
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [isMasterLoading, setIsMasterLoading] = useState(false)
+  const [masterLoadError, setMasterLoadError] = useState("")
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -123,6 +139,71 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [rcInsurance,     setRcInsurance]     = useState("")
   const [rcAdvertising,   setRcAdvertising]   = useState("")
   const [rcOther,         setRcOther]         = useState("")
+
+  const runningCostSetters: Record<string, (value: string) => void> = {
+    rcElectricity: setRcElectricity,
+    rcWater: setRcWater,
+    rcStaff: setRcStaff,
+    rcCleaning: setRcCleaning,
+    rcCommunication: setRcCommunication,
+    rcSupplies: setRcSupplies,
+    rcInsurance: setRcInsurance,
+    rcAdvertising: setRcAdvertising,
+    rcOther: setRcOther,
+  }
+
+  const investmentCostSetters: Record<string, (value: string) => void> = {
+    fitnessMachineCost: setFitnessMachineCost,
+    interiorCost: setInteriorCost,
+    flapperGateCost: setFlapperGateCost,
+    bodyCompositionCost: setBodyCompositionCost,
+    waterServerCost: setWaterServerCost,
+    franchiseFeeCost: setFranchiseFeeCost,
+    systemCost: setSystemCost,
+    openingPrepCost: setOpeningPrepCost,
+    openingPackageCost: setOpeningPackageCost,
+    securityCost: setSecurityCost,
+    otherInitialCost: setOtherInitialCost,
+  }
+
+  async function loadMasterDefaults() {
+    setIsMasterLoading(true)
+    setMasterLoadError("")
+    try {
+      const response = await fetch("/api/master/values", { cache: "no-store" })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message = getErrorMessage(payload, "マスタ値の取得に失敗しました。")
+        setMasterLoadError(message)
+        toast.error(message)
+        return
+      }
+
+      const values = (Array.isArray(payload?.values) ? payload.values : []) as MasterValue[]
+      values.forEach((value) => {
+        const amountText = String(Math.max(0, Number(value.defaultAmount) || 0))
+        if (value.category === "ランニングコスト") {
+          const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID]
+          if (fieldId) runningCostSetters[fieldId]?.(amountText)
+          return
+        }
+        if (value.category === "投資コスト") {
+          const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID]
+          if (fieldId) investmentCostSetters[fieldId]?.(amountText)
+        }
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "マスタ値の取得に失敗しました。"
+      setMasterLoadError(message)
+      toast.error(message)
+    } finally {
+      setIsMasterLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadMasterDefaults()
+  }, [])
 
   // ── アイテム定義（全state宣言の後に記述）──
   const RC_ITEMS = [
@@ -255,6 +336,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           address,
           floorArea: parseInt(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
+        },
+        runningCosts: {
+          byField: Object.fromEntries(RC_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),
+          total: totalRunningCost,
+        },
+        investmentCosts: {
+          byField: Object.fromEntries(COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),
+          total: totalInitialCost,
         },
         demographics,
         demographicsError,
@@ -406,6 +495,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   合計 {totalRunningCost.toLocaleString()} 円/月
                 </span>
               </div>
+              {masterLoadError && (
+                <div className="flex items-center justify-between rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                  <span>{masterLoadError}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => { void loadMasterDefaults() }} disabled={isMasterLoading}>
+                    再試行
+                  </Button>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {rcPageItems.map((item) => (
@@ -464,6 +561,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   合計 {totalInitialCost.toLocaleString()} 円
                 </span>
               </div>
+              {masterLoadError && (
+                <div className="flex items-center justify-between rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+                  <span>{masterLoadError}</span>
+                  <Button type="button" size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => { void loadMasterDefaults() }} disabled={isMasterLoading}>
+                    再試行
+                  </Button>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {costPageItems.map((item) => (

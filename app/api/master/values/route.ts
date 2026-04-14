@@ -6,6 +6,7 @@ const lambdaMasterValuesBasePath = process.env.LAMBDA_MASTER_VALUES_BASE_PATH?.t
 
 type MasterValuePayload = {
   category?: string
+  code?: string
   label?: string
   unit?: string
   defaultAmount?: number
@@ -44,16 +45,17 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as MasterValuePayload | null
 
   const category = body?.category?.trim()
+  const code = body?.code?.trim().toLowerCase()
   const label = body?.label?.trim()
   const unit = body?.unit?.trim()
   const defaultAmount = Number(body?.defaultAmount)
   const currentAmount = Number(body?.currentAmount)
   const note = body?.note ?? ""
 
-  if (!category || !label || !unit || !Number.isFinite(defaultAmount) || !Number.isFinite(currentAmount)) {
+  if (!category || !code || !label || !unit || !Number.isFinite(defaultAmount) || !Number.isFinite(currentAmount)) {
     return errorResponse(
       ErrorCode.VALIDATION_ERROR,
-      "category, label, unit, defaultAmount, currentAmount は必須です。",
+      "category, code, label, unit, defaultAmount, currentAmount は必須です。",
       400,
     )
   }
@@ -66,7 +68,7 @@ export async function POST(request: Request) {
     const result = await invokeLambdaGateway<{ value: unknown }>({
       method: "POST",
       path: lambdaMasterValuesBasePath,
-      body: { category, label, unit, defaultAmount, currentAmount, note },
+      body: { category, code, label, unit, defaultAmount, currentAmount, note },
     })
 
     if (!result.ok || !result.data) {

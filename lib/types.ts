@@ -6,6 +6,7 @@
 export interface MasterValue {
   id: string
   category: "ランニングコスト" | "投資コスト"
+  code: string
   label: string
   unit: string        // 単位ラベル（例: "円/月", "円/台", "円/坪"）
   defaultAmount: number
