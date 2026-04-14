@@ -30,7 +30,7 @@ export async function GET() {
         ErrorCode.INTERNAL_ERROR,
         result.errorMessage || "単価マスタの取得に失敗しました。",
         result.status || 502,
-        { upstreamCode: result.errorCode },
+        { upstreamCode: result.errorCode, upstreamDetails: result.errorDetails },
       )
     }
 
