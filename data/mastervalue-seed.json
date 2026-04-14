@@ -1,0 +1,582 @@
+﻿[
+    {
+        "id":  {
+                   "S":  "1"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  "電気・ガスの合算想定"
+                 },
+        "label":  {
+                      "S":  "水道光熱費"
+                  },
+        "defaultAmount":  {
+                              "N":  "150000"
+                          },
+        "currentAmount":  {
+                              "N":  "150000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_electricity"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "2"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "水道代"
+                  },
+        "defaultAmount":  {
+                              "N":  "30000"
+                          },
+        "currentAmount":  {
+                              "N":  "30000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_water"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "3"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "人件費"
+                  },
+        "defaultAmount":  {
+                              "N":  "500000"
+                          },
+        "currentAmount":  {
+                              "N":  "500000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_staff"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "4"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "清掃費"
+                  },
+        "defaultAmount":  {
+                              "N":  "50000"
+                          },
+        "currentAmount":  {
+                              "N":  "50000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_cleaning"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "5"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "通信費"
+                  },
+        "defaultAmount":  {
+                              "N":  "20000"
+                          },
+        "currentAmount":  {
+                              "N":  "20000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_communication"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "6"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "消耗品費"
+                  },
+        "defaultAmount":  {
+                              "N":  "30000"
+                          },
+        "currentAmount":  {
+                              "N":  "30000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_supplies"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "7"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "保険料"
+                  },
+        "defaultAmount":  {
+                              "N":  "15000"
+                          },
+        "currentAmount":  {
+                              "N":  "15000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_insurance"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "8"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "広告宣伝費"
+                  },
+        "defaultAmount":  {
+                              "N":  "100000"
+                          },
+        "currentAmount":  {
+                              "N":  "100000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_advertising"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "9"
+               },
+        "category":  {
+                         "S":  "ランニングコスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "その他"
+                  },
+        "defaultAmount":  {
+                              "N":  "50000"
+                          },
+        "currentAmount":  {
+                              "N":  "50000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "running_other"
+                 },
+        "unit":  {
+                     "S":  "円/月"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "10"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "フィットネスマシン費"
+                  },
+        "defaultAmount":  {
+                              "N":  "12000000"
+                          },
+        "currentAmount":  {
+                              "N":  "12000000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_fitness_machine"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "11"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "内装工事費"
+                  },
+        "defaultAmount":  {
+                              "N":  "8000000"
+                          },
+        "currentAmount":  {
+                              "N":  "8000000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_interior"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "12"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "フラッパーゲート"
+                  },
+        "defaultAmount":  {
+                              "N":  "1500000"
+                          },
+        "currentAmount":  {
+                              "N":  "1500000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_flapper_gate"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "13"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "体組成計"
+                  },
+        "defaultAmount":  {
+                              "N":  "500000"
+                          },
+        "currentAmount":  {
+                              "N":  "500000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_body_composition"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "14"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "ウォーターサーバー"
+                  },
+        "defaultAmount":  {
+                              "N":  "100000"
+                          },
+        "currentAmount":  {
+                              "N":  "100000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_water_server"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "15"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "フランチャイズ加盟費用"
+                  },
+        "defaultAmount":  {
+                              "N":  "4500000"
+                          },
+        "currentAmount":  {
+                              "N":  "4500000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_franchise_fee"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "16"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "システム導入費"
+                  },
+        "defaultAmount":  {
+                              "N":  "800000"
+                          },
+        "currentAmount":  {
+                              "N":  "800000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_system"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "17"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "開業準備費"
+                  },
+        "defaultAmount":  {
+                              "N":  "300000"
+                          },
+        "currentAmount":  {
+                              "N":  "300000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_opening_prep"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "18"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "開業前パッケージ費"
+                  },
+        "defaultAmount":  {
+                              "N":  "600000"
+                          },
+        "currentAmount":  {
+                              "N":  "600000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_opening_package"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "19"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "ALSOK/USEN導入費"
+                  },
+        "defaultAmount":  {
+                              "N":  "200000"
+                          },
+        "currentAmount":  {
+                              "N":  "200000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_security"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "20"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  ""
+                 },
+        "label":  {
+                      "S":  "その他"
+                  },
+        "defaultAmount":  {
+                              "N":  "500000"
+                          },
+        "currentAmount":  {
+                              "N":  "500000"
+                          },
+        "updatedAt":  {
+                          "S":  "2026-04-14T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_other"
+                 },
+        "unit":  {
+                     "S":  "円"
+                 }
+    }
+]
