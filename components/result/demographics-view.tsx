@@ -70,56 +70,6 @@ const fmtPopulation = (n: number) =>
     ? `${(n / 10000).toFixed(1)}万人`
     : `${n.toLocaleString()}人`
 
-// 20歳以上を10歳刻みにまとめる
-function mergeAgeGroupsToDecade(
-  data: { ageGroup: string; male: number; female: number }[]
-): { ageGroup: string; male: number; female: number }[] {
-  const result: { ageGroup: string; male: number; female: number }[] = []
-  const buckets: Record<string, { male: number; female: number }> = {}
-
-  for (const row of data) {
-    const normalized = normalizeAgeLabel(row.ageGroup)
-
-    // 5歳刻みの範囲マッチ (例: 20-24歳, 100歳以上 など)
-    const rangeMatch = normalized.match(/^(\d+)-(\d+)歳$/)
-    const overMatch = normalized.match(/^(\d+)歳以上$/)
-
-    let startAge: number | null = null
-    if (rangeMatch) {
-      startAge = Number(rangeMatch[1])
-    } else if (overMatch) {
-      startAge = Number(overMatch[1])
-    }
-
-    if (startAge !== null && startAge >= 20) {
-      // 10歳刻みのバケツキーを生成
-      const decadeStart = Math.floor(startAge / 10) * 10
-      const isOver100 = startAge >= 100
-      const bucketKey = isOver100 ? "100歳以上" : `${decadeStart}-${decadeStart + 9}歳`
-      if (!buckets[bucketKey]) {
-        buckets[bucketKey] = { male: 0, female: 0 }
-      }
-      buckets[bucketKey].male += row.male
-      buckets[bucketKey].female += row.female
-    } else {
-      // 20歳未満はそのまま
-      result.push(row)
-    }
-  }
-
-  // バケツを昇順で result に追加
-  const sortedKeys = Object.keys(buckets).sort((a, b) => {
-    const aNum = parseInt(a)
-    const bNum = parseInt(b)
-    return aNum - bNum
-  })
-  for (const key of sortedKeys) {
-    result.push({ ageGroup: key, male: buckets[key].male, female: buckets[key].female })
-  }
-
-  return result
-}
-
 export function DemographicsView({ data, demographicsData, demographicsError }: DemographicsViewProps) {
   const demographics = demographicsData
     ? {
@@ -187,9 +137,7 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
     )
   }
 
-  const displayData = mergeAgeGroupsToDecade(
-    demographics.data.filter((d) => shouldDisplayAgeLabel(d.ageGroup))
-  )
+  const displayData = demographics.data.filter((d) => shouldDisplayAgeLabel(d.ageGroup))
 
   // フィットネス適齢期の合計
   const fitnessPopulation = displayData
