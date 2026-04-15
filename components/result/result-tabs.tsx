@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { DownloadIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -62,6 +62,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenarioError, setScenarioError] = useState("")
   const [isScenarioLoading, setIsScenarioLoading] = useState(false)
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
+  const prevIncludeDepreciation = useRef(true)
 
   useEffect(() => {
     setScenario(initialData.scenario ?? "standard")
@@ -69,6 +70,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
     setIncludeDepreciation(true)
+    prevIncludeDepreciation.current = true
     setScenarioError("")
   }, [initialData])
 
@@ -77,7 +79,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     const controlsAreSame =
       scenario === scenarioData.scenario &&
       nextFranchiseRate === (scenarioData.franchiseRate ?? 0) &&
-      includeDepreciation
+      includeDepreciation === prevIncludeDepreciation.current
 
     if (controlsAreSame) return
 
@@ -108,6 +110,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
         if (!isCancelled) {
           setScenarioData(payload.data as SimulationResult)
+          prevIncludeDepreciation.current = includeDepreciation
         }
       } catch (error) {
         if (!isCancelled) {
