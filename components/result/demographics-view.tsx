@@ -186,7 +186,7 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
   return (
     <div className="flex flex-col gap-5">
       {/* エリアヘッダー */}
-      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border bg-card px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-border bg-card px-5 py-4">
         <div className="flex items-center gap-2">
           <MapPinIcon className="size-4 text-muted-foreground" />
           <div>
@@ -238,8 +238,10 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
             </p>
           </div>
         </div>
-        <div className="ml-auto rounded-md border border-border bg-muted/40 px-3 py-1.5 text-[10px] text-muted-foreground">
-          入力住所: {data.location}
+        <div className="ml-auto max-w-xs rounded-md border border-border bg-muted/40 px-3 py-1.5 text-[10px] text-muted-foreground">
+          <span className="block truncate" title={data.location ?? ""}>
+            入力住所: {data.location}
+          </span>
         </div>
       </div>
 
