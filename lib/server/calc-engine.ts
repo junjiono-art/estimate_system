@@ -29,6 +29,7 @@ const INITIAL_INVESTMENT = 23_110_000
 const DEFAULT_BREAKEVEN_MEMBERS = 374
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
+const BASE_FLOOR_AREA_TSUBO = 50
 const ROYALTY_CAP_MONTHLY = 5_000_000
 const PAYMENT_FEE_RATE = 0.035
 const BASE_SUBURBAN_FIRST_MONTH_JOINERS = 334
@@ -167,23 +168,71 @@ function getPaymentFee(revenue: number): number {
   return Math.round(revenue * PAYMENT_FEE_RATE)
 }
 
+function getMonthlyAdCost(month: number): number {
+  const year = Math.ceil(month / 12)
+  const monthInYear = ((month - 1) % 12) + 1
+
+  if (year === 1) {
+    if (monthInYear === 1) return 520_000
+    if (monthInYear === 2) return 280_000
+    if (monthInYear === 3 || monthInYear === 4) return 240_000
+    return 180_000
+  }
+
+  if (year === 2) return 180_000
+  return 120_000
+}
+
+function resolveMonthlyRent(input?: SimulateInput): number {
+  if (!input) return DEFAULT_MONTHLY_RENT
+  const floorArea = Number(input.floorAreaTsubo)
+  const rentPerTsubo = Number(input.rentPerTsubo)
+
+  if (Number.isFinite(floorArea) && floorArea > 0 && Number.isFinite(rentPerTsubo) && rentPerTsubo > 0) {
+    return Math.round(floorArea * rentPerTsubo)
+  }
+
+  if (Number.isFinite(rentPerTsubo) && rentPerTsubo > 0) {
+    return Math.round(rentPerTsubo)
+  }
+
+  return DEFAULT_MONTHLY_RENT
+}
+
+function resolveMonthlyRunning(input?: SimulateInput): number {
+  const running = Number(input?.runningCostTotal)
+  if (Number.isFinite(running) && running >= 0) return Math.round(running)
+  return DEFAULT_MONTHLY_RUNNING
+}
+
+function resolveInitialInvestment(input?: SimulateInput): number {
+  const total = Number(input?.initialInvestmentTotal)
+  if (Number.isFinite(total) && total > 0) return Math.round(total)
+  return INITIAL_INVESTMENT
+}
+
 function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): RegressionMonthlyRow[] {
   if (!input) return rows
 
   const royaltyRate = Math.max(0, input.royaltyRate ?? 0) / 100
   const competitorCount = Math.max(0, input.competitorCount ?? 0)
-  const demandMultiplier = getDemandMultiplier(input.locationType ?? "suburban", competitorCount)
+  const locationMultiplier = getDemandMultiplier(input.locationType ?? "suburban", competitorCount)
+  const floorArea = Number(input.floorAreaTsubo)
+  const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
+  const demandMultiplier = Math.max(0.2, locationMultiplier * areaMultiplier)
+  const monthlyRent = resolveMonthlyRent(input)
+  const monthlyRunning = resolveMonthlyRunning(input)
+  const fixedNonAdCost = monthlyRent + monthlyRunning
 
   return rows.map((row) => {
     const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
     const members = Math.max(0, Math.round(row.members * demandMultiplier))
-    const basePaymentFee = getPaymentFee(row.revenue)
-    const fixedAndAdCost = row.cost - basePaymentFee
+    const adCost = getMonthlyAdCost(row.month)
     const paymentFee = getPaymentFee(revenue)
     const royaltyRaw = Math.round(revenue * royaltyRate)
     const royalty = Math.min(royaltyRaw, ROYALTY_CAP_MONTHLY)
     const appFee = royalty > 0 ? 50 : 0
-    const cost = fixedAndAdCost + paymentFee + royalty + appFee
+    const cost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
 
     return {
       month: row.month,
@@ -232,8 +281,8 @@ export function buildRegressionRows(scenario: ScenarioType, input?: SimulateInpu
   return applyCalcParams(rows, input)
 }
 
-function estimatePaybackMonths(rows: RegressionMonthlyRow[]): number {
-  let cumulativeProfit = -INITIAL_INVESTMENT
+function estimatePaybackMonths(rows: RegressionMonthlyRow[], initialInvestment: number): number {
+  let cumulativeProfit = -initialInvestment
   for (const row of rows) {
     cumulativeProfit += row.profit
     if (cumulativeProfit >= 0) return row.month
@@ -241,8 +290,8 @@ function estimatePaybackMonths(rows: RegressionMonthlyRow[]): number {
   return 999
 }
 
-function buildMonthlyProjection(rows: RegressionMonthlyRow[]) {
-  let cumulativeProfit = -INITIAL_INVESTMENT
+function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment: number) {
+  let cumulativeProfit = -initialInvestment
   return rows.map((row) => {
     cumulativeProfit += row.profit
     return {
@@ -257,13 +306,23 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[]) {
 
 export function calculateSimulation(input: SimulateInput): SimulationResult {
   const scenario = input.scenario ?? "standard"
+  const initialInvestment = resolveInitialInvestment(input)
+  const monthlyRent = resolveMonthlyRent(input)
+  const monthlyRunningCost = resolveMonthlyRunning(input)
+  const royaltyRate = Math.max(0, input.royaltyRate ?? 0) / 100
   const rows = buildRegressionRows(scenario, input)
-  const monthlyProjection = buildMonthlyProjection(rows)
+  const monthlyProjection = buildMonthlyProjection(rows, initialInvestment)
   const year1Last = monthlyProjection[11]
 
   const monthlyRevenue = year1Last?.revenue ?? 0
-  const monthlyCost = year1Last?.cost ?? 0
   const monthlyProfit = year1Last?.profit ?? 0
+  const monthlyPaymentFee = getPaymentFee(monthlyRevenue)
+  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), ROYALTY_CAP_MONTHLY)
+  const monthlyAppFee = monthlyRoyalty > 0 ? 50 : 0
+  const variableCostPerMember = (monthlyPaymentFee + monthlyRoyalty + monthlyAppFee) / Math.max(1, year1Last?.members ?? 1)
+  const avgRevenuePerMember = monthlyRevenue / Math.max(1, year1Last?.members ?? 1)
+  const contributionPerMember = Math.max(1, avgRevenuePerMember - variableCostPerMember)
+  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost + getMonthlyAdCost(12)) / contributionPerMember)
 
   return {
     id: `calc-${Date.now()}`,
@@ -272,19 +331,19 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy?.trim() || "API",
     scenario,
-    franchiseRate: 0,
-    totalInitialInvestment: INITIAL_INVESTMENT,
+    franchiseRate: input.royaltyRate ?? 0,
+    totalInitialInvestment: initialInvestment,
     machinesCost: 3_750_000,
     interiorCost: 15_000_000,
     franchiseInitialCost: 0,
-    otherInitialCost: 4_360_000,
+    otherInitialCost: Math.max(0, initialInvestment - 18_750_000),
     monthlyRevenue,
-    monthlyRent: DEFAULT_MONTHLY_RENT,
-    monthlyRunningCost: DEFAULT_MONTHLY_RUNNING,
-    monthlyFranchiseCost: 0,
+    monthlyRent,
+    monthlyRunningCost,
+    monthlyFranchiseCost: monthlyRoyalty + monthlyAppFee,
     monthlyProfit,
-    paybackMonths: estimatePaybackMonths(rows),
-    breakevenMembers: DEFAULT_BREAKEVEN_MEMBERS,
+    paybackMonths: estimatePaybackMonths(rows, initialInvestment),
+    breakevenMembers: Number.isFinite(breakevenMembers) ? breakevenMembers : DEFAULT_BREAKEVEN_MEMBERS,
     monthlyProjection,
   }
 }
