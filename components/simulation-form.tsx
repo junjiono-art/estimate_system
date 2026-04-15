@@ -415,37 +415,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           {/* 店舗基本情報 */}
           {activeTab === "store" && (
             <div className="flex flex-col gap-5">
-              {/* シナリオ選択 */}
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {(
-                    [
-                      { value: "conservative", label: "保守",          desc: "低め見積もり。堅実な計画に。"     },
-                      { value: "standard",     label: "スタンダード",  desc: "標準的な成長モデル。"             },
-                      { value: "aggressive",   label: "アグレッシブ",  desc: "強気見積もり。最大ポテンシャル。" },
-                    ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setScenario(opt.value)}
-                      className={cn(
-                        "flex flex-col gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-all",
-                        scenario === opt.value
-                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                          : "border-border bg-background hover:bg-muted/50",
-                      )}
-                    >
-                      <span className="text-xs font-semibold text-foreground">{opt.label}</span>
-                      <span className="text-[10px] leading-relaxed text-muted-foreground">{opt.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
               <div className="flex flex-col gap-1.5 sm:w-96">
                 <Label htmlFor="storeName" className="flex items-center gap-1.5 text-xs font-medium">
                   試算名
