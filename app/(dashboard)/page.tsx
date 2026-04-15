@@ -42,6 +42,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const estimatedMembers = monthlyMemberFee > 0 ? Math.round(monthlyRevenue / monthlyMemberFee) : 0
   const totalMonthlyCost = monthlyRent + monthlyRunningCost + monthlyFranchiseCost
   const breakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
+  const simpleBreakevenMembers = breakevenMembers
 
   const monthlyProjection = Array.from({ length: 120 }, (_, index) => {
     const month = index + 1
@@ -76,6 +77,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     monthlyProfit,
     paybackMonths,
     breakevenMembers,
+    simpleBreakevenMembers,
     monthlyProjection,
   }
 }

@@ -332,10 +332,20 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
 
   const monthlyRevenue = year1Last?.revenue ?? 0
   const monthlyProfit = year1Last?.profit ?? 0
+  const projectedMembers = Math.max(0, year1Last?.members ?? 0)
   const monthlyPaymentFee = getPaymentFee(monthlyRevenue)
   const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), ROYALTY_CAP_MONTHLY)
   const monthlyAppFee = monthlyRoyalty > 0 ? 50 : 0
-  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / MONTHLY_MEMBER_FEE_EX_TAX)
+  const monthlyDepreciation = includeDepreciation ? Math.round(initialInvestment / 6 / 12) : 0
+  const simpleBreakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / MONTHLY_MEMBER_FEE_EX_TAX)
+  const averageRevenuePerMember = projectedMembers > 0 ? monthlyRevenue / projectedMembers : MONTHLY_MEMBER_FEE_EX_TAX
+  const paymentFeePerMember = projectedMembers > 0 ? monthlyPaymentFee / projectedMembers : 0
+  const royaltyPerMember = projectedMembers > 0 ? monthlyRoyalty / projectedMembers : 0
+  const netRevenuePerMember = averageRevenuePerMember - paymentFeePerMember - royaltyPerMember
+  const fixedCostForBreakeven = monthlyRent + monthlyRunningCost + getMonthlyAdCost(12) + monthlyDepreciation + monthlyAppFee
+  const breakevenMembers = netRevenuePerMember > 0
+    ? Math.ceil(fixedCostForBreakeven / netRevenuePerMember)
+    : DEFAULT_BREAKEVEN_MEMBERS
 
   return {
     id: `calc-${Date.now()}`,
@@ -357,6 +367,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     monthlyProfit,
     paybackMonths: estimatePaybackMonths(rows, initialInvestment),
     breakevenMembers: Number.isFinite(breakevenMembers) ? breakevenMembers : DEFAULT_BREAKEVEN_MEMBERS,
+    simpleBreakevenMembers: Number.isFinite(simpleBreakevenMembers) ? simpleBreakevenMembers : DEFAULT_BREAKEVEN_MEMBERS,
     monthlyProjection,
   }
 }
