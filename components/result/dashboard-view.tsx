@@ -7,8 +7,23 @@ import {
 import { Progress } from "@/components/ui/progress"
 import type { SimulationResult } from "@/lib/types"
 
+const SCENARIO_LABELS: Record<string, string> = {
+  conservative: "保守",
+  standard:     "スタンダード",
+  aggressive:   "アグレッシブ",
+}
+
+const LOCATION_LABELS: Record<string, string> = {
+  urban:    "都市型",
+  suburban: "郊外型",
+  rural:    "田舎型",
+}
+
 interface DashboardViewProps {
   data: SimulationResult
+  includeDepreciation?: boolean
+  competitorCount?: number | null
+  locationType?: string | null
 }
 
 const COLORS = [
@@ -29,7 +44,12 @@ const tooltipStyle = {
   boxShadow: "0 4px 12px rgba(0,0,0,.08)",
 }
 
-export function DashboardView({ data }: DashboardViewProps) {
+export function DashboardView({
+  data,
+  includeDepreciation = true,
+  competitorCount = null,
+  locationType = null,
+}: DashboardViewProps) {
   const investmentBreakdown = [
     { name: "マシン費",    value: data.machinesCost },
     { name: "内装工事",    value: data.interiorCost },
@@ -128,6 +148,45 @@ export function DashboardView({ data }: DashboardViewProps) {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 計算条件サマリーカード */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="border-b border-border px-5 py-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">計算条件サマリー</p>
+        </div>
+        <div className="grid grid-cols-2 gap-0 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            {
+              label: "計算シナリオ",
+              value: SCENARIO_LABELS[data.scenario ?? "standard"] ?? "—",
+            },
+            {
+              label: "ロイヤリティ率",
+              value: data.franchiseRate > 0 ? `${data.franchiseRate}%` : "直営 (0%)",
+            },
+            {
+              label: "競合ジム件数",
+              value: competitorCount != null ? `${competitorCount} 件` : "—",
+            },
+            {
+              label: "減価償却",
+              value: includeDepreciation ? "含める" : "含めない",
+            },
+            {
+              label: "計算方式",
+              value: "API計算",
+            },
+          ].map((item, i) => (
+            <div
+              key={item.label}
+              className={`flex flex-col gap-1 px-5 py-3 ${i < 4 ? "border-b sm:border-b-0 sm:border-r border-border/60" : ""}`}
+            >
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{item.label}</span>
+              <span className="text-sm font-semibold text-foreground">{item.value}</span>
+            </div>
+          ))}
         </div>
       </div>
 

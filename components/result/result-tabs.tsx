@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { KpiCards } from "./kpi-cards"
 import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
@@ -52,6 +53,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [selectedYear, setSelectedYear] = useState("3")
   const [rating, setRating] = useState<number | undefined>(initialData.rating)
   const [franchiseRate, setFranchiseRate] = useState<string>(String(initialData.franchiseRate ?? 0))
+  const [includeDepreciation, setIncludeDepreciation] = useState(true)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [createdBy, setCreatedBy] = useState("")
   const [isSaving, setIsSaving] = useState(false)
@@ -265,7 +267,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             )}
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               <p><span className="font-medium text-foreground">試算名:</span> {currentData.storeName}</p>
-              <p><span className="font-medium text-foreground">シナリオ:</span> {SCENARIO_LABELS[scenario]}</p>
+              <p><span className="font-medium text-foreground">計算シナリオ:</span> {SCENARIO_LABELS[scenario]}</p>
               {rating && <p><span className="font-medium text-foreground">評価:</span> {"★".repeat(rating)}</p>}
             </div>
           </div>
@@ -283,7 +285,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       {/* フィルタバー */}
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">シナリオ</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</span>
           <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
             <SelectTrigger className="h-7 w-36 text-xs" disabled={isScenarioLoading}>
               <SelectValue />
@@ -309,6 +311,21 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               <SelectItem value="15" className="text-xs">15%</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="includeDepreciation"
+            checked={includeDepreciation}
+            onCheckedChange={(checked) => setIncludeDepreciation(checked === true)}
+            className="size-3.5"
+          />
+          <label
+            htmlFor="includeDepreciation"
+            className="cursor-pointer select-none text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+          >
+            減価償却を利益計算に含める
+          </label>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">
@@ -352,7 +369,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <ChartTableView data={filteredData} />
         </TabsContent>
         <TabsContent value="dashboard" className="mt-4">
-          <DashboardView data={filteredData} />
+          <DashboardView data={filteredData} includeDepreciation={includeDepreciation} />
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
           <DemographicsView
