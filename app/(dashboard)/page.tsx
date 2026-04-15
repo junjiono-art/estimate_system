@@ -8,6 +8,7 @@ import type { FormSubmitData } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
 import type { SimulationResult } from "@/lib/types"
+import { getErrorMessage } from "@/lib/error-utils"
 
 function buildPreviewResult(submittedData: FormSubmitData | null): SimulationResult {
   const now = new Date().toISOString()
@@ -79,7 +80,37 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
 export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
-  const resultData = buildPreviewResult(submittedData)
+  const [resultData, setResultData] = useState<SimulationResult | null>(null)
+
+  async function handleSubmitWithData(data: FormSubmitData) {
+    setSubmittedData(data)
+
+    try {
+      const response = await fetch("/api/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeName: data.storeInfo.storeName,
+          location: data.storeInfo.address,
+          scenario: "standard",
+        }),
+      })
+
+      const payload = await response.json().catch(() => null)
+      if (!response.ok || !payload?.data) {
+        throw new Error(getErrorMessage(payload, "試算APIの実行に失敗しました。"))
+      }
+
+      setResultData(payload.data as SimulationResult)
+    } catch {
+      // APIが利用できない場合でも画面利用を止めないため、従来のプレビュー計算にフォールバックする
+      setResultData(buildPreviewResult(data))
+    }
+
+    setShowResult(true)
+  }
+
+  const displayResult = resultData ?? buildPreviewResult(submittedData)
 
   if (showResult) {
     return (
@@ -102,7 +133,7 @@ export default function NewSimulationPage() {
         <div className="overflow-auto">
           <div className="mx-auto max-w-6xl px-8 py-7">
             <ResultTabs
-              data={resultData}
+              data={displayResult}
               demographicsData={submittedData?.demographics}
               demographicsError={submittedData?.demographicsError}
             />
@@ -128,8 +159,7 @@ export default function NewSimulationPage() {
             </p>
           </div>
           <SimulationForm
-            onSubmit={() => setShowResult(true)}
-            onSubmitWithData={setSubmittedData}
+            onSubmitWithData={handleSubmitWithData}
           />
         </div>
       </div>

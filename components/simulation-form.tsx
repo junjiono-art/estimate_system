@@ -42,7 +42,7 @@ import {
 
 interface SimulationFormProps {
   onSubmit?: () => void
-  onSubmitWithData?: (data: FormSubmitData) => void
+  onSubmitWithData?: (data: FormSubmitData) => void | Promise<void>
 }
 
 export type FormSubmitData = {
@@ -349,7 +349,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         demographicsError,
       }
 
-      onSubmitWithData?.(formData)
+      await onSubmitWithData?.(formData)
       onSubmit?.()
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "送信に失敗しました。")
