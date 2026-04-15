@@ -57,14 +57,16 @@ export function KpiCards({ data }: KpiCardsProps) {
       border: "border-chart-5/20",
     },
     {
-      label: "損益分岐点（12か月目単月基準）",
+      label: "損益分岐点",
+      sublabel: "12か月目単月基準",
       value: data.breakevenMembers !== undefined ? `${data.breakevenMembers} 人` : "－",
       icon: UsersIcon,
       accent: "bg-chart-3/10 text-chart-3",
       border: "border-chart-3/20",
     },
     {
-      label: "簡易損益分岐点（家賃＋ランニング）",
+      label: "簡易損益分岐点",
+      sublabel: "家賃＋ランニング",
       value: data.simpleBreakevenMembers !== undefined ? `${data.simpleBreakevenMembers} 人` : "－",
       icon: UsersIcon,
       accent: "bg-chart-1/10 text-chart-1",
@@ -83,10 +85,15 @@ export function KpiCards({ data }: KpiCardsProps) {
             <c.icon className="size-4" />
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground leading-tight">
               {c.label}
             </span>
-            <span className="text-xl font-bold leading-none tracking-tight text-foreground">
+            {"sublabel" in c && c.sublabel && (
+              <span className="text-[9px] text-muted-foreground/70 leading-tight">
+                {c.sublabel}
+              </span>
+            )}
+            <span className="text-xl font-bold leading-none tracking-tight text-foreground mt-0.5">
               {c.value}
             </span>
           </div>
