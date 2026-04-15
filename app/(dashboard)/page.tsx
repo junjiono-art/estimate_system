@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeftIcon, SparklesIcon } from "lucide-react"
+import { ArrowLeftIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { SimulationForm } from "@/components/simulation-form"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import type { SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
 
@@ -77,10 +78,35 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   }
 }
 
+type RegressionStatus = "idle" | "running" | "pass" | "fail"
+
 export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
   const [resultData, setResultData] = useState<SimulationResult | null>(null)
+
+  // 回帰検証ステータス（開発用）
+  const [regressionStatus, setRegressionStatus] = useState<RegressionStatus>("idle")
+  const [regressionDiffCount, setRegressionDiffCount] = useState<number | null>(null)
+
+  async function handleRunRegression() {
+    setRegressionStatus("running")
+    setRegressionDiffCount(null)
+    try {
+      const response = await fetch("/api/regression/standard", { method: "POST" })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        setRegressionStatus("fail")
+        setRegressionDiffCount(payload?.diffCount ?? null)
+        return
+      }
+      setRegressionStatus(payload?.passed === false ? "fail" : "pass")
+      setRegressionDiffCount(payload?.diffCount ?? 0)
+    } catch {
+      setRegressionStatus("fail")
+      setRegressionDiffCount(null)
+    }
+  }
 
   async function handleSubmitWithData(data: FormSubmitData) {
     setSubmittedData(data)
@@ -143,11 +169,42 @@ export default function NewSimulationPage() {
     )
   }
 
+  const regressionActions = (
+    <div className="flex items-center gap-2">
+      {regressionStatus === "pass" && (
+        <Badge className="border border-chart-2/30 bg-chart-2/10 text-chart-2 text-[10px] font-semibold">
+          PASS
+        </Badge>
+      )}
+      {regressionStatus === "fail" && (
+        <Badge className="border border-destructive/30 bg-destructive/10 text-destructive text-[10px] font-semibold">
+          FAIL
+        </Badge>
+      )}
+      {regressionDiffCount != null && (
+        <span className="text-[10px] text-muted-foreground font-mono">
+          差分 {regressionDiffCount} 件
+        </span>
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1.5 text-xs"
+        onClick={() => { void handleRunRegression() }}
+        disabled={regressionStatus === "running"}
+      >
+        <FlaskConicalIcon className="size-3.5" />
+        {regressionStatus === "running" ? "検証中..." : "標準回帰検証"}
+      </Button>
+    </div>
+  )
+
   return (
     <>
       <PageHeader
         title="新規試算"
         description="店舗情報を入力して、初期投資・月間収益・回収期間を試算します"
+        actions={regressionActions}
       />
       <div className="overflow-auto">
         <div className="mx-auto max-w-3xl px-8 py-7">

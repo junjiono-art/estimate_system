@@ -9,6 +9,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CheckIcon,
+  SlidersHorizontalIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -82,9 +83,10 @@ export type FormSubmitData = {
 }
 
 const TABS = [
-  { id: "store",        label: "店舗基本情報",     icon: BuildingIcon  },
-  { id: "running-cost", label: "ランニングコスト", icon: WalletIcon    },
-  { id: "initial-cost", label: "投資コスト",       icon: BanknoteIcon  },
+  { id: "store",        label: "店舗基本情報",     icon: BuildingIcon         },
+  { id: "running-cost", label: "ランニングコスト", icon: WalletIcon           },
+  { id: "initial-cost", label: "投資コスト",       icon: BanknoteIcon         },
+  { id: "calc-params",  label: "計算パラメータ",   icon: SlidersHorizontalIcon },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -109,6 +111,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
+
+  // シナリオ
+  const [scenario, setScenario] = useState<"conservative" | "standard" | "aggressive">("standard")
+
+  // 計算パラメータ
+  const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">("0")
+  const [competitorCount,  setCompetitorCount]  = useState("")
+  const [locationType,     setLocationType]     = useState<"urban" | "suburban" | "rural">("urban")
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -405,6 +415,37 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           {/* 店舗基本情報 */}
           {activeTab === "store" && (
             <div className="flex flex-col gap-5">
+              {/* シナリオ選択 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      { value: "conservative", label: "保守",          desc: "低め見積もり。堅実な計画に。"     },
+                      { value: "standard",     label: "スタンダード",  desc: "標準的な成長モデル。"             },
+                      { value: "aggressive",   label: "アグレッシブ",  desc: "強気見積もり。最大ポテンシャル。" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setScenario(opt.value)}
+                      className={cn(
+                        "flex flex-col gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-all",
+                        scenario === opt.value
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border bg-background hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="text-xs font-semibold text-foreground">{opt.label}</span>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="flex flex-col gap-1.5 sm:w-96">
                 <Label htmlFor="storeName" className="flex items-center gap-1.5 text-xs font-medium">
                   試算名
@@ -479,6 +520,90 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 計算パラメータ */}
+          {activeTab === "calc-params" && (
+            <div className="flex flex-col gap-6">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                計算に使用するパラメータを確認・調整してください。配線は後続対応予定です。
+              </p>
+
+              {/* ロイヤリティ率 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">ロイヤリティ率</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["0", "10", "15"] as const).map((rate) => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => setRoyaltyRate(rate)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2.5 text-center transition-all",
+                        royaltyRate === rate
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border bg-background hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="text-sm font-semibold text-foreground">{rate === "0" ? "直営 (0%)" : `${rate}%`}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* 競合ジム件数 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">競合ジム件数</p>
+                <div className="sm:w-48">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="competitorCount" className="text-xs font-medium">
+                      半径1km圏内の競合ジム数
+                    </Label>
+                    <Input
+                      id="competitorCount"
+                      type="number"
+                      placeholder="例: 3"
+                      min={0}
+                      value={competitorCount}
+                      onChange={(e) => setCompetitorCount(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* 立地タイプ */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">立地タイプ</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      { value: "urban",    label: "都市型",  desc: "駅近・繁華街。集客力高め。"     },
+                      { value: "suburban", label: "郊外型",  desc: "住宅街・ロードサイド。"         },
+                      { value: "rural",    label: "田舎型",  desc: "地方・競合少なめ。"             },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setLocationType(opt.value)}
+                      className={cn(
+                        "flex flex-col gap-0.5 rounded-lg border px-3 py-2.5 text-left transition-all",
+                        locationType === opt.value
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border bg-background hover:bg-muted/50",
+                      )}
+                    >
+                      <span className="text-xs font-semibold text-foreground">{opt.label}</span>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">{opt.desc}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
