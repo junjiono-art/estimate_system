@@ -8,7 +8,7 @@ import type { FormSubmitData } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import type { SimulationResult } from "@/lib/types"
+import type { SimulationRequestInput, SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
 
 function buildPreviewResult(submittedData: FormSubmitData | null): SimulationResult {
@@ -84,6 +84,7 @@ export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
   const [resultData, setResultData] = useState<SimulationResult | null>(null)
+  const [simulationRequest, setSimulationRequest] = useState<SimulationRequestInput | null>(null)
 
   // 回帰検証ステータス（開発用）
   const [regressionStatus, setRegressionStatus] = useState<RegressionStatus>("idle")
@@ -93,33 +94,46 @@ export default function NewSimulationPage() {
     setRegressionStatus("running")
     setRegressionDiffCount(null)
     try {
-      const response = await fetch("/api/regression/standard", { method: "POST" })
+      const response = await fetch("/api/simulate/validate-standard", { method: "GET" })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         setRegressionStatus("fail")
-        setRegressionDiffCount(payload?.diffCount ?? null)
+        setRegressionDiffCount(Array.isArray(payload?.diffs) ? payload.diffs.length : null)
         return
       }
-      setRegressionStatus(payload?.passed === false ? "fail" : "pass")
-      setRegressionDiffCount(payload?.diffCount ?? 0)
+      setRegressionStatus(payload?.pass === false ? "fail" : "pass")
+      setRegressionDiffCount(Array.isArray(payload?.diffs) ? payload.diffs.length : 0)
     } catch {
       setRegressionStatus("fail")
       setRegressionDiffCount(null)
     }
   }
 
+  function buildSimulationRequest(data: FormSubmitData, scenario: SimulationRequestInput["scenario"] = "standard"): SimulationRequestInput {
+    return {
+      storeName: data.storeInfo.storeName,
+      location: data.storeInfo.address,
+      scenario,
+      floorAreaTsubo: data.storeInfo.floorArea,
+      rentPerTsubo: data.storeInfo.rentPerTsubo,
+      royaltyRate: data.calcParams.royaltyRate,
+      competitorCount: data.calcParams.competitorCount,
+      locationType: data.calcParams.locationType,
+      runningCostTotal: data.runningCosts.total,
+      initialInvestmentTotal: data.investmentCosts.total,
+    }
+  }
+
   async function handleSubmitWithData(data: FormSubmitData) {
     setSubmittedData(data)
+    const requestBody = buildSimulationRequest(data)
+    setSimulationRequest(requestBody)
 
     try {
       const response = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storeName: data.storeInfo.storeName,
-          location: data.storeInfo.address,
-          scenario: "standard",
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const payload = await response.json().catch(() => null)
@@ -162,6 +176,7 @@ export default function NewSimulationPage() {
               data={displayResult}
               demographicsData={submittedData?.demographics}
               demographicsError={submittedData?.demographicsError}
+              simulationRequest={simulationRequest}
             />
           </div>
         </div>

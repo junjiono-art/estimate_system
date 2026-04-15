@@ -1,11 +1,6 @@
-import type { ScenarioType, SimulationResult } from "@/lib/types"
+import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 
-export type SimulateInput = {
-  storeName: string
-  location?: string
-  scenario?: ScenarioType
-  createdBy?: string
-}
+export type SimulateInput = SimulationRequestInput
 
 type MonthlySeed = {
   month: number
@@ -34,6 +29,13 @@ const INITIAL_INVESTMENT = 23_110_000
 const DEFAULT_BREAKEVEN_MEMBERS = 374
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
+const ROYALTY_CAP_MONTHLY = 5_000_000
+const PAYMENT_FEE_RATE = 0.035
+const BASE_SUBURBAN_FIRST_MONTH_JOINERS = 334
+const BASE_URBAN_ESTIMATED_JOINERS = 137
+const BASE_SUBURBAN_ESTIMATED_JOINERS = 137 + 316
+const BASE_RURAL_ESTIMATED_JOINERS = 137 + 316 + 65
+const POPULATION_FACTOR = 1 - 0.26
 
 const MONTHLY_SEEDS: Record<ScenarioType, MonthlySeed[]> = {
   conservative: [
@@ -138,7 +140,62 @@ function buildMemberSeries(start: number, end: number): number[] {
   return members
 }
 
-export function buildRegressionRows(scenario: ScenarioType): RegressionMonthlyRow[] {
+function getCompetitorImpactRate(competitorCount: number): number {
+  if (competitorCount <= 0) return 0
+  if (competitorCount <= 2) return 0.1
+  if (competitorCount === 3) return 0.15
+  if (competitorCount === 4) return 0.2
+  return 0.25
+}
+
+function getDemandMultiplier(locationType: SimulateInput["locationType"], competitorCount: number): number {
+  if (locationType === "urban") {
+    const urbanJoiners = BASE_URBAN_ESTIMATED_JOINERS * POPULATION_FACTOR
+    return urbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
+  }
+
+  if (locationType === "rural") {
+    const ruralJoiners = BASE_RURAL_ESTIMATED_JOINERS * POPULATION_FACTOR * (1 - getCompetitorImpactRate(competitorCount))
+    return ruralJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
+  }
+
+  const suburbanJoiners = BASE_SUBURBAN_ESTIMATED_JOINERS * POPULATION_FACTOR
+  return suburbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
+}
+
+function getPaymentFee(revenue: number): number {
+  return Math.round(revenue * PAYMENT_FEE_RATE)
+}
+
+function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): RegressionMonthlyRow[] {
+  if (!input) return rows
+
+  const royaltyRate = Math.max(0, input.royaltyRate ?? 0) / 100
+  const competitorCount = Math.max(0, input.competitorCount ?? 0)
+  const demandMultiplier = getDemandMultiplier(input.locationType ?? "suburban", competitorCount)
+
+  return rows.map((row) => {
+    const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
+    const members = Math.max(0, Math.round(row.members * demandMultiplier))
+    const basePaymentFee = getPaymentFee(row.revenue)
+    const fixedAndAdCost = row.cost - basePaymentFee
+    const paymentFee = getPaymentFee(revenue)
+    const royaltyRaw = Math.round(revenue * royaltyRate)
+    const royalty = Math.min(royaltyRaw, ROYALTY_CAP_MONTHLY)
+    const appFee = royalty > 0 ? 50 : 0
+    const cost = fixedAndAdCost + paymentFee + royalty + appFee
+
+    return {
+      month: row.month,
+      members,
+      revenue,
+      cost,
+      profit: revenue - cost,
+    }
+  })
+}
+
+export function buildRegressionRows(scenario: ScenarioType, input?: SimulateInput): RegressionMonthlyRow[] {
   const year1 = MONTHLY_SEEDS[scenario].map((row) => ({ ...row }))
   const annualSeeds = ANNUAL_SEEDS[scenario]
   const rows: RegressionMonthlyRow[] = [...year1]
@@ -172,7 +229,7 @@ export function buildRegressionRows(scenario: ScenarioType): RegressionMonthlyRo
     previousYearEndMembers = year.yearEndMembers
   }
 
-  return rows
+  return applyCalcParams(rows, input)
 }
 
 function estimatePaybackMonths(rows: RegressionMonthlyRow[]): number {
@@ -200,7 +257,7 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[]) {
 
 export function calculateSimulation(input: SimulateInput): SimulationResult {
   const scenario = input.scenario ?? "standard"
-  const rows = buildRegressionRows(scenario)
+  const rows = buildRegressionRows(scenario, input)
   const monthlyProjection = buildMonthlyProjection(rows)
   const year1Last = monthlyProjection[11]
 

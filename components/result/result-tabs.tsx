@@ -19,7 +19,7 @@ import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
 import { DemographicsView } from "./demographics-view"
 import { StarRating } from "@/components/star-rating"
-import type { SimulationResult, ScenarioType } from "@/lib/types"
+import type { SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { extractCity } from "@/lib/utils"
@@ -28,6 +28,7 @@ interface ResultTabsProps {
   data: SimulationResult
   demographicsData?: FormSubmitData["demographics"]
   demographicsError?: string
+  simulationRequest?: SimulationRequestInput | null
 }
 
 const YEAR_OPTIONS = Array.from({ length: 10 }, (_, i) => ({
@@ -48,7 +49,7 @@ const SCENARIO_LABELS: Record<ScenarioType, string> = {
   aggressive: "強気シナリオ",
 }
 
-export function ResultTabs({ data: initialData, demographicsData, demographicsError }: ResultTabsProps) {
+export function ResultTabs({ data: initialData, demographicsData, demographicsError, simulationRequest }: ResultTabsProps) {
   const [scenario, setScenario] = useState<ScenarioType>(initialData.scenario ?? "standard")
   const [selectedYear, setSelectedYear] = useState("3")
   const [rating, setRating] = useState<number | undefined>(initialData.rating)
@@ -84,8 +85,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            storeName: initialData.storeName,
-            location: initialData.location,
+            ...simulationRequest,
+            storeName: simulationRequest?.storeName ?? initialData.storeName,
+            location: simulationRequest?.location ?? initialData.location,
             scenario,
           }),
         })
@@ -114,32 +116,16 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     return () => {
       isCancelled = true
     }
-  }, [initialData.location, initialData.storeName, scenario, scenarioData.scenario])
+  }, [initialData.location, initialData.storeName, scenario, scenarioData.scenario, simulationRequest])
 
   const franchiseRateNum = parseInt(franchiseRate) || 0
   const activeBaseData = scenarioData
-  const adjustedMonthlyRevenue = activeBaseData.monthlyRevenue
-  const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(adjustedMonthlyRevenue * (franchiseRateNum / 100)) : 0
-  const adjustedMonthlyProfit = adjustedMonthlyRevenue - activeBaseData.monthlyRent - activeBaseData.monthlyRunningCost - monthlyFranchiseCost
-  const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(activeBaseData.totalInitialInvestment / adjustedMonthlyProfit) : 999
-  const adjustedBreakevenMembers = activeBaseData.breakevenMembers
-
-  const currentData: SimulationResult = {
-    ...activeBaseData,
-    scenario,
-    franchiseRate: franchiseRateNum,
-    monthlyRevenue: adjustedMonthlyRevenue,
-    monthlyFranchiseCost,
-    monthlyProfit: adjustedMonthlyProfit,
-    paybackMonths: adjustedPaybackMonths,
-    breakevenMembers: adjustedBreakevenMembers,
-  }
-
-  const yearMonths  = parseInt(selectedYear) * 12
+  const yearMonths = parseInt(selectedYear) * 12
+  const depreciationPerMonth = includeDepreciation ? Math.round(activeBaseData.totalInitialInvestment / 6 / 12) : 0
   let runningCumulative = -activeBaseData.totalInitialInvestment
-  const computedProjection = activeBaseData.monthlyProjection.slice(0, yearMonths).map((row) => {
+  const fullAdjustedProjection = activeBaseData.monthlyProjection.map((row) => {
     const franchiseCost = franchiseRateNum > 0 ? Math.round(row.revenue * (franchiseRateNum / 100)) : 0
-    const cost = row.cost + franchiseCost
+    const cost = row.cost + franchiseCost + depreciationPerMonth
     const profit = row.revenue - cost
     runningCumulative += profit
     return {
@@ -150,6 +136,22 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       cumulativeProfit: runningCumulative,
     }
   })
+
+  const computedProjection = fullAdjustedProjection.slice(0, yearMonths)
+  const summaryMonth = fullAdjustedProjection[Math.min(11, fullAdjustedProjection.length - 1)]
+  const paybackIndex = fullAdjustedProjection.findIndex((row) => row.cumulativeProfit >= 0)
+  const monthlyFranchiseCost = franchiseRateNum > 0 && summaryMonth ? Math.round(summaryMonth.revenue * (franchiseRateNum / 100)) : 0
+
+  const currentData: SimulationResult = {
+    ...activeBaseData,
+    scenario,
+    franchiseRate: franchiseRateNum,
+    monthlyRevenue: summaryMonth?.revenue ?? activeBaseData.monthlyRevenue,
+    monthlyFranchiseCost,
+    monthlyProfit: summaryMonth?.profit ?? activeBaseData.monthlyProfit,
+    paybackMonths: paybackIndex >= 0 ? fullAdjustedProjection[paybackIndex].month : 999,
+    breakevenMembers: activeBaseData.breakevenMembers,
+  }
 
   const filteredData: SimulationResult = {
     ...currentData,

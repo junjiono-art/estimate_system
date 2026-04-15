@@ -66,6 +66,22 @@ export interface StoreInput {
 /** シナリオ種別 */
 export type ScenarioType = "conservative" | "standard" | "aggressive"
 
+export type LocationType = "urban" | "suburban" | "rural"
+
+export interface SimulationRequestInput {
+  storeName: string
+  location?: string
+  scenario?: ScenarioType
+  createdBy?: string
+  floorAreaTsubo?: number
+  rentPerTsubo?: number
+  royaltyRate?: 0 | 10 | 15
+  competitorCount?: number
+  locationType?: LocationType
+  runningCostTotal?: number
+  initialInvestmentTotal?: number
+}
+
 export interface AreaDemographics {
   municipality: {
     prefecture: string

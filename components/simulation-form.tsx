@@ -34,7 +34,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
-import type { MasterValue } from "@/lib/types"
+import type { LocationType, MasterValue } from "@/lib/types"
 import { toast } from "sonner"
 import {
   INVESTMENT_COST_CODE_TO_FIELD_ID,
@@ -52,6 +52,11 @@ export type FormSubmitData = {
     address: string
     floorArea: number
     rentPerTsubo: number
+  }
+  calcParams: {
+    royaltyRate: 0 | 10 | 15
+    competitorCount: number
+    locationType: LocationType
   }
   runningCosts: {
     byField: Record<string, number>
@@ -112,13 +117,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
 
-  // シナリオ
-  const [scenario, setScenario] = useState<"conservative" | "standard" | "aggressive">("standard")
-
   // 計算パラメータ
   const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">("0")
   const [competitorCount,  setCompetitorCount]  = useState("")
-  const [locationType,     setLocationType]     = useState<"urban" | "suburban" | "rural">("urban")
+  const [locationType,     setLocationType]     = useState<LocationType>("suburban")
 
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
@@ -346,6 +348,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           address,
           floorArea: parseInt(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
+        },
+        calcParams: {
+          royaltyRate: parseInt(royaltyRate) as 0 | 10 | 15,
+          competitorCount: Math.max(0, parseInt(competitorCount) || 0),
+          locationType,
         },
         runningCosts: {
           byField: Object.fromEntries(RC_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),

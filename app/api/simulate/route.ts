@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { calculateSimulation } from "@/lib/server/calc-engine"
-import type { ScenarioType } from "@/lib/types"
-
-type SimulateRequestBody = {
-  storeName?: string
-  location?: string
-  scenario?: ScenarioType
-  createdBy?: string
-}
+import type { SimulationRequestInput } from "@/lib/types"
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as SimulateRequestBody | null
+  const body = (await request.json().catch(() => null)) as Partial<SimulationRequestInput> | null
 
   if (!body?.storeName?.trim()) {
     return errorResponse(ErrorCode.VALIDATION_ERROR, "storeName は必須です。", 400)
