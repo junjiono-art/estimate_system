@@ -106,6 +106,8 @@ type DemographicRow = {
 }
 
 export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
+  const allRunningFieldIds = Object.values(RUNNING_COST_CODE_TO_FIELD_ID)
+  const allInvestmentFieldIds = Object.values(INVESTMENT_COST_CODE_TO_FIELD_ID)
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
@@ -116,6 +118,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
+  const [visibleRunningCostIds, setVisibleRunningCostIds] = useState<string[]>(allRunningFieldIds)
+  const [visibleInvestmentCostIds, setVisibleInvestmentCostIds] = useState<string[]>(allInvestmentFieldIds)
 
   // 計算パラメータ
   const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">("0")
@@ -192,18 +196,28 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       }
 
       const values = (Array.isArray(payload?.values) ? payload.values : []) as MasterValue[]
+      const runningIdsInMaster = new Set<string>()
+      const investmentIdsInMaster = new Set<string>()
       values.forEach((value) => {
         const amountText = String(Math.max(0, Number(value.defaultAmount) || 0))
         if (value.category === "ランニングコスト") {
           const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID]
-          if (fieldId) runningCostSetters[fieldId]?.(amountText)
+          if (fieldId) {
+            runningIdsInMaster.add(fieldId)
+            runningCostSetters[fieldId]?.(amountText)
+          }
           return
         }
         if (value.category === "投資コスト") {
           const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID]
-          if (fieldId) investmentCostSetters[fieldId]?.(amountText)
+          if (fieldId) {
+            investmentIdsInMaster.add(fieldId)
+            investmentCostSetters[fieldId]?.(amountText)
+          }
         }
       })
+      setVisibleRunningCostIds(runningIdsInMaster.size > 0 ? Array.from(runningIdsInMaster) : [])
+      setVisibleInvestmentCostIds(investmentIdsInMaster.size > 0 ? Array.from(investmentIdsInMaster) : [])
     } catch (error) {
       const message = error instanceof Error ? error.message : "マスタ値の取得に失敗しました。"
       setMasterLoadError(message)
@@ -228,7 +242,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     { id: "rcInsurance",     label: "保険料（円/月）",     placeholder: "例: 15,000",  value: rcInsurance,     setter: setRcInsurance     },
     { id: "rcAdvertising",   label: "広告宣伝費（円/月）", placeholder: "例: 100,000", value: rcAdvertising,   setter: setRcAdvertising   },
     { id: "rcOther",         label: "その他（円/月）",     placeholder: "例: 50,000",  value: rcOther,         setter: setRcOther         },
-  ]
+  ].filter((item) => visibleRunningCostIds.includes(item.id))
 
   const COST_ITEMS = [
     { id: "fitnessMachineCost",  label: "フィットネスマシン費（円）",  placeholder: "例: 12,000,000", value: fitnessMachineCost,  setter: setFitnessMachineCost  },
@@ -242,7 +256,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     { id: "openingPackageCost",  label: "開業前パッケージ費（円）",     placeholder: "例: 600,000",    value: openingPackageCost,  setter: setOpeningPackageCost  },
     { id: "securityCost",        label: "ALSOK/USEN導入費（円）",       placeholder: "例: 200,000",    value: securityCost,        setter: setSecurityCost        },
     { id: "otherInitialCost",    label: "その他（円）",                 placeholder: "例: 500,000",    value: otherInitialCost,    setter: setOtherInitialCost    },
-  ]
+  ].filter((item) => visibleInvestmentCostIds.includes(item.id))
 
   const rcTotalPages   = Math.ceil(RC_ITEMS.length   / PAGE_SIZE)
   const costTotalPages = Math.ceil(COST_ITEMS.length / PAGE_SIZE)
