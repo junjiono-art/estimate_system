@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { DownloadIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -49,39 +49,83 @@ const SCENARIO_LABELS: Record<ScenarioType, string> = {
 }
 
 export function ResultTabs({ data: initialData, demographicsData, demographicsError }: ResultTabsProps) {
-  const [scenario, setScenario]                 = useState<ScenarioType>(initialData.scenario ?? "standard")
-  const [selectedYear, setSelectedYear]          = useState("3")
-  const [rating, setRating]                      = useState<number | undefined>(initialData.rating)
-  const [franchiseRate, setFranchiseRate]        = useState<string>(String(initialData.franchiseRate ?? 0))
+  const [scenario, setScenario] = useState<ScenarioType>(initialData.scenario ?? "standard")
+  const [selectedYear, setSelectedYear] = useState("3")
+  const [rating, setRating] = useState<number | undefined>(initialData.rating)
+  const [franchiseRate, setFranchiseRate] = useState<string>(String(initialData.franchiseRate ?? 0))
   const [includeDepreciation, setIncludeDepreciation] = useState(true)
-  const [saveDialogOpen, setSaveDialogOpen]      = useState(false)
-  const [createdBy, setCreatedBy]        = useState("")
-  const [isSaving, setIsSaving]          = useState(false)
-  const [saveError, setSaveError]        = useState("")
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [createdBy, setCreatedBy] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
+  const [scenarioError, setScenarioError] = useState("")
+  const [isScenarioLoading, setIsScenarioLoading] = useState(false)
+  const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
 
-  // シナリオ係数
-  const SCENARIO_FACTORS: Record<ScenarioType, { revenueMultiplier: number; growthSpeed: number }> = {
-    conservative: { revenueMultiplier: 0.8, growthSpeed: 0.03 },
-    standard: { revenueMultiplier: 1.0, growthSpeed: 0.05 },
-    aggressive: { revenueMultiplier: 1.25, growthSpeed: 0.07 },
-  }
+  useEffect(() => {
+    setScenario(initialData.scenario ?? "standard")
+    setScenarioData(initialData)
+    setRating(initialData.rating)
+    setFranchiseRate(String(initialData.franchiseRate ?? 0))
+    setScenarioError("")
+  }, [initialData])
 
-  const scenarioFactor = SCENARIO_FACTORS[scenario]
+  useEffect(() => {
+    if (scenario === scenarioData.scenario) return
+
+    let isCancelled = false
+
+    async function refreshScenario() {
+      setIsScenarioLoading(true)
+      setScenarioError("")
+
+      try {
+        const response = await fetch("/api/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            storeName: initialData.storeName,
+            location: initialData.location,
+            scenario,
+          }),
+        })
+
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.data) {
+          throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
+        }
+
+        if (!isCancelled) {
+          setScenarioData(payload.data as SimulationResult)
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setScenarioError(error instanceof Error ? error.message : "シナリオ再計算に失敗しました。")
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsScenarioLoading(false)
+        }
+      }
+    }
+
+    void refreshScenario()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [initialData.location, initialData.storeName, scenario, scenarioData.scenario])
+
   const franchiseRateNum = parseInt(franchiseRate) || 0
-  
-  // シナリオに応じて収益を調整
-  const adjustedMonthlyRevenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier)
+  const activeBaseData = scenarioData
+  const adjustedMonthlyRevenue = activeBaseData.monthlyRevenue
   const monthlyFranchiseCost = franchiseRateNum > 0 ? Math.round(adjustedMonthlyRevenue * (franchiseRateNum / 100)) : 0
-  const adjustedMonthlyProfit = adjustedMonthlyRevenue - initialData.monthlyRent - initialData.monthlyRunningCost - monthlyFranchiseCost
-  const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(initialData.totalInitialInvestment / adjustedMonthlyProfit) : 999
-  
-  // 損益分岐点（会員数）の再計算
-  const monthlyMemberFee = 8000
-  const totalMonthlyCost = initialData.monthlyRent + initialData.monthlyRunningCost + monthlyFranchiseCost
-  const adjustedBreakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
+  const adjustedMonthlyProfit = adjustedMonthlyRevenue - activeBaseData.monthlyRent - activeBaseData.monthlyRunningCost - monthlyFranchiseCost
+  const adjustedPaybackMonths = adjustedMonthlyProfit > 0 ? Math.ceil(activeBaseData.totalInitialInvestment / adjustedMonthlyProfit) : 999
+  const adjustedBreakevenMembers = activeBaseData.breakevenMembers
 
   const currentData: SimulationResult = {
-    ...initialData,
+    ...activeBaseData,
     scenario,
     franchiseRate: franchiseRateNum,
     monthlyRevenue: adjustedMonthlyRevenue,
@@ -92,23 +136,19 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   }
 
   const yearMonths  = parseInt(selectedYear) * 12
-
-  // 自己参照（TDZ）を避けるため、monthlyProjection を独立して計算する
-  // Step1: 月あたりの売上・コスト・利益を算出
-  const rawProjection = Array.from({ length: yearMonths }, (_, index) => {
-    const month = index + 1
-    const growthFactor = Math.min(1, 0.5 + month * scenarioFactor.growthSpeed)
-    const revenue = Math.round(initialData.monthlyRevenue * scenarioFactor.revenueMultiplier * growthFactor)
-    const cost = initialData.monthlyRent + initialData.monthlyRunningCost + (franchiseRateNum > 0 ? Math.round(revenue * (franchiseRateNum / 100)) : 0)
-    const profit = revenue - cost
-    return { month, revenue, cost, profit }
-  })
-
-  // Step2: 累積利益を逐次加算（前月の値を変数で保持してフォワード参照を排除）
-  let runningCumulative = -initialData.totalInitialInvestment
-  const computedProjection = rawProjection.map((m) => {
-    runningCumulative += m.profit
-    return { ...m, cumulativeProfit: runningCumulative }
+  let runningCumulative = -activeBaseData.totalInitialInvestment
+  const computedProjection = activeBaseData.monthlyProjection.slice(0, yearMonths).map((row) => {
+    const franchiseCost = franchiseRateNum > 0 ? Math.round(row.revenue * (franchiseRateNum / 100)) : 0
+    const cost = row.cost + franchiseCost
+    const profit = row.revenue - cost
+    runningCumulative += profit
+    return {
+      month: row.month,
+      revenue: row.revenue,
+      cost,
+      profit,
+      cumulativeProfit: runningCumulative,
+    }
   })
 
   const filteredData: SimulationResult = {
@@ -247,7 +287,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</span>
           <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
-            <SelectTrigger className="h-7 w-36 text-xs">
+            <SelectTrigger className="h-7 w-36 text-xs" disabled={isScenarioLoading}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -256,6 +296,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               <SelectItem value="aggressive" className="text-xs">アグレッシブ</SelectItem>
             </SelectContent>
           </Select>
+          {isScenarioLoading && <span className="text-[10px] text-muted-foreground">再計算中...</span>}
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">
@@ -304,6 +345,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           試算日: {new Date(currentData.createdAt).toLocaleDateString("ja-JP")}
         </p>
       </div>
+      {scenarioError && (
+        <p className="text-xs text-destructive">{scenarioError}</p>
+      )}
 
       {/* KPIカード */}
       <KpiCards data={currentData} />
