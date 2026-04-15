@@ -37,8 +37,8 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const paybackMonths = monthlyProfit > 0 ? Math.ceil(totalInitialInvestment / monthlyProfit) : 999
   
   // 損益分岐点（会員数）の計算
-  // 月額会員費を8,000円と仮定
-  const monthlyMemberFee = 8000
+  // 月額会員費は税抜2,980円で計算
+  const monthlyMemberFee = 2980
   const totalMonthlyCost = monthlyRent + monthlyRunningCost + monthlyFranchiseCost
   const breakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
 

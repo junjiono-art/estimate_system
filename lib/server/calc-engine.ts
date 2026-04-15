@@ -27,6 +27,7 @@ export type RegressionMonthlyRow = {
 
 const INITIAL_INVESTMENT = 23_110_000
 const DEFAULT_BREAKEVEN_MEMBERS = 374
+const MONTHLY_MEMBER_FEE_EX_TAX = 2_980
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
 const BASE_FLOOR_AREA_TSUBO = 50
@@ -211,7 +212,7 @@ function resolveInitialInvestment(input?: SimulateInput): number {
   return INITIAL_INVESTMENT
 }
 
-function resolveFranchiseRate(input?: SimulateInput): number {
+function resolveFranchiseRate(input?: SimulateInput): 0 | 10 | 15 {
   const rate = input?.franchiseRate ?? input?.royaltyRate ?? 0
   if (rate === 10 || rate === 15) return rate
   return 0
@@ -338,8 +339,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const monthlyPaymentFee = getPaymentFee(monthlyRevenue)
   const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), ROYALTY_CAP_MONTHLY)
   const monthlyAppFee = monthlyRoyalty > 0 ? 50 : 0
-  const avgRevenuePerMember = Math.max(1, monthlyRevenue / Math.max(1, year1Last?.members ?? 1))
-  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / avgRevenuePerMember)
+  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / MONTHLY_MEMBER_FEE_EX_TAX)
 
   return {
     id: `calc-${Date.now()}`,
