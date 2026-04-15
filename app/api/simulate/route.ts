@@ -20,10 +20,8 @@ export async function POST(request: Request) {
 
   try {
     const result = calculateSimulation({
+      ...body,
       storeName: body.storeName,
-      location: body.location,
-      scenario: body.scenario,
-      createdBy: body.createdBy,
     })
 
     return NextResponse.json(

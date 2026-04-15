@@ -68,11 +68,18 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     setScenarioData(initialData)
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
+    setIncludeDepreciation(true)
     setScenarioError("")
   }, [initialData])
 
   useEffect(() => {
-    if (scenario === scenarioData.scenario) return
+    const nextFranchiseRate = parseInt(franchiseRate) || 0
+    const controlsAreSame =
+      scenario === scenarioData.scenario &&
+      nextFranchiseRate === (scenarioData.franchiseRate ?? 0) &&
+      includeDepreciation
+
+    if (controlsAreSame) return
 
     let isCancelled = false
 
@@ -89,6 +96,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             storeName: simulationRequest?.storeName ?? initialData.storeName,
             location: simulationRequest?.location ?? initialData.location,
             scenario,
+            franchiseRate: nextFranchiseRate,
+            includeDepreciation,
           }),
         })
 
@@ -116,46 +125,28 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     return () => {
       isCancelled = true
     }
-  }, [initialData.location, initialData.storeName, scenario, scenarioData.scenario, simulationRequest])
+  }, [
+    franchiseRate,
+    includeDepreciation,
+    initialData.location,
+    initialData.storeName,
+    scenario,
+    scenarioData.franchiseRate,
+    scenarioData.scenario,
+    simulationRequest,
+  ])
 
-  const franchiseRateNum = parseInt(franchiseRate) || 0
   const activeBaseData = scenarioData
   const yearMonths = parseInt(selectedYear) * 12
-  const depreciationPerMonth = includeDepreciation ? Math.round(activeBaseData.totalInitialInvestment / 6 / 12) : 0
-  let runningCumulative = -activeBaseData.totalInitialInvestment
-  const fullAdjustedProjection = activeBaseData.monthlyProjection.map((row) => {
-    const franchiseCost = franchiseRateNum > 0 ? Math.round(row.revenue * (franchiseRateNum / 100)) : 0
-    const cost = row.cost + franchiseCost + depreciationPerMonth
-    const profit = row.revenue - cost
-    runningCumulative += profit
-    return {
-      month: row.month,
-      revenue: row.revenue,
-      cost,
-      profit,
-      cumulativeProfit: runningCumulative,
-    }
-  })
-
-  const computedProjection = fullAdjustedProjection.slice(0, yearMonths)
-  const summaryMonth = fullAdjustedProjection[Math.min(11, fullAdjustedProjection.length - 1)]
-  const paybackIndex = fullAdjustedProjection.findIndex((row) => row.cumulativeProfit >= 0)
-  const monthlyFranchiseCost = franchiseRateNum > 0 && summaryMonth ? Math.round(summaryMonth.revenue * (franchiseRateNum / 100)) : 0
-
   const currentData: SimulationResult = {
     ...activeBaseData,
     scenario,
-    franchiseRate: franchiseRateNum,
-    monthlyRevenue: summaryMonth?.revenue ?? activeBaseData.monthlyRevenue,
-    monthlyFranchiseCost,
-    monthlyProfit: summaryMonth?.profit ?? activeBaseData.monthlyProfit,
-    paybackMonths: paybackIndex >= 0 ? fullAdjustedProjection[paybackIndex].month : 999,
-    breakevenMembers: activeBaseData.breakevenMembers,
+    franchiseRate: parseInt(franchiseRate) || 0,
   }
 
   const filteredData: SimulationResult = {
     ...currentData,
-    monthlyProjection: computedProjection,
+    monthlyProjection: currentData.monthlyProjection.slice(0, yearMonths),
   }
 
   async function handleSave() {

@@ -80,6 +80,12 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
 
 type RegressionStatus = "idle" | "running" | "pass" | "fail"
 
+type ScenarioCheckSummary = {
+  scenario: "conservative" | "standard" | "aggressive"
+  pass: boolean
+  diffCount: number
+}
+
 export default function NewSimulationPage() {
   const [showResult, setShowResult] = useState(false)
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
@@ -89,23 +95,44 @@ export default function NewSimulationPage() {
   // 回帰検証ステータス（開発用）
   const [regressionStatus, setRegressionStatus] = useState<RegressionStatus>("idle")
   const [regressionDiffCount, setRegressionDiffCount] = useState<number | null>(null)
+  const [regressionScenarioSummary, setRegressionScenarioSummary] = useState<ScenarioCheckSummary[]>([])
 
   async function handleRunRegression() {
     setRegressionStatus("running")
     setRegressionDiffCount(null)
+    setRegressionScenarioSummary([])
     try {
-      const response = await fetch("/api/simulate/validate-standard", { method: "GET" })
+      const response = await fetch("/api/simulate/validate-all", { method: "GET" })
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         setRegressionStatus("fail")
-        setRegressionDiffCount(Array.isArray(payload?.diffs) ? payload.diffs.length : null)
+        setRegressionDiffCount(typeof payload?.totalDiffs === "number" ? payload.totalDiffs : null)
+        setRegressionScenarioSummary(
+          Array.isArray(payload?.scenarios)
+            ? payload.scenarios.map((row: { scenario: ScenarioCheckSummary["scenario"]; pass: boolean; diffCount: number }) => ({
+                scenario: row.scenario,
+                pass: row.pass,
+                diffCount: row.diffCount,
+              }))
+            : [],
+        )
         return
       }
       setRegressionStatus(payload?.pass === false ? "fail" : "pass")
-      setRegressionDiffCount(Array.isArray(payload?.diffs) ? payload.diffs.length : 0)
+      setRegressionDiffCount(typeof payload?.totalDiffs === "number" ? payload.totalDiffs : 0)
+      setRegressionScenarioSummary(
+        Array.isArray(payload?.scenarios)
+          ? payload.scenarios.map((row: { scenario: ScenarioCheckSummary["scenario"]; pass: boolean; diffCount: number }) => ({
+              scenario: row.scenario,
+              pass: row.pass,
+              diffCount: row.diffCount,
+            }))
+          : [],
+      )
     } catch {
       setRegressionStatus("fail")
       setRegressionDiffCount(null)
+      setRegressionScenarioSummary([])
     }
   }
 
@@ -121,6 +148,8 @@ export default function NewSimulationPage() {
       locationType: data.calcParams.locationType,
       runningCostTotal: data.runningCosts.total,
       initialInvestmentTotal: data.investmentCosts.total,
+      franchiseRate: 0,
+      includeDepreciation: true,
     }
   }
 
@@ -209,7 +238,7 @@ export default function NewSimulationPage() {
         disabled={regressionStatus === "running"}
       >
         <FlaskConicalIcon className="size-3.5" />
-        {regressionStatus === "running" ? "検証中..." : "標準回帰検証"}
+        {regressionStatus === "running" ? "検証中..." : "回帰検証（全シナリオ）"}
       </Button>
     </div>
   )
@@ -233,6 +262,22 @@ export default function NewSimulationPage() {
           <SimulationForm
             onSubmitWithData={handleSubmitWithData}
           />
+          {regressionScenarioSummary.length > 0 && (
+            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">回帰検証詳細</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {regressionScenarioSummary.map((row) => (
+                  <div key={row.scenario} className="rounded-md border border-border bg-background px-2.5 py-2">
+                    <p className="text-[11px] font-medium text-foreground">{row.scenario}</p>
+                    <p className={`text-[11px] ${row.pass ? "text-chart-2" : "text-destructive"}`}>
+                      {row.pass ? "PASS" : "FAIL"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">差分 {row.diffCount} 件</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

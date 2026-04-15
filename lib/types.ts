@@ -80,6 +80,8 @@ export interface SimulationRequestInput {
   locationType?: LocationType
   runningCostTotal?: number
   initialInvestmentTotal?: number
+  franchiseRate?: 0 | 10 | 15
+  includeDepreciation?: boolean
 }
 
 export interface AreaDemographics {

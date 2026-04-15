@@ -211,10 +211,26 @@ function resolveInitialInvestment(input?: SimulateInput): number {
   return INITIAL_INVESTMENT
 }
 
+function resolveFranchiseRate(input?: SimulateInput): number {
+  const rate = input?.franchiseRate ?? input?.royaltyRate ?? 0
+  if (rate === 10 || rate === 15) return rate
+  return 0
+}
+
+function applyDepreciation(rows: RegressionMonthlyRow[], initialInvestment: number, includeDepreciation: boolean): RegressionMonthlyRow[] {
+  if (!includeDepreciation) return rows
+  const depreciationPerMonth = Math.round(initialInvestment / 6 / 12)
+  return rows.map((row) => ({
+    ...row,
+    cost: row.cost + depreciationPerMonth,
+    profit: row.revenue - (row.cost + depreciationPerMonth),
+  }))
+}
+
 function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): RegressionMonthlyRow[] {
   if (!input) return rows
 
-  const royaltyRate = Math.max(0, input.royaltyRate ?? 0) / 100
+  const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
   const competitorCount = Math.max(0, input.competitorCount ?? 0)
   const locationMultiplier = getDemandMultiplier(input.locationType ?? "suburban", competitorCount)
   const floorArea = Number(input.floorAreaTsubo)
@@ -309,8 +325,11 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const initialInvestment = resolveInitialInvestment(input)
   const monthlyRent = resolveMonthlyRent(input)
   const monthlyRunningCost = resolveMonthlyRunning(input)
-  const royaltyRate = Math.max(0, input.royaltyRate ?? 0) / 100
-  const rows = buildRegressionRows(scenario, input)
+  const franchiseRate = resolveFranchiseRate(input)
+  const royaltyRate = Math.max(0, franchiseRate) / 100
+  const includeDepreciation = input.includeDepreciation !== false
+  const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate })
+  const rows = applyDepreciation(baseRows, initialInvestment, includeDepreciation)
   const monthlyProjection = buildMonthlyProjection(rows, initialInvestment)
   const year1Last = monthlyProjection[11]
 
@@ -322,7 +341,8 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const variableCostPerMember = (monthlyPaymentFee + monthlyRoyalty + monthlyAppFee) / Math.max(1, year1Last?.members ?? 1)
   const avgRevenuePerMember = monthlyRevenue / Math.max(1, year1Last?.members ?? 1)
   const contributionPerMember = Math.max(1, avgRevenuePerMember - variableCostPerMember)
-  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost + getMonthlyAdCost(12)) / contributionPerMember)
+  const monthlyDepreciation = includeDepreciation ? Math.round(initialInvestment / 6 / 12) : 0
+  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost + getMonthlyAdCost(12) + monthlyDepreciation) / contributionPerMember)
 
   return {
     id: `calc-${Date.now()}`,
@@ -331,7 +351,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy?.trim() || "API",
     scenario,
-    franchiseRate: input.royaltyRate ?? 0,
+    franchiseRate,
     totalInitialInvestment: initialInvestment,
     machinesCost: 3_750_000,
     interiorCost: 15_000_000,
