@@ -313,6 +313,7 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment:
     cumulativeProfit += row.profit
     return {
       month: row.month,
+      members: row.members,
       revenue: row.revenue,
       cost: row.cost,
       profit: row.profit,

@@ -11,12 +11,14 @@ const formatYen = (n: number) =>
   `${(n / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万円`
 
 export function KpiCards({ data }: KpiCardsProps) {
-  // 表示用の見込み会員数（月間売上 ÷ 月会費の目安として月会費を8,000円と仮定）
-  const estimatedMonthlyFee = 8000
+  const projectedMonth12Members = data.monthlyProjection[11]?.members
+  const estimatedMonthlyFee = 2980
   const estimatedMembers =
-    estimatedMonthlyFee > 0
-      ? Math.round(data.monthlyRevenue / estimatedMonthlyFee)
-      : 0
+    Number.isFinite(projectedMonth12Members)
+      ? Math.max(0, Math.round(projectedMonth12Members ?? 0))
+      : estimatedMonthlyFee > 0
+        ? Math.round(data.monthlyRevenue / estimatedMonthlyFee)
+        : 0
 
   const cards = [
     {

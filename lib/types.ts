@@ -137,6 +137,7 @@ export interface SimulationResult {
   // 月次推移（最大120ヶ月 = 10年分）
   monthlyProjection: {
     month: number
+    members?: number
     revenue: number
     cost: number
     profit: number

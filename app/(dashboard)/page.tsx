@@ -39,6 +39,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   // 損益分岐点（会員数）の計算
   // 月額会員費は税抜2,980円で計算
   const monthlyMemberFee = 2980
+  const estimatedMembers = monthlyMemberFee > 0 ? Math.round(monthlyRevenue / monthlyMemberFee) : 0
   const totalMonthlyCost = monthlyRent + monthlyRunningCost + monthlyFranchiseCost
   const breakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0
 
@@ -47,6 +48,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     const cumulativeProfit = monthlyProfit * month - totalInitialInvestment
     return {
       month,
+      members: estimatedMembers,
       revenue: monthlyRevenue,
       cost: monthlyRent + monthlyRunningCost + monthlyFranchiseCost,
       profit: monthlyProfit,
