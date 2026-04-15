@@ -56,7 +56,7 @@ export default function ResultPage() {
         description="入力情報をもとにした収益シミュレーション結果です"
       />
       <div className="overflow-auto">
-        <div className="mx-auto max-w-6xl px-8 py-7">
+        <div className="mx-auto max-w-screen-2xl px-6 py-7">
           {isLoading ? (
             <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 py-16">
               <ClockIcon className="size-8 animate-pulse text-muted-foreground/40" />
