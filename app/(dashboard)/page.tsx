@@ -20,7 +20,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
 
   // 簡易的な収益計算（床面積ベース）
   const monthlyRevenue = Math.max(0, floorArea * 50000)
-  const monthlyRent = Math.max(0, floorArea * rentPerTsubo)
+  const monthlyRent = Math.max(0, rentPerTsubo)
   const submittedRunningCost = submittedData?.runningCosts.total ?? 0
   const monthlyRunningCost = Math.max(0, submittedRunningCost || Math.round(monthlyRent * 0.6))
   // デフォルトは直営（0%）、試算結果画面で変更可能

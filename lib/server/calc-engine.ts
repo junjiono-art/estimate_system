@@ -186,12 +186,7 @@ function getMonthlyAdCost(month: number): number {
 
 function resolveMonthlyRent(input?: SimulateInput): number {
   if (!input) return DEFAULT_MONTHLY_RENT
-  const floorArea = Number(input.floorAreaTsubo)
   const rentPerTsubo = Number(input.rentPerTsubo)
-
-  if (Number.isFinite(floorArea) && floorArea > 0 && Number.isFinite(rentPerTsubo) && rentPerTsubo > 0) {
-    return Math.round(floorArea * rentPerTsubo)
-  }
 
   if (Number.isFinite(rentPerTsubo) && rentPerTsubo > 0) {
     return Math.round(rentPerTsubo)
