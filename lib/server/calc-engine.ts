@@ -338,11 +338,8 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const monthlyPaymentFee = getPaymentFee(monthlyRevenue)
   const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), ROYALTY_CAP_MONTHLY)
   const monthlyAppFee = monthlyRoyalty > 0 ? 50 : 0
-  const variableCostPerMember = (monthlyPaymentFee + monthlyRoyalty + monthlyAppFee) / Math.max(1, year1Last?.members ?? 1)
-  const avgRevenuePerMember = monthlyRevenue / Math.max(1, year1Last?.members ?? 1)
-  const contributionPerMember = Math.max(1, avgRevenuePerMember - variableCostPerMember)
-  const monthlyDepreciation = includeDepreciation ? Math.round(initialInvestment / 6 / 12) : 0
-  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost + getMonthlyAdCost(12) + monthlyDepreciation) / contributionPerMember)
+  const avgRevenuePerMember = Math.max(1, monthlyRevenue / Math.max(1, year1Last?.members ?? 1))
+  const breakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / avgRevenuePerMember)
 
   return {
     id: `calc-${Date.now()}`,
