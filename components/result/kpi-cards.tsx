@@ -11,6 +11,13 @@ const formatYen = (n: number) =>
   `${(n / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}万円`
 
 export function KpiCards({ data }: KpiCardsProps) {
+  // 表示用の見込み会員数（月間売上 ÷ 月会費の目安として月会費を8,000円と仮定）
+  const estimatedMonthlyFee = 8000
+  const estimatedMembers =
+    estimatedMonthlyFee > 0
+      ? Math.round(data.monthlyRevenue / estimatedMonthlyFee)
+      : 0
+
   const cards = [
     {
       label: "初期投資額",
@@ -41,6 +48,13 @@ export function KpiCards({ data }: KpiCardsProps) {
       border: "border-chart-4/20",
     },
     {
+      label: "見込み会員数",
+      value: `${estimatedMembers.toLocaleString()} 人`,
+      icon: UsersIcon,
+      accent: "bg-chart-5/10 text-chart-5",
+      border: "border-chart-5/20",
+    },
+    {
       label: "損益分岐点（会員数）",
       value: data.breakevenMembers !== undefined ? `${data.breakevenMembers} 人` : "－",
       icon: UsersIcon,
@@ -50,7 +64,7 @@ export function KpiCards({ data }: KpiCardsProps) {
   ]
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
       {cards.map((c) => (
         <div
           key={c.label}
