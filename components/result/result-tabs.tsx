@@ -107,6 +107,37 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const prevIncludeDepreciation = useRef(true)
+  const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
+
+  function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean): string {
+    return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}`
+  }
+
+  function resolveRequestValues(nextRoyaltyRate: 0 | 10 | 15): {
+    runningCostTotal: number | undefined
+    requestInitialInvestmentTotal: number | undefined
+  } {
+    const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
+    const mappedInitialInvestment = simulationRequest?.initialInvestmentByRoyaltyRate?.[String(nextRoyaltyRate) as "0" | "10" | "15"]
+    const baseRoyaltyRate = ((simulationRequest?.royaltyRate ?? simulationRequest?.franchiseRate ?? initialData.franchiseRate ?? 0) as 0 | 10 | 15)
+    const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate) : null
+    const requestInitialInvestmentTotal =
+      Number.isFinite(mappedInitialInvestment)
+        ? Math.max(0, Math.round(mappedInitialInvestment as number))
+        : resolved?.visibleInvestmentFieldIds.length &&
+          baseResolved?.visibleInvestmentFieldIds.length &&
+          Number.isFinite(simulationRequest?.initialInvestmentTotal)
+        ? Math.max(
+            0,
+            Math.round((simulationRequest?.initialInvestmentTotal as number) + (resolved.totalInvestmentCost - baseResolved.totalInvestmentCost)),
+          )
+        : simulationRequest?.initialInvestmentTotal
+
+    return {
+      runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
+      requestInitialInvestmentTotal,
+    }
+  }
 
   useEffect(() => {
     if (!simulationRequest) {
@@ -144,13 +175,69 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   useEffect(() => {
     setScenario(initialData.scenario ?? "standard")
-    setScenarioData(initialData)
+    const initialRoyaltyRate = (initialData.franchiseRate ?? 0) as 0 | 10 | 15
+    const initialRequestValues = resolveRequestValues(initialRoyaltyRate)
+    const seededData = applyResolvedBreakdown(initialData, masterValues, initialRoyaltyRate, initialRequestValues.requestInitialInvestmentTotal)
+    setScenarioData(seededData)
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
     setIncludeDepreciation(true)
     prevIncludeDepreciation.current = true
     setScenarioError("")
-  }, [initialData, masterValues])
+    scenarioCacheRef.current.clear()
+    scenarioCacheRef.current.set(
+      buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true),
+      seededData,
+    )
+  }, [initialData, masterValues, simulationRequest])
+
+  useEffect(() => {
+    if (!simulationRequest) return
+
+    let isCancelled = false
+
+    async function prefetchScenarioRates() {
+      const rates: Array<0 | 10 | 15> = [0, 10, 15]
+      const targets = rates.filter((rate) => !scenarioCacheRef.current.has(buildScenarioCacheKey(scenario, rate, includeDepreciation)))
+      if (targets.length === 0) return
+
+      await Promise.all(targets.map(async (rate) => {
+        const cacheKey = buildScenarioCacheKey(scenario, rate, includeDepreciation)
+        const requestValues = resolveRequestValues(rate)
+        try {
+          const response = await fetch("/api/simulate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...simulationRequest,
+              storeName: simulationRequest?.storeName ?? initialData.storeName,
+              location: simulationRequest?.location ?? initialData.location,
+              scenario,
+              royaltyRate: rate,
+              franchiseRate: rate,
+              runningCostTotal: requestValues.runningCostTotal,
+              initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
+              includeDepreciation,
+            }),
+          })
+
+          const payload = await response.json().catch(() => null)
+          if (!response.ok || !payload?.data || isCancelled) return
+
+          const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, rate, requestValues.requestInitialInvestmentTotal)
+          scenarioCacheRef.current.set(cacheKey, computed)
+        } catch {
+          // プリフェッチ失敗時は無視して都度計算にフォールバック
+        }
+      }))
+    }
+
+    void prefetchScenarioRates()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [includeDepreciation, initialData.location, initialData.storeName, masterValues, scenario, simulationRequest])
 
   useEffect(() => {
     const nextFranchiseRate = parseInt(franchiseRate) || 0
@@ -164,32 +251,29 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     let isCancelled = false
 
     async function refreshScenario() {
-      setIsScenarioLoading(true)
       setScenarioError("")
 
       try {
         const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
-        const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
-        const mappedInitialInvestment = simulationRequest?.initialInvestmentByRoyaltyRate?.[String(nextRoyaltyRate) as "0" | "10" | "15"]
-        const baseRoyaltyRate = ((simulationRequest?.royaltyRate ?? simulationRequest?.franchiseRate ?? initialData.franchiseRate ?? 0) as 0 | 10 | 15)
-        const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate) : null
-        const requestInitialInvestmentTotal =
-          Number.isFinite(mappedInitialInvestment)
-            ? Math.max(0, Math.round(mappedInitialInvestment as number))
-            : resolved?.visibleInvestmentFieldIds.length &&
-              baseResolved?.visibleInvestmentFieldIds.length &&
-              Number.isFinite(simulationRequest?.initialInvestmentTotal)
-            ? Math.max(
-                0,
-                Math.round((simulationRequest?.initialInvestmentTotal as number) + (resolved.totalInvestmentCost - baseResolved.totalInvestmentCost)),
-              )
-            : simulationRequest?.initialInvestmentTotal
+        const requestValues = resolveRequestValues(nextRoyaltyRate)
+        const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation)
+        const cached = scenarioCacheRef.current.get(cacheKey)
+
+        if (cached) {
+          if (!isCancelled) {
+            setScenarioData(cached)
+            prevIncludeDepreciation.current = includeDepreciation
+          }
+          return
+        }
+
+        setIsScenarioLoading(true)
 
         setScenarioData((current) => applyResolvedBreakdown({
           ...current,
           scenario,
           franchiseRate: nextFranchiseRate,
-        }, masterValues, nextRoyaltyRate, requestInitialInvestmentTotal))
+        }, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal))
 
         const response = await fetch("/api/simulate", {
           method: "POST",
@@ -201,8 +285,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             scenario,
             royaltyRate: nextRoyaltyRate,
             franchiseRate: nextFranchiseRate,
-            runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
-            initialInvestmentTotal: requestInitialInvestmentTotal,
+            runningCostTotal: requestValues.runningCostTotal,
+            initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
             includeDepreciation,
           }),
         })
@@ -213,7 +297,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         }
 
         if (!isCancelled) {
-          setScenarioData(applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate, requestInitialInvestmentTotal))
+          const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal)
+          scenarioCacheRef.current.set(cacheKey, computed)
+          setScenarioData(computed)
           prevIncludeDepreciation.current = includeDepreciation
         }
       } catch (error) {
