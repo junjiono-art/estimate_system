@@ -50,7 +50,12 @@ const SCENARIO_LABELS: Record<ScenarioType, string> = {
   aggressive: "強気シナリオ",
 }
 
-function applyResolvedBreakdown(result: SimulationResult, masterValues: MasterValue[] | null, royaltyRate: 0 | 10 | 15): SimulationResult {
+function applyResolvedBreakdown(
+  result: SimulationResult,
+  masterValues: MasterValue[] | null,
+  royaltyRate: 0 | 10 | 15,
+  totalInitialInvestmentOverride?: number,
+): SimulationResult {
   if (!masterValues || masterValues.length === 0) return result
 
   const resolved = resolveMasterFieldValues(masterValues, royaltyRate)
@@ -68,7 +73,9 @@ function applyResolvedBreakdown(result: SimulationResult, masterValues: MasterVa
     ? resolved.investmentByField.franchiseFeeCost ?? result.franchiseInitialCost
     : result.franchiseInitialCost
   const totalInitialInvestment = hasInvestmentValues
-    ? resolved.totalInvestmentCost
+    ? (Number.isFinite(totalInitialInvestmentOverride)
+      ? Math.max(0, Math.round(totalInitialInvestmentOverride as number))
+      : resolved.totalInvestmentCost)
     : result.totalInitialInvestment
   const otherInitialCost = hasInvestmentValues
     ? Math.max(0, totalInitialInvestment - machinesCost - interiorCost - franchiseInitialCost)
@@ -137,7 +144,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   useEffect(() => {
     setScenario(initialData.scenario ?? "standard")
-    setScenarioData(applyResolvedBreakdown(initialData, masterValues, (initialData.franchiseRate ?? 0) as 0 | 10 | 15))
+    setScenarioData(initialData)
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
     setIncludeDepreciation(true)
@@ -163,11 +170,23 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       try {
         const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
         const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
+        const baseRoyaltyRate = ((simulationRequest?.royaltyRate ?? simulationRequest?.franchiseRate ?? initialData.franchiseRate ?? 0) as 0 | 10 | 15)
+        const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate) : null
+        const requestInitialInvestmentTotal =
+          resolved?.visibleInvestmentFieldIds.length &&
+          baseResolved?.visibleInvestmentFieldIds.length &&
+          Number.isFinite(simulationRequest?.initialInvestmentTotal)
+            ? Math.max(
+                0,
+                Math.round((simulationRequest?.initialInvestmentTotal as number) + (resolved.totalInvestmentCost - baseResolved.totalInvestmentCost)),
+              )
+            : simulationRequest?.initialInvestmentTotal
+
         setScenarioData((current) => applyResolvedBreakdown({
           ...current,
           scenario,
           franchiseRate: nextFranchiseRate,
-        }, masterValues, nextRoyaltyRate))
+        }, masterValues, nextRoyaltyRate, requestInitialInvestmentTotal))
 
         const response = await fetch("/api/simulate", {
           method: "POST",
@@ -180,7 +199,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             royaltyRate: nextRoyaltyRate,
             franchiseRate: nextFranchiseRate,
             runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
-            initialInvestmentTotal: resolved?.visibleInvestmentFieldIds.length ? resolved.totalInvestmentCost : simulationRequest?.initialInvestmentTotal,
+            initialInvestmentTotal: requestInitialInvestmentTotal,
             includeDepreciation,
           }),
         })
@@ -191,7 +210,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         }
 
         if (!isCancelled) {
-          setScenarioData(applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate))
+          setScenarioData(applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate, requestInitialInvestmentTotal))
           prevIncludeDepreciation.current = includeDepreciation
         }
       } catch (error) {
