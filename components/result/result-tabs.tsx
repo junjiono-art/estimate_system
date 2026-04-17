@@ -195,10 +195,21 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     if (!simulationRequest) return
 
     let isCancelled = false
+    const currentRoyaltyRate = (parseInt(franchiseRate) || 0) as 0 | 10 | 15
+    const isSettledState =
+      scenario === scenarioData.scenario &&
+      currentRoyaltyRate === (scenarioData.franchiseRate ?? 0) &&
+      includeDepreciation === prevIncludeDepreciation.current
+
+    if (!isSettledState || isScenarioLoading) return
 
     async function prefetchScenarioRates() {
       const rates: Array<0 | 10 | 15> = [0, 10, 15]
-      const targets = rates.filter((rate) => !scenarioCacheRef.current.has(buildScenarioCacheKey(scenario, rate, includeDepreciation)))
+      const targets = rates.filter(
+        (rate) =>
+          rate !== currentRoyaltyRate &&
+          !scenarioCacheRef.current.has(buildScenarioCacheKey(scenario, rate, includeDepreciation)),
+      )
       if (targets.length === 0) return
 
       await Promise.all(targets.map(async (rate) => {
@@ -232,12 +243,26 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       }))
     }
 
-    void prefetchScenarioRates()
+    const prefetchTimer = setTimeout(() => {
+      void prefetchScenarioRates()
+    }, 400)
 
     return () => {
       isCancelled = true
+      clearTimeout(prefetchTimer)
     }
-  }, [includeDepreciation, initialData.location, initialData.storeName, masterValues, scenario, simulationRequest])
+  }, [
+    franchiseRate,
+    includeDepreciation,
+    initialData.location,
+    initialData.storeName,
+    isScenarioLoading,
+    masterValues,
+    scenario,
+    scenarioData.franchiseRate,
+    scenarioData.scenario,
+    simulationRequest,
+  ])
 
   useEffect(() => {
     const nextFranchiseRate = parseInt(franchiseRate) || 0
