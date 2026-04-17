@@ -64,18 +64,10 @@ export function KpiCards({ data }: KpiCardsProps) {
       accent: "bg-chart-3/10 text-chart-3",
       border: "border-chart-3/20",
     },
-    {
-      label: "簡易損益分岐点",
-      sublabel: "家賃＋ランニング",
-      value: data.simpleBreakevenMembers !== undefined ? `${data.simpleBreakevenMembers} 人` : "－",
-      icon: UsersIcon,
-      accent: "bg-chart-1/10 text-chart-1",
-      border: "border-chart-1/20",
-    },
   ]
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
       {cards.map((c) => (
         <div
           key={c.label}
