@@ -279,6 +279,18 @@
         "currentAmount":  {
                               "N":  "12000000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "6000000"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "12000000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -332,11 +344,23 @@
                       "S":  "フラッパーゲート"
                   },
         "defaultAmount":  {
-                              "N":  "1500000"
+                              "N":  "800000"
                           },
         "currentAmount":  {
-                              "N":  "1500000"
+                              "N":  "800000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "300000"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "800000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -361,11 +385,23 @@
                       "S":  "体組成計"
                   },
         "defaultAmount":  {
-                              "N":  "500000"
+                              "N":  "830000"
                           },
         "currentAmount":  {
-                              "N":  "500000"
+                              "N":  "830000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "680000"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "830000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -390,11 +426,23 @@
                       "S":  "ウォーターサーバー"
                   },
         "defaultAmount":  {
-                              "N":  "100000"
+                              "N":  "350000"
                           },
         "currentAmount":  {
-                              "N":  "100000"
+                              "N":  "350000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "250000"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "350000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -419,11 +467,23 @@
                       "S":  "フランチャイズ加盟費用"
                   },
         "defaultAmount":  {
-                              "N":  "4500000"
+                              "N":  "2000000"
                           },
         "currentAmount":  {
-                              "N":  "4500000"
+                              "N":  "2000000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "0"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "2000000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -448,11 +508,23 @@
                       "S":  "システム導入費"
                   },
         "defaultAmount":  {
-                              "N":  "800000"
+                              "N":  "500000"
                           },
         "currentAmount":  {
-                              "N":  "800000"
+                              "N":  "500000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "0"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "500000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -477,11 +549,26 @@
                       "S":  "開業準備費"
                   },
         "defaultAmount":  {
-                              "N":  "300000"
+                              "N":  "1000000"
                           },
         "currentAmount":  {
-                              "N":  "300000"
+                              "N":  "1000000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "rate"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "500000"
+                                 },
+        "amountWithRoyalty10":  {
+                                    "N":  "1000000"
+                                },
+        "amountWithRoyalty15":  {
+                                    "N":  "1500000"
+                                },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },
@@ -506,11 +593,23 @@
                       "S":  "開業前パッケージ費"
                   },
         "defaultAmount":  {
-                              "N":  "600000"
+                              "N":  "1100000"
                           },
         "currentAmount":  {
-                              "N":  "600000"
+                              "N":  "1100000"
                           },
+        "royaltyRuleEnabled":  {
+                                   "BOOL":  true
+                               },
+        "royaltyRuleMode":  {
+                                "S":  "binary"
+                            },
+        "amountWithoutRoyalty":  {
+                                     "N":  "550000"
+                                 },
+        "amountWithRoyalty":  {
+                                  "N":  "1100000"
+                              },
         "updatedAt":  {
                           "S":  "2026-04-14T00:00:00Z"
                       },

@@ -55,7 +55,7 @@ function toNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0
 }
 
-function mapDemographics(value: HistoryApiResult["result"] extends { demographics?: infer T } ? T : never): AreaDemographics | undefined {
+function mapDemographics(value: unknown): AreaDemographics | undefined {
   if (!value || typeof value !== "object") return undefined
 
   const municipality = (value as { municipality?: unknown }).municipality

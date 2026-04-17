@@ -3,6 +3,8 @@
 // ============================================================
 
 /** 単価マスタ */
+export type MasterValueRoyaltyMode = "binary" | "rate"
+
 export interface MasterValue {
   id: string
   category: "ランニングコスト" | "投資コスト"
@@ -11,6 +13,12 @@ export interface MasterValue {
   unit: string        // 単位ラベル（例: "円/月", "円/台", "円/坪"）
   defaultAmount: number
   currentAmount: number
+  royaltyRuleEnabled?: boolean
+  royaltyRuleMode?: MasterValueRoyaltyMode
+  amountWithoutRoyalty?: number
+  amountWithRoyalty?: number
+  amountWithRoyalty10?: number
+  amountWithRoyalty15?: number
   note: string
 }
 

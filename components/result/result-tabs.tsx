@@ -19,9 +19,10 @@ import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
 import { DemographicsView } from "./demographics-view"
 import { StarRating } from "@/components/star-rating"
-import type { SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
+import type { MasterValue, SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
+import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
 import { extractCity } from "@/lib/utils"
 
 interface ResultTabsProps {
@@ -49,6 +50,41 @@ const SCENARIO_LABELS: Record<ScenarioType, string> = {
   aggressive: "強気シナリオ",
 }
 
+function applyResolvedBreakdown(result: SimulationResult, masterValues: MasterValue[] | null, royaltyRate: 0 | 10 | 15): SimulationResult {
+  if (!masterValues || masterValues.length === 0) return result
+
+  const resolved = resolveMasterFieldValues(masterValues, royaltyRate)
+  const hasInvestmentValues = resolved.visibleInvestmentFieldIds.length > 0
+  const hasRunningValues = resolved.visibleRunningFieldIds.length > 0
+  if (!hasInvestmentValues && !hasRunningValues) return result
+
+  const machinesCost = hasInvestmentValues
+    ? resolved.investmentByField.fitnessMachineCost ?? result.machinesCost
+    : result.machinesCost
+  const interiorCost = hasInvestmentValues
+    ? resolved.investmentByField.interiorCost ?? result.interiorCost
+    : result.interiorCost
+  const franchiseInitialCost = hasInvestmentValues
+    ? resolved.investmentByField.franchiseFeeCost ?? result.franchiseInitialCost
+    : result.franchiseInitialCost
+  const totalInitialInvestment = hasInvestmentValues
+    ? resolved.totalInvestmentCost
+    : result.totalInitialInvestment
+  const otherInitialCost = hasInvestmentValues
+    ? Math.max(0, totalInitialInvestment - machinesCost - interiorCost - franchiseInitialCost)
+    : result.otherInitialCost
+
+  return {
+    ...result,
+    totalInitialInvestment,
+    machinesCost,
+    interiorCost,
+    franchiseInitialCost,
+    otherInitialCost,
+    monthlyRunningCost: hasRunningValues ? resolved.totalRunningCost : result.monthlyRunningCost,
+  }
+}
+
 export function ResultTabs({ data: initialData, demographicsData, demographicsError, simulationRequest }: ResultTabsProps) {
   const [scenario, setScenario] = useState<ScenarioType>(initialData.scenario ?? "standard")
   const [selectedYear, setSelectedYear] = useState("3")
@@ -62,17 +98,52 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenarioError, setScenarioError] = useState("")
   const [isScenarioLoading, setIsScenarioLoading] = useState(false)
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
+  const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const prevIncludeDepreciation = useRef(true)
 
   useEffect(() => {
+    if (!simulationRequest) {
+      setMasterValues(null)
+      return
+    }
+
+    let isCancelled = false
+
+    async function loadMasterValues() {
+      try {
+        const response = await fetch("/api/master/values", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok) {
+          throw new Error(getErrorMessage(payload, "単価マスタの取得に失敗しました。"))
+        }
+
+        if (!isCancelled) {
+          setMasterValues(Array.isArray(payload?.values) ? payload.values as MasterValue[] : [])
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setMasterValues(null)
+          setScenarioError(error instanceof Error ? error.message : "単価マスタの取得に失敗しました。")
+        }
+      }
+    }
+
+    void loadMasterValues()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [simulationRequest])
+
+  useEffect(() => {
     setScenario(initialData.scenario ?? "standard")
-    setScenarioData(initialData)
+    setScenarioData(applyResolvedBreakdown(initialData, masterValues, (initialData.franchiseRate ?? 0) as 0 | 10 | 15))
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
     setIncludeDepreciation(true)
     prevIncludeDepreciation.current = true
     setScenarioError("")
-  }, [initialData])
+  }, [initialData, masterValues])
 
   useEffect(() => {
     const nextFranchiseRate = parseInt(franchiseRate) || 0
@@ -90,6 +161,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       setScenarioError("")
 
       try {
+        const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
+        const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
         const response = await fetch("/api/simulate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -99,6 +172,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             location: simulationRequest?.location ?? initialData.location,
             scenario,
             franchiseRate: nextFranchiseRate,
+            runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
+            initialInvestmentTotal: resolved?.visibleInvestmentFieldIds.length ? resolved.totalInvestmentCost : simulationRequest?.initialInvestmentTotal,
             includeDepreciation,
           }),
         })
@@ -109,7 +184,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         }
 
         if (!isCancelled) {
-          setScenarioData(payload.data as SimulationResult)
+          setScenarioData(applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate))
           prevIncludeDepreciation.current = includeDepreciation
         }
       } catch (error) {
@@ -133,6 +208,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     includeDepreciation,
     initialData.location,
     initialData.storeName,
+    masterValues,
     scenario,
     scenarioData.franchiseRate,
     scenarioData.scenario,

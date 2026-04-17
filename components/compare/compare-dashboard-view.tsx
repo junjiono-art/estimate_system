@@ -52,7 +52,7 @@ export function CompareDashboardView({ left, right, displayMonths = 24 }: Compar
     { name: "内装工事",   [left.storeName]: left.interiorCost,          [right.storeName]: right.interiorCost },
     { name: "FC初期費用", [left.storeName]: left.franchiseInitialCost,  [right.storeName]: right.franchiseInitialCost },
     { name: "その他",     [left.storeName]: left.otherInitialCost,      [right.storeName]: right.otherInitialCost },
-  ].filter((d) => d[left.storeName] > 0 || d[right.storeName] > 0)
+  ].filter((d) => Number(d[left.storeName]) > 0 || Number(d[right.storeName]) > 0)
 
   // レーダーチャートデータ（スコア正規化）
   const maxRevenue    = Math.max(left.monthlyRevenue, right.monthlyRevenue) || 1

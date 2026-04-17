@@ -23,9 +23,10 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const monthlyRent = Math.max(0, rentPerTsubo)
   const submittedRunningCost = submittedData?.runningCosts.total ?? 0
   const monthlyRunningCost = Math.max(0, submittedRunningCost || Math.round(monthlyRent * 0.6))
-  // デフォルトは直営（0%）、試算結果画面で変更可能
-  const franchiseRate = 0
-  const monthlyFranchiseCost = 0
+  const franchiseRate = submittedData?.calcParams.royaltyRate ?? 0
+  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * (franchiseRate / 100)), 5000000)
+  const monthlyAppFee = franchiseRate > 0 ? 50 : 0
+  const monthlyFranchiseCost = monthlyRoyalty + monthlyAppFee
   const monthlyProfit = monthlyRevenue - monthlyRent - monthlyRunningCost - monthlyFranchiseCost
   const submittedInitialCost = submittedData?.investmentCosts.total ?? 0
   const totalInitialInvestment = Math.max(0, submittedInitialCost || (floorArea * 300000 + 10000000))
@@ -152,7 +153,7 @@ export default function NewSimulationPage() {
       locationType: data.calcParams.locationType,
       runningCostTotal: data.runningCosts.total,
       initialInvestmentTotal: data.investmentCosts.total,
-      franchiseRate: 0,
+      franchiseRate: data.calcParams.royaltyRate,
       includeDepreciation: true,
     }
   }

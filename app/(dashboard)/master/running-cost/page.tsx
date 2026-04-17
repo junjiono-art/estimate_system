@@ -12,9 +12,17 @@ import {
 } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -66,7 +74,18 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
   unit: "",
   defaultAmount: 0,
   currentAmount: 0,
+  royaltyRuleEnabled: false,
+  royaltyRuleMode: "binary",
+  amountWithoutRoyalty: 0,
+  amountWithRoyalty: 0,
+  amountWithRoyalty10: 0,
+  amountWithRoyalty15: 0,
   note: "",
+}
+
+function getRoyaltyModeLabel(row: MasterValue): string {
+  if (!row.royaltyRuleEnabled) return "なし"
+  return row.royaltyRuleMode === "rate" ? "0/10/15%" : "無/有"
 }
 
 export default function RunningCostPage() {
@@ -141,7 +160,21 @@ export default function RunningCostPage() {
   function openEdit(row: MasterValue) {
     setDialogMode("edit")
     setEditTarget(row)
-    setForm({ category: row.category, code: row.code, label: row.label, unit: row.unit, defaultAmount: row.defaultAmount, currentAmount: row.currentAmount, note: row.note })
+    setForm({
+      category: row.category,
+      code: row.code,
+      label: row.label,
+      unit: row.unit,
+      defaultAmount: row.defaultAmount,
+      currentAmount: row.currentAmount,
+      royaltyRuleEnabled: row.royaltyRuleEnabled === true,
+      royaltyRuleMode: row.royaltyRuleMode === "rate" ? "rate" : "binary",
+      amountWithoutRoyalty: row.amountWithoutRoyalty ?? row.defaultAmount,
+      amountWithRoyalty: row.amountWithRoyalty ?? row.defaultAmount,
+      amountWithRoyalty10: row.amountWithRoyalty10 ?? row.defaultAmount,
+      amountWithRoyalty15: row.amountWithRoyalty15 ?? row.defaultAmount,
+      note: row.note,
+    })
     setDialogOpen(true)
   }
 
@@ -152,6 +185,15 @@ export default function RunningCostPage() {
     if (!target.unit.trim()) return "単位は必須です。"
     if (!Number.isFinite(target.defaultAmount) || !Number.isFinite(target.currentAmount)) return "単価には数値を入力してください。"
     if (target.defaultAmount < 0 || target.currentAmount < 0) return "単価は0以上で入力してください。"
+    if (target.royaltyRuleEnabled) {
+      if (!Number.isFinite(target.amountWithoutRoyalty) || Number(target.amountWithoutRoyalty) < 0) return "ロイヤリティなし金額は0以上で入力してください。"
+      if (target.royaltyRuleMode === "rate") {
+        if (!Number.isFinite(target.amountWithRoyalty10) || Number(target.amountWithRoyalty10) < 0) return "10%時金額は0以上で入力してください。"
+        if (!Number.isFinite(target.amountWithRoyalty15) || Number(target.amountWithRoyalty15) < 0) return "15%時金額は0以上で入力してください。"
+      } else if (!Number.isFinite(target.amountWithRoyalty) || Number(target.amountWithRoyalty) < 0) {
+        return "ロイヤリティあり金額は0以上で入力してください。"
+      }
+    }
 
     const normalizedCode = normalizeMasterCode(target.code)
     const duplicateCode = rows.some((row) =>
@@ -171,7 +213,16 @@ export default function RunningCostPage() {
   }
 
   async function handleSave() {
-    const payload: Omit<MasterValue, "id"> = { ...form, code: normalizeMasterCode(form.code) }
+    const payload: Omit<MasterValue, "id"> = {
+      ...form,
+      code: normalizeMasterCode(form.code),
+      royaltyRuleEnabled: form.royaltyRuleEnabled === true,
+      royaltyRuleMode: form.royaltyRuleEnabled ? (form.royaltyRuleMode === "rate" ? "rate" : "binary") : undefined,
+      amountWithoutRoyalty: form.royaltyRuleEnabled ? Number(form.amountWithoutRoyalty) || 0 : undefined,
+      amountWithRoyalty: form.royaltyRuleEnabled && form.royaltyRuleMode !== "rate" ? Number(form.amountWithRoyalty) || 0 : undefined,
+      amountWithRoyalty10: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty10) || 0 : undefined,
+      amountWithRoyalty15: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty15) || 0 : undefined,
+    }
     const validationError = validateForm(payload)
     if (validationError) {
       toast.error(validationError)
@@ -291,6 +342,9 @@ export default function RunningCostPage() {
                     デフォルト単価
                   </TableHead>
                   <TableHead className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    ロイヤリティ連動
+                  </TableHead>
+                  <TableHead className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                     備考
                   </TableHead>
                   <TableHead className="w-20 text-right text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -301,7 +355,7 @@ export default function RunningCostPage() {
               <TableBody>
                 {paged.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-xs text-muted-foreground">
+                    <TableCell colSpan={6} className="py-10 text-center text-xs text-muted-foreground">
                       {isLoading ? "読み込み中..." : "データがありません"}
                     </TableCell>
                   </TableRow>
@@ -317,6 +371,7 @@ export default function RunningCostPage() {
                         {row.defaultAmount.toLocaleString()}
                         <span className="ml-0.5 text-[11px]">{row.unit}</span>
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{getRoyaltyModeLabel(row)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{row.note}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-0.5">
@@ -453,6 +508,78 @@ export default function RunningCostPage() {
                 value={form.defaultAmount || ""}
                 onChange={(e) => setForm((f) => ({ ...f, defaultAmount: Number(e.target.value) }))}
               />
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={form.royaltyRuleEnabled === true}
+                  onCheckedChange={(checked) => setForm((f) => ({ ...f, royaltyRuleEnabled: checked === true }))}
+                  id="running-royalty-rule-enabled"
+                />
+                <Label htmlFor="running-royalty-rule-enabled" className="text-xs">ロイヤリティ有無で金額を切り替える</Label>
+              </div>
+              {form.royaltyRuleEnabled && (
+                <div className="mt-3 flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs">切替方式</Label>
+                    <Select
+                      value={form.royaltyRuleMode === "rate" ? "rate" : "binary"}
+                      onValueChange={(value) => setForm((f) => ({ ...f, royaltyRuleMode: value === "rate" ? "rate" : "binary" }))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="切替方式を選択" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="binary">2段階（なし / あり）</SelectItem>
+                        <SelectItem value="rate">3段階（なし / 10% / 15%）</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs">ロイヤリティなし金額</Label>
+                      <Input
+                        className="h-8 text-xs"
+                        type="number"
+                        value={form.amountWithoutRoyalty || ""}
+                        onChange={(e) => setForm((f) => ({ ...f, amountWithoutRoyalty: Number(e.target.value) }))}
+                      />
+                    </div>
+                    {form.royaltyRuleMode === "rate" ? (
+                      <>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">10%時金額</Label>
+                          <Input
+                            className="h-8 text-xs"
+                            type="number"
+                            value={form.amountWithRoyalty10 || ""}
+                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty10: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-xs">15%時金額</Label>
+                          <Input
+                            className="h-8 text-xs"
+                            type="number"
+                            value={form.amountWithRoyalty15 || ""}
+                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty15: Number(e.target.value) }))}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-xs">ロイヤリティあり金額</Label>
+                        <Input
+                          className="h-8 text-xs"
+                          type="number"
+                          value={form.amountWithRoyalty || ""}
+                          onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty: Number(e.target.value) }))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">備考</Label>

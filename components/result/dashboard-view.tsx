@@ -164,7 +164,7 @@ export function DashboardView({
             },
             {
               label: "ロイヤリティ率",
-              value: data.franchiseRate > 0 ? `${data.franchiseRate}%` : "直営 (0%)",
+              value: (data.franchiseRate ?? 0) > 0 ? `${data.franchiseRate}%` : "直営 (0%)",
             },
             {
               label: "競合ジム件数",

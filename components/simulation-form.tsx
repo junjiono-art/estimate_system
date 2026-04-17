@@ -38,6 +38,7 @@ import type { LocationType, MasterValue } from "@/lib/types"
 import { toast } from "sonner"
 import {
   INVESTMENT_COST_CODE_TO_FIELD_ID,
+  resolveMasterFieldValues,
   RUNNING_COST_CODE_TO_FIELD_ID,
 } from "@/lib/master-value-mapping"
 
@@ -118,6 +119,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
+  const [masterValues, setMasterValues] = useState<MasterValue[]>([])
   const [visibleRunningCostIds, setVisibleRunningCostIds] = useState<string[]>(allRunningFieldIds)
   const [visibleInvestmentCostIds, setVisibleInvestmentCostIds] = useState<string[]>(allInvestmentFieldIds)
 
@@ -182,6 +184,21 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     otherInitialCost: setOtherInitialCost,
   }
 
+  function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
+    const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
+    const resolved = resolveMasterFieldValues(values, numericRoyaltyRate)
+
+    Object.entries(resolved.runningByField).forEach(([fieldId, amount]) => {
+      runningCostSetters[fieldId]?.(String(amount ?? 0))
+    })
+    Object.entries(resolved.investmentByField).forEach(([fieldId, amount]) => {
+      investmentCostSetters[fieldId]?.(String(amount ?? 0))
+    })
+
+    setVisibleRunningCostIds(resolved.visibleRunningFieldIds)
+    setVisibleInvestmentCostIds(resolved.visibleInvestmentFieldIds)
+  }
+
   async function loadMasterDefaults() {
     setIsMasterLoading(true)
     setMasterLoadError("")
@@ -196,28 +213,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       }
 
       const values = (Array.isArray(payload?.values) ? payload.values : []) as MasterValue[]
-      const runningIdsInMaster = new Set<string>()
-      const investmentIdsInMaster = new Set<string>()
-      values.forEach((value) => {
-        const amountText = String(Math.max(0, Number(value.defaultAmount) || 0))
-        if (value.category === "ランニングコスト") {
-          const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID]
-          if (fieldId) {
-            runningIdsInMaster.add(fieldId)
-            runningCostSetters[fieldId]?.(amountText)
-          }
-          return
-        }
-        if (value.category === "投資コスト") {
-          const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID]
-          if (fieldId) {
-            investmentIdsInMaster.add(fieldId)
-            investmentCostSetters[fieldId]?.(amountText)
-          }
-        }
-      })
-      setVisibleRunningCostIds(runningIdsInMaster.size > 0 ? Array.from(runningIdsInMaster) : [])
-      setVisibleInvestmentCostIds(investmentIdsInMaster.size > 0 ? Array.from(investmentIdsInMaster) : [])
+      setMasterValues(values)
+      applyMasterDefaults(values, royaltyRate)
     } catch (error) {
       const message = error instanceof Error ? error.message : "マスタ値の取得に失敗しました。"
       setMasterLoadError(message)
@@ -230,6 +227,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   useEffect(() => {
     void loadMasterDefaults()
   }, [])
+
+  useEffect(() => {
+    if (masterValues.length === 0) return
+    applyMasterDefaults(masterValues, royaltyRate)
+  }, [masterValues, royaltyRate])
 
   // ── アイテム定義（全state宣言の後に記述）──
   const RC_ITEMS = [
