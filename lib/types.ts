@@ -88,6 +88,7 @@ export interface SimulationRequestInput {
   locationType?: LocationType
   runningCostTotal?: number
   initialInvestmentTotal?: number
+  initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
   franchiseRate?: 0 | 10 | 15
   includeDepreciation?: boolean
 }

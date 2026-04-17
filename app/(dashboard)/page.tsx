@@ -153,6 +153,7 @@ export default function NewSimulationPage() {
       locationType: data.calcParams.locationType,
       runningCostTotal: data.runningCosts.total,
       initialInvestmentTotal: data.investmentCosts.total,
+      initialInvestmentByRoyaltyRate: data.investmentCosts.byRoyaltyRate,
       franchiseRate: data.calcParams.royaltyRate,
       includeDepreciation: true,
     }

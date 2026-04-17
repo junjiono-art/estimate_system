@@ -66,6 +66,7 @@ export type FormSubmitData = {
   investmentCosts: {
     byField: Record<string, number>
     total: number
+    byRoyaltyRate: Record<"0" | "10" | "15", number>
   }
   demographics?: {
     municipality: {
@@ -377,6 +378,17 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         investmentCosts: {
           byField: Object.fromEntries(COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),
           total: totalInitialCost,
+          byRoyaltyRate: masterValues.length > 0
+            ? {
+                "0": resolveMasterFieldValues(masterValues, 0).totalInvestmentCost,
+                "10": resolveMasterFieldValues(masterValues, 10).totalInvestmentCost,
+                "15": resolveMasterFieldValues(masterValues, 15).totalInvestmentCost,
+              }
+            : {
+                "0": totalInitialCost,
+                "10": totalInitialCost,
+                "15": totalInitialCost,
+              },
         },
         demographics,
         demographicsError,

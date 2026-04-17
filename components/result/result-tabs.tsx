@@ -170,12 +170,15 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       try {
         const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
         const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
+        const mappedInitialInvestment = simulationRequest?.initialInvestmentByRoyaltyRate?.[String(nextRoyaltyRate) as "0" | "10" | "15"]
         const baseRoyaltyRate = ((simulationRequest?.royaltyRate ?? simulationRequest?.franchiseRate ?? initialData.franchiseRate ?? 0) as 0 | 10 | 15)
         const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate) : null
         const requestInitialInvestmentTotal =
-          resolved?.visibleInvestmentFieldIds.length &&
-          baseResolved?.visibleInvestmentFieldIds.length &&
-          Number.isFinite(simulationRequest?.initialInvestmentTotal)
+          Number.isFinite(mappedInitialInvestment)
+            ? Math.max(0, Math.round(mappedInitialInvestment as number))
+            : resolved?.visibleInvestmentFieldIds.length &&
+              baseResolved?.visibleInvestmentFieldIds.length &&
+              Number.isFinite(simulationRequest?.initialInvestmentTotal)
             ? Math.max(
                 0,
                 Math.round((simulationRequest?.initialInvestmentTotal as number) + (resolved.totalInvestmentCost - baseResolved.totalInvestmentCost)),
