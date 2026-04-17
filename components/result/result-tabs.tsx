@@ -163,6 +163,12 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       try {
         const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
         const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
+        setScenarioData((current) => applyResolvedBreakdown({
+          ...current,
+          scenario,
+          franchiseRate: nextFranchiseRate,
+        }, masterValues, nextRoyaltyRate))
+
         const response = await fetch("/api/simulate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -171,6 +177,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             storeName: simulationRequest?.storeName ?? initialData.storeName,
             location: simulationRequest?.location ?? initialData.location,
             scenario,
+            royaltyRate: nextRoyaltyRate,
             franchiseRate: nextFranchiseRate,
             runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
             initialInvestmentTotal: resolved?.visibleInvestmentFieldIds.length ? resolved.totalInvestmentCost : simulationRequest?.initialInvestmentTotal,
