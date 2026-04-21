@@ -45,6 +45,11 @@ function normalizeRoyaltyMode(value?: MasterValueRoyaltyMode): MasterValueRoyalt
 }
 
 export function resolveMasterValueAmount(value: MasterValue, royaltyRate: RoyaltyRate): number {
+  if (value.code === "investment_fitness_machine") {
+    // マシン費はロイヤリティに依存させず、単価（currentAmount優先）を採用する。
+    return Math.max(0, Number(value.currentAmount) || Number(value.defaultAmount) || 0)
+  }
+
   const fallbackAmount = Math.max(0, Number(value.defaultAmount) || 0)
 
   if (!value.royaltyRuleEnabled) return fallbackAmount

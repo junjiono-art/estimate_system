@@ -1,4 +1,8 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
+import {
+  FITNESS_MACHINE_BASE_COST,
+  resolveFitnessMachineCostByAddress,
+} from "@/lib/fitness-machine-cost"
 
 export type SimulateInput = SimulationRequestInput
 
@@ -26,6 +30,7 @@ export type RegressionMonthlyRow = {
 }
 
 const INITIAL_INVESTMENT = 23_110_000
+const INTERIOR_COST = 15_000_000
 const DEFAULT_BREAKEVEN_MEMBERS = 374
 const MONTHLY_MEMBER_FEE_EX_TAX = 2_980
 const DEFAULT_MONTHLY_RENT = 900_000
@@ -319,7 +324,9 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment:
 
 export function calculateSimulation(input: SimulateInput): SimulationResult {
   const scenario = input.scenario ?? "standard"
-  const initialInvestment = resolveInitialInvestment(input)
+  const machinesCost = resolveFitnessMachineCostByAddress(input.location)
+  const machineDelta = machinesCost - FITNESS_MACHINE_BASE_COST
+  const initialInvestment = Math.max(0, resolveInitialInvestment(input) + machineDelta)
   const monthlyRent = resolveMonthlyRent(input)
   const monthlyRunningCost = resolveMonthlyRunning(input)
   const franchiseRate = resolveFranchiseRate(input)
@@ -356,10 +363,10 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     scenario,
     franchiseRate,
     totalInitialInvestment: initialInvestment,
-    machinesCost: 3_750_000,
-    interiorCost: 15_000_000,
+    machinesCost,
+    interiorCost: INTERIOR_COST,
     franchiseInitialCost: 0,
-    otherInitialCost: Math.max(0, initialInvestment - 18_750_000),
+    otherInitialCost: Math.max(0, initialInvestment - (machinesCost + INTERIOR_COST)),
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,
