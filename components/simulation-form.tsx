@@ -34,6 +34,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
+import { getFitnessMachineUnitPriceByAddress } from "@/lib/fitness-machine-cost"
 import type { LocationType, MasterValue } from "@/lib/types"
 import { toast } from "sonner"
 import {
@@ -147,6 +148,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [openingPackageCost,  setOpeningPackageCost]  = useState("")
   const [securityCost,        setSecurityCost]        = useState("")
   const [otherInitialCost,    setOtherInitialCost]    = useState("")
+  const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
 
   // ランニングコスト
   const [rcElectricity,   setRcElectricity]   = useState("")
@@ -185,6 +187,23 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     otherInitialCost: setOtherInitialCost,
   }
 
+  function getAddressBasedFitnessMachineCost(
+    values: MasterValue[],
+    selectedRoyaltyRate: "0" | "10" | "15",
+    currentAddress: string,
+    currentFloorArea: string,
+  ): number {
+    const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
+    const resolved = resolveMasterFieldValues(values, numericRoyaltyRate)
+    const dbUnitPrice = resolved.investmentByField.fitnessMachineCost
+      ?? Math.max(0, Number(values.find((v) => v.code === "investment_fitness_machine")?.currentAmount) || 0)
+
+    // J8相当: フィットネスマシン費 = 単価(I8) × 坪数(H3)
+    const unitPrice = getFitnessMachineUnitPriceByAddress(currentAddress, dbUnitPrice)
+    const floorAreaTsubo = Math.max(0, parseInt(currentFloorArea, 10) || 0)
+    return Math.max(0, Math.round(unitPrice * floorAreaTsubo))
+  }
+
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
     const resolved = resolveMasterFieldValues(values, numericRoyaltyRate)
@@ -195,6 +214,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     Object.entries(resolved.investmentByField).forEach(([fieldId, amount]) => {
       investmentCostSetters[fieldId]?.(String(amount ?? 0))
     })
+
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(values, selectedRoyaltyRate, address, floorArea)
+    setFitnessMachineCost(String(fitnessMachineCostByAddress))
+    setIsFitnessMachineCostManual(false)
 
     setVisibleRunningCostIds(resolved.visibleRunningFieldIds)
     setVisibleInvestmentCostIds(resolved.visibleInvestmentFieldIds)
@@ -233,6 +256,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     if (masterValues.length === 0) return
     applyMasterDefaults(masterValues, royaltyRate)
   }, [masterValues, royaltyRate])
+
+  useEffect(() => {
+    if (masterValues.length === 0) return
+    if (isFitnessMachineCostManual) return
+
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea)
+    setFitnessMachineCost(String(fitnessMachineCostByAddress))
+  }, [address, floorArea, isFitnessMachineCostManual, masterValues, royaltyRate])
 
   // ── アイテム定義（全state宣言の後に記述）──
   const RC_ITEMS = [
@@ -736,7 +767,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       type="number"
                       placeholder={item.placeholder}
                       value={item.value}
-                      onChange={(e) => item.setter(e.target.value)}
+                      onChange={(e) => {
+                        if (item.id === "fitnessMachineCost") {
+                          setIsFitnessMachineCostManual(true)
+                        }
+                        item.setter(e.target.value)
+                      }}
                     />
                   </div>
                 ))}

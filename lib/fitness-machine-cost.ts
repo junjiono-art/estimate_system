@@ -1,6 +1,6 @@
 const FITNESS_MACHINE_BASE_COST = 3_750_000
 
-const PREFECTURE_MACHINE_SURCHARGE: Record<string, number> = {
+const PREFECTURE_MACHINE_UNIT_PRICE: Record<string, number> = {
   北海道: 70_000,
   青森: 125_000,
   岩手: 115_000,
@@ -64,14 +64,21 @@ export function extractPrefectureFromAddress(address?: string): string | null {
   return normalizePrefectureName(prefMatch[1])
 }
 
-export function getFitnessMachineSurchargeByAddress(address?: string): number {
+export function getFitnessMachineUnitPriceByAddress(address?: string, fallbackUnitPrice?: number): number {
+  const fallback = Math.max(0, Number(fallbackUnitPrice) || 0)
   const prefecture = extractPrefectureFromAddress(address)
-  if (!prefecture) return 0
-  return PREFECTURE_MACHINE_SURCHARGE[prefecture] ?? 0
+  if (!prefecture) return fallback
+  return PREFECTURE_MACHINE_UNIT_PRICE[prefecture] ?? fallback
 }
 
-export function resolveFitnessMachineCostByAddress(address?: string): number {
-  return FITNESS_MACHINE_BASE_COST + getFitnessMachineSurchargeByAddress(address)
+export function getFitnessMachineSurchargeByAddress(address?: string): number {
+  const unitPrice = getFitnessMachineUnitPriceByAddress(address, 0)
+  return unitPrice
+}
+
+export function resolveFitnessMachineCostByAddress(address?: string, baseCost?: number): number {
+  const base = Math.max(0, Number(baseCost) || FITNESS_MACHINE_BASE_COST)
+  return base + getFitnessMachineSurchargeByAddress(address)
 }
 
 export { FITNESS_MACHINE_BASE_COST }
