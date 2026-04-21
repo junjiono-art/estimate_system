@@ -359,6 +359,44 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         console.warn(demographicsError)
       }
 
+      const investmentByField = Object.fromEntries(
+        COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)]),
+      )
+
+      const selectedRoyaltyRate = parseInt(royaltyRate) as 0 | 10 | 15
+      const investmentByRoyaltyRate: Record<"0" | "10" | "15", number> = masterValues.length > 0
+        ? (() => {
+            const currentResolved = resolveMasterFieldValues(masterValues, selectedRoyaltyRate)
+            const currentResolvedByField = currentResolved.investmentByField as Record<string, number | undefined>
+            const fieldDeltaById = Object.fromEntries(
+              Object.entries(investmentByField).map(([fieldId, enteredAmount]) => {
+                const baseAmount = Number(currentResolvedByField[fieldId] ?? enteredAmount)
+                return [fieldId, enteredAmount - baseAmount]
+              }),
+            ) as Record<string, number>
+
+            const calcTotalForRate = (rate: 0 | 10 | 15): number => {
+              const targetResolved = resolveMasterFieldValues(masterValues, rate)
+              const targetResolvedByField = targetResolved.investmentByField as Record<string, number | undefined>
+              return Object.entries(investmentByField).reduce((sum, [fieldId, enteredAmount]) => {
+                const targetBaseAmount = Number(targetResolvedByField[fieldId] ?? enteredAmount)
+                const adjustedAmount = Math.max(0, Math.round(targetBaseAmount + (fieldDeltaById[fieldId] ?? 0)))
+                return sum + adjustedAmount
+              }, 0)
+            }
+
+            return {
+              "0": calcTotalForRate(0),
+              "10": calcTotalForRate(10),
+              "15": calcTotalForRate(15),
+            }
+          })()
+        : {
+            "0": totalInitialCost,
+            "10": totalInitialCost,
+            "15": totalInitialCost,
+          }
+
       const formData: FormSubmitData = {
         storeInfo: {
           storeName,
@@ -376,19 +414,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           total: totalRunningCost,
         },
         investmentCosts: {
-          byField: Object.fromEntries(COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),
+          byField: investmentByField,
           total: totalInitialCost,
-          byRoyaltyRate: masterValues.length > 0
-            ? {
-                "0": resolveMasterFieldValues(masterValues, 0).totalInvestmentCost,
-                "10": resolveMasterFieldValues(masterValues, 10).totalInvestmentCost,
-                "15": resolveMasterFieldValues(masterValues, 15).totalInvestmentCost,
-              }
-            : {
-                "0": totalInitialCost,
-                "10": totalInitialCost,
-                "15": totalInitialCost,
-              },
+          byRoyaltyRate: investmentByRoyaltyRate,
         },
         demographics,
         demographicsError,
