@@ -4,26 +4,10 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts"
-import { Progress } from "@/components/ui/progress"
 import type { SimulationResult } from "@/lib/types"
-
-const SCENARIO_LABELS: Record<string, string> = {
-  conservative: "保守",
-  standard:     "スタンダード",
-  aggressive:   "アグレッシブ",
-}
-
-const LOCATION_LABELS: Record<string, string> = {
-  urban:    "都市型",
-  suburban: "郊外型",
-  rural:    "田舎型",
-}
 
 interface DashboardViewProps {
   data: SimulationResult
-  includeDepreciation?: boolean
-  competitorCount?: number | null
-  locationType?: string | null
 }
 
 const COLORS = [
@@ -44,12 +28,7 @@ const tooltipStyle = {
   boxShadow: "0 4px 12px rgba(0,0,0,.08)",
 }
 
-export function DashboardView({
-  data,
-  includeDepreciation = true,
-  competitorCount = null,
-  locationType = null,
-}: DashboardViewProps) {
+export function DashboardView({ data }: DashboardViewProps) {
   const investmentBreakdown = [
     { name: "マシン費",    value: data.machinesCost },
     { name: "内装工事",    value: data.interiorCost },
@@ -63,19 +42,10 @@ export function DashboardView({
     { name: "FC月額",           value: data.monthlyFranchiseCost },
   ].filter((d) => d.value > 0)
 
-  const profitMargin = data.monthlyRevenue > 0
-    ? Math.round((data.monthlyProfit / data.monthlyRevenue) * 100)
-    : 0
-
-  const projLen = data.monthlyProjection.length
-  const last = data.monthlyProjection[projLen - 1]
-  const recoveredAmount = data.totalInitialInvestment + (last?.cumulativeProfit ?? 0)
-  const recoveryPercent = Math.max(0, Math.min(100, Math.round((recoveredAmount / data.totalInitialInvestment) * 100)))
-
   return (
     <div className="flex flex-col gap-5">
-      {/* 上段: 3カラム */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* 上段: 2カラム */}
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* 初期投資円グラフ */}
         <div className="rounded-lg border border-border bg-card p-5">
           <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">初期投資内訳</p>
@@ -120,74 +90,6 @@ export function DashboardView({
           </div>
         </div>
 
-        {/* 収益サマリ */}
-        <div className="rounded-lg border border-border bg-card p-5">
-          <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">収益サマリ</p>
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-muted-foreground">月間利益率</span>
-                <span className="text-2xl font-bold tracking-tight text-foreground">{profitMargin}<span className="text-sm font-normal text-muted-foreground ml-0.5">%</span></span>
-              </div>
-              <Progress value={profitMargin} className="h-1.5" />
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-muted-foreground">投資回収進捗（{projLen}ヶ月）</span>
-                <span className="text-2xl font-bold tracking-tight text-foreground">{recoveryPercent}<span className="text-sm font-normal text-muted-foreground ml-0.5">%</span></span>
-              </div>
-              <Progress value={recoveryPercent} className="h-1.5" />
-            </div>
-            <div className="mt-auto rounded-md border border-border bg-muted/30 px-3 py-2.5">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[10px] text-muted-foreground">想定回収期間</span>
-                <span className="font-mono text-sm font-semibold text-foreground">{data.paybackMonths} ヶ月</span>
-              </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                約 {Math.floor(data.paybackMonths / 12)} 年 {data.paybackMonths % 12} ヶ月で回収見込み
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 計算条件サマリーカード */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="border-b border-border px-5 py-3">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">計算条件サマリー</p>
-        </div>
-        <div className="grid grid-cols-2 gap-0 sm:grid-cols-3 lg:grid-cols-5">
-          {[
-            {
-              label: "計算シナリオ",
-              value: SCENARIO_LABELS[data.scenario ?? "standard"] ?? "—",
-            },
-            {
-              label: "ロイヤリティ率",
-              value: (data.franchiseRate ?? 0) > 0 ? `${data.franchiseRate}%` : "直営 (0%)",
-            },
-            {
-              label: "競合ジム件数",
-              value: competitorCount != null ? `${competitorCount} 件` : "—",
-            },
-            {
-              label: "減価償却",
-              value: includeDepreciation ? "含める" : "含めない",
-            },
-            {
-              label: "計算方式",
-              value: "API計算",
-            },
-          ].map((item, i) => (
-            <div
-              key={item.label}
-              className={`flex flex-col gap-1 px-5 py-3 ${i < 4 ? "border-b sm:border-b-0 sm:border-r border-border/60" : ""}`}
-            >
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{item.label}</span>
-              <span className="text-sm font-semibold text-foreground">{item.value}</span>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* 下段: 明細テーブル 2カラム */}

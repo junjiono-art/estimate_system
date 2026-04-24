@@ -614,7 +614,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <ChartTableView data={filteredData} />
         </TabsContent>
         <TabsContent value="dashboard" className="mt-4">
-          <DashboardView data={filteredData} includeDepreciation={includeDepreciation} />
+          <DashboardView data={filteredData} />
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
           <DemographicsView
