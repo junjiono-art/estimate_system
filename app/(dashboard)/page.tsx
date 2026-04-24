@@ -62,6 +62,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     id: `preview-${Date.now()}`,
     storeName,
     location,
+    locationType: submittedData?.calcParams.locationType ?? "suburban",
     createdAt: now,
     createdBy: "未保存",
     scenario: "standard",

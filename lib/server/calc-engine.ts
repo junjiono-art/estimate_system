@@ -421,6 +421,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     id: `calc-${Date.now()}`,
     storeName: input.storeName.trim() || "試算結果",
     location: input.location,
+    locationType: input.locationType ?? "suburban",
     createdAt: new Date().toISOString(),
     createdBy: input.createdBy?.trim() || "API",
     scenario,

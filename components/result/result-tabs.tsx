@@ -181,7 +181,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     const initialRoyaltyRate = (initialData.franchiseRate ?? 0) as 0 | 10 | 15
     const initialRequestValues = resolveRequestValues(initialRoyaltyRate)
     const seededData = applyResolvedBreakdown(initialData, masterValues, initialRoyaltyRate, initialRequestValues.requestInitialInvestmentTotal)
-    setScenarioData(seededData)
+    setScenarioData({ ...seededData, locationType: simulationRequest?.locationType ?? "suburban" })
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
     setLocationType(simulationRequest?.locationType ?? "suburban")
@@ -191,7 +191,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     scenarioCacheRef.current.clear()
     scenarioCacheRef.current.set(
       buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true, simulationRequest?.locationType ?? "suburban"),
-      seededData,
+      { ...seededData, locationType: simulationRequest?.locationType ?? "suburban" },
     )
   }, [initialData, masterValues, simulationRequest])
 
@@ -227,7 +227,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       if (targets.length === 0) return
 
       await Promise.all(targets.map(async ({ scenario: targetScenario, rate }) => {
-        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation)
+        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation, locationType)
         const requestValues = resolveRequestValues(rate)
         try {
           const response = await fetch("/api/simulate", {
@@ -240,6 +240,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               scenario: targetScenario,
               royaltyRate: rate,
               franchiseRate: rate,
+              locationType,
               runningCostTotal: requestValues.runningCostTotal,
               initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
               includeDepreciation,
@@ -280,6 +281,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   ])
 
   useEffect(() => {
+    if (isScenarioLoading) return
+
     const nextFranchiseRate = parseInt(franchiseRate) || 0
     const controlsAreSame =
       scenario === scenarioData.scenario &&
@@ -314,6 +317,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           ...current,
           scenario,
           franchiseRate: nextFranchiseRate,
+          locationType,
         }, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal))
 
         const response = await fetch("/api/simulate", {
@@ -341,7 +345,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         if (!isCancelled) {
           const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal)
           scenarioCacheRef.current.set(cacheKey, computed)
-          setScenarioData(computed)
+          setScenarioData({ ...computed, locationType })
           prevIncludeDepreciation.current = includeDepreciation
         }
       } catch (error) {
@@ -372,6 +376,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     scenarioData.locationType,
     scenarioData.scenario,
     simulationRequest,
+    isScenarioLoading,
   ])
 
   const activeBaseData = scenarioData

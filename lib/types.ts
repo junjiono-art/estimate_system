@@ -126,6 +126,8 @@ export interface SimulationResult {
   storeName: string
   /** 住所（市区町村の人口統計表示に使用） */
   location?: string
+  /** 立地タイプ（再計算の状態一致判定・表示に使用） */
+  locationType?: LocationType
   createdAt: string
   createdBy: string
   scenario: ScenarioType
