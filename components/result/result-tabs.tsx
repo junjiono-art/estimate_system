@@ -211,23 +211,29 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     async function prefetchScenarioRates() {
       const allScenarios: ScenarioType[] = ["conservative", "standard", "aggressive"]
       const allRates: Array<0 | 10 | 15> = [0, 10, 15]
+      const allLocationTypes: Array<"urban" | "suburban" | "rural"> = ["urban", "suburban", "rural"]
 
-      // 他ロイヤリティ率 × 現在のシナリオ ＋ 他シナリオ × 現在のロイヤリティ率 をプリフェッチ
-      const targets: Array<{ scenario: ScenarioType; rate: 0 | 10 | 15 }> = [
+      // 他ロイヤリティ率 × 現在シナリオ × 現在立地
+      // ＋ 他シナリオ × 現在ロイヤリティ率 × 現在立地
+      // ＋ 他立地タイプ × 現在シナリオ × 現在ロイヤリティ率 をプリフェッチ
+      const targets: Array<{ scenario: ScenarioType; rate: 0 | 10 | 15; locationType: "urban" | "suburban" | "rural" }> = [
         ...allRates
           .filter((rate) => rate !== currentRoyaltyRate)
-          .map((rate) => ({ scenario, rate })),
+          .map((rate) => ({ scenario, rate, locationType })),
         ...allScenarios
           .filter((s) => s !== scenario)
-          .map((s) => ({ scenario: s, rate: currentRoyaltyRate })),
-      ].filter(({ scenario: s, rate }) =>
-        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation, locationType)),
+          .map((s) => ({ scenario: s, rate: currentRoyaltyRate, locationType })),
+        ...allLocationTypes
+          .filter((lt) => lt !== locationType)
+          .map((lt) => ({ scenario, rate: currentRoyaltyRate, locationType: lt })),
+      ].filter(({ scenario: s, rate, locationType: lt }) =>
+        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation, lt)),
       )
 
       if (targets.length === 0) return
 
-      await Promise.all(targets.map(async ({ scenario: targetScenario, rate }) => {
-        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation, locationType)
+      await Promise.all(targets.map(async ({ scenario: targetScenario, rate, locationType: targetLocationType }) => {
+        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation, targetLocationType)
         const requestValues = resolveRequestValues(rate)
         try {
           const response = await fetch("/api/simulate", {
@@ -240,7 +246,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               scenario: targetScenario,
               royaltyRate: rate,
               franchiseRate: rate,
-              locationType,
+              locationType: targetLocationType,
               runningCostTotal: requestValues.runningCostTotal,
               initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
               includeDepreciation,
@@ -251,7 +257,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           if (!response.ok || !payload?.data || isCancelled) return
 
           const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, rate, requestValues.requestInitialInvestmentTotal)
-          scenarioCacheRef.current.set(cacheKey, computed)
+          scenarioCacheRef.current.set(cacheKey, { ...computed, locationType: targetLocationType })
         } catch {
           // プリフェッチ失敗時は無視して都度計算にフォールバック
         }
