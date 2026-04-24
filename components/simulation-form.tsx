@@ -150,6 +150,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [otherInitialCost,    setOtherInitialCost]    = useState("")
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
 
+  // ゴルフ設備
+  const [golfRightBayCount, setGolfRightBayCount] = useState("0")
+  const [golfDualBayCount,  setGolfDualBayCount]  = useState("0")
+
   // ランニングコスト
   const [rcElectricity,   setRcElectricity]   = useState("")
   const [rcWater,         setRcWater]         = useState("")
@@ -192,16 +196,33 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     selectedRoyaltyRate: "0" | "10" | "15",
     currentAddress: string,
     currentFloorArea: string,
+    currentGolfRightBay: string,
+    currentGolfDualBay: string,
   ): number {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
     const resolved = resolveMasterFieldValues(values, numericRoyaltyRate)
     const dbUnitPrice = resolved.investmentByField.fitnessMachineCost
       ?? Math.max(0, Number(values.find((v) => v.code === "investment_fitness_machine")?.currentAmount) || 0)
 
-    // J8相当: フィットネスマシン費 = 単価(I8) × 坪数(H3)
+    // J8式: =IFS(L11=1,H3*I8, L11=2,(H3-(H6*7))*I8, L11=3,(H3-(H7*9))*I8, L11=4,(H3-(H6*7)-(H7*9))*I8)
     const unitPrice = getFitnessMachineUnitPriceByAddress(currentAddress, dbUnitPrice)
     const floorAreaTsubo = Math.max(0, parseInt(currentFloorArea, 10) || 0)
-    return Math.max(0, Math.round(unitPrice * floorAreaTsubo))
+    const rightBay = Math.max(0, parseInt(currentGolfRightBay, 10) || 0)  // H6
+    const dualBay  = Math.max(0, parseInt(currentGolfDualBay,  10) || 0)  // H7
+    const hasRight = rightBay > 0
+    const hasDual  = dualBay  > 0
+    // L11 判定: 1=ゴルフなし, 2=右打席のみ, 3=両打席のみ, 4=両方
+    let effectiveTsubo: number
+    if (!hasRight && !hasDual) {
+      effectiveTsubo = floorAreaTsubo
+    } else if (hasRight && !hasDual) {
+      effectiveTsubo = floorAreaTsubo - rightBay * 7
+    } else if (!hasRight && hasDual) {
+      effectiveTsubo = floorAreaTsubo - dualBay * 9
+    } else {
+      effectiveTsubo = floorAreaTsubo - rightBay * 7 - dualBay * 9
+    }
+    return Math.max(0, Math.round(unitPrice * Math.max(0, effectiveTsubo)))
   }
 
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
@@ -215,7 +236,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       investmentCostSetters[fieldId]?.(String(amount ?? 0))
     })
 
-    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(values, selectedRoyaltyRate, address, floorArea)
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(values, selectedRoyaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
     setFitnessMachineCost(String(fitnessMachineCostByAddress))
     setIsFitnessMachineCostManual(false)
 
@@ -261,9 +282,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     if (masterValues.length === 0) return
     if (isFitnessMachineCostManual) return
 
-    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea)
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
     setFitnessMachineCost(String(fitnessMachineCostByAddress))
-  }, [address, floorArea, isFitnessMachineCostManual, masterValues, royaltyRate])
+  }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, masterValues, royaltyRate])
 
   // ── アイテム定義（全state宣言の後に記述）──
   const RC_ITEMS = [
@@ -582,6 +603,43 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                         <p className="text-[11px] text-destructive">{fieldErrors.floorArea}</p>
                       )}
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">ゴルフ設備</p>
+                <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
+                  ゴルフ打席を設ける場合は台数を入力してください。フィットネスマシン費の計算に使用します（右打席: 7坪/台、両打席: 9坪/台を除外）。
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="golfRightBayCount" className="text-xs font-medium">
+                      ゴルフ（右打席）台数
+                    </Label>
+                    <Input
+                      id="golfRightBayCount"
+                      type="number"
+                      min={0}
+                      placeholder="例: 0"
+                      value={golfRightBayCount}
+                      onChange={(e) => setGolfRightBayCount(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="golfDualBayCount" className="text-xs font-medium">
+                      ゴルフ（両打席）台数
+                    </Label>
+                    <Input
+                      id="golfDualBayCount"
+                      type="number"
+                      min={0}
+                      placeholder="例: 0"
+                      value={golfDualBayCount}
+                      onChange={(e) => setGolfDualBayCount(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
