@@ -16,13 +16,14 @@ import {
 } from "recharts"
 import { MapPinIcon, UsersIcon, AlertCircleIcon, TrendingUpIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { SimulationResult } from "@/lib/types"
+import type { SimulationResult, SimulationRequestInput } from "@/lib/types"
 import type { FormSubmitData } from "@/components/simulation-form"
 
 interface DemographicsViewProps {
   data: SimulationResult
   demographicsData?: FormSubmitData["demographics"]
   demographicsError?: string
+  simulationRequest?: SimulationRequestInput | null
 }
 
 const tooltipStyle = {
@@ -70,7 +71,7 @@ const fmtPopulation = (n: number) =>
     ? `${(n / 10000).toFixed(1)}万人`
     : `${n.toLocaleString()}人`
 
-export function DemographicsView({ data, demographicsData, demographicsError }: DemographicsViewProps) {
+export function DemographicsView({ data, demographicsData, demographicsError, simulationRequest }: DemographicsViewProps) {
   const demographics = demographicsData
     ? {
         city: demographicsData.municipality.city,
@@ -165,6 +166,64 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
     maleLabel: d.male,
     femaleLabel: d.female,
   }))
+
+  // 距離別見込み人数の計算（e-Statメッシュ統計が取得できた場合のみ）
+  const pop = simulationRequest?.populationByRadius
+  const locType = simulationRequest?.locationType ?? "suburban"
+
+  // 見込み人数係数 e38 = VLOOKUP(C38, '見込み人数テーブル'!A5:C77, 3, TRUE)
+  // C38: 立地タイプ別累計人口（都市型=1km圏, 郊外型=1+3km圏, 田舎型=1+3+5km圏）
+  const lookupPopForCoeff = pop
+    ? locType === "urban"
+      ? pop.km1Ring
+      : locType === "suburban"
+        ? pop.km1Ring + pop.km3Ring
+        : pop.km1Ring + pop.km3Ring + pop.km5Ring
+    : 0
+  const e38 = -(16 + Math.min(72, Math.floor(Math.max(0, lookupPopForCoeff) / 5000))) / 100
+
+  // 式: 都市型=E60*(1+E38), 郊外型=E60+F60*(1+E38), 田舎型=E60+F60+G60*(1+E38)
+  // 係数(e38)は立地タイプの「最外圈」にのみ適用
+  const radiusRows = pop
+    ? (() => {
+        const e60 = pop.km1Ring * 0.012
+        const f60 = pop.km3Ring * 0.008
+        const g60 = pop.km5Ring * 0.001
+        return [
+          {
+            label: "〜1km圏",
+            population: pop.km1Ring,
+            rate: 1.2,
+            rawJoiners: Math.round(e60),
+            applyCoeff: locType === "urban",
+            usedInFormula: true,
+            effectiveJoiners: Math.round(locType === "urban" ? e60 * (1 + e38) : e60),
+          },
+          {
+            label: "1〜3km圏",
+            population: pop.km3Ring,
+            rate: 0.8,
+            rawJoiners: Math.round(f60),
+            applyCoeff: locType === "suburban",
+            usedInFormula: locType !== "urban",
+            effectiveJoiners: locType !== "urban" ? Math.round(locType === "suburban" ? f60 * (1 + e38) : f60) : null,
+          },
+          {
+            label: "3〜5km圏",
+            population: pop.km5Ring,
+            rate: 0.1,
+            rawJoiners: Math.round(g60),
+            applyCoeff: locType === "rural",
+            usedInFormula: locType === "rural",
+            effectiveJoiners: locType === "rural" ? Math.round(g60 * (1 + e38)) : null,
+          },
+        ]
+      })()
+    : null
+
+  const totalRadiusPopulation = radiusRows ? radiusRows.reduce((s, r) => s + r.population, 0) : 0
+  const totalEffectiveJoiners = radiusRows ? radiusRows.reduce((s, r) => s + (r.effectiveJoiners ?? 0), 0) : 0
+  const firstMonthMembers = data.monthlyProjection[0]?.members ?? 0
 
   // 見込み人数の変動チャートデータ
   const memberTrendData = data.monthlyProjection
@@ -376,7 +435,90 @@ export function DemographicsView({ data, demographicsData, demographicsError }: 
               </div>
             </div>
 
-            {/* フィットネス適齢期の詳細 */}
+            {radiusRows && (
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="border-b border-border px-5 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      距離別 20〜59歳人口・見込み入会人数
+                    </p>
+                    <span className="rounded border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                      見込み人数係数 e38 = {(e38 * 100).toFixed(0)}%
+                      <span className="ml-1 text-muted-foreground/60">
+                        ({locType === "urban" ? "ルークアップ値: 1km圏人口" : locType === "suburban" ? "ルークアップ値: 1+3km圏人口" : "ルークアップ値: 1+3+5km圏人口"})
+                      </span>
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">e-Stat メッシュ統計（1km単位）</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">圏域</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">20〜59歳人口</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">見込み率</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">素・見込み人数</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">係数適用</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">見込み人数（係数反映）</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {radiusRows.map((row) => (
+                        <tr
+                          key={row.label}
+                          className={`border-b border-border/50 last:border-0 transition-colors ${
+                            row.usedInFormula ? "hover:bg-muted/20" : "opacity-40"
+                          }`}
+                        >
+                          <td className="px-4 py-2.5 font-medium text-foreground">{row.label}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-foreground">{row.population.toLocaleString()}人</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-muted-foreground">{row.rate}%</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-foreground">{row.rawJoiners.toLocaleString()}人</td>
+                          <td className="px-4 py-2.5 text-right font-mono">
+                            {row.applyCoeff
+                              ? <span className="text-chart-2 font-medium">{(e38 * 100).toFixed(0)}%</span>
+                              : row.usedInFormula
+                                ? <span className="text-muted-foreground">—</span>
+                                : <span className="text-muted-foreground/50">（対象外）</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono font-medium">
+                            {row.effectiveJoiners !== null
+                              ? <span className="text-foreground">{row.effectiveJoiners.toLocaleString()}人</span>
+                              : <span className="text-muted-foreground/50">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-muted/30">
+                        <td className="px-4 py-2.5 text-xs font-semibold text-foreground">合計</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-xs font-bold text-foreground">{totalRadiusPopulation.toLocaleString()}人</td>
+                        <td className="px-4 py-2.5" />
+                        <td className="px-4 py-2.5" />
+                        <td className="px-4 py-2.5" />
+                        <td className="px-4 py-2.5 text-right font-mono text-xs font-bold text-foreground">{totalEffectiveJoiners.toLocaleString()}人</td>
+                      </tr>
+                      {firstMonthMembers > 0 && (
+                        <tr className="border-t border-border bg-chart-1/5">
+                          <td className="px-4 py-2.5 text-xs font-semibold text-foreground">初月入会見込み（試算値）</td>
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5" />
+                          <td className="px-4 py-2.5 text-right text-[10px] text-muted-foreground">競合店舗数補正後</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs font-bold text-primary">{firstMonthMembers.toLocaleString()}人</td>
+                        </tr>
+                      )}
+                    </tfoot>
+                  </table>
+                </div>
+                <p className="px-5 py-2.5 text-[10px] text-muted-foreground border-t border-border/50">
+                  ※ 係数適用: 立地タイプの「最外圈」にのみ見込み人数係数(e38)を適用。試算値は競合店舗数による減少補正を含みます。
+                </p>
+              </div>
+            )}
+
+            {/* フィットネス適齢期の詳細 */}}
             <div className="rounded-lg border border-border bg-card overflow-hidden">
               <div className="border-b border-border px-5 py-3">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

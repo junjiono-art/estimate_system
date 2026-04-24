@@ -280,13 +280,15 @@ function resolveInitialJoiners(input: SimulateInput): number {
   const e38 = lookupMemberCoefficient(lookupPop)
 
   // J38: 見込み入会人数
+  // 式: 都市型=E60*(1+E38), 郊外型=E60+F60*(1+E38), 田舎型=E60+F60+G60*(1+E38)
+  // 係数(e38)は立地タイプの「最外圏」にのみ適用される点に注意
   let baseJoiners: number
   if (locationType === "urban") {
     baseJoiners = e60 * (1 + e38)
   } else if (locationType === "suburban") {
-    baseJoiners = (e60 + f60) * (1 + e38)
+    baseJoiners = e60 + f60 * (1 + e38)
   } else {
-    baseJoiners = (e60 + f60 + g60) * (1 + e38)
+    baseJoiners = e60 + f60 + g60 * (1 + e38)
   }
 
   // E78: 競合影響補正

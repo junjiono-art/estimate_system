@@ -496,6 +496,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             data={currentData}
             demographicsData={demographicsData}
             demographicsError={demographicsError}
+            simulationRequest={simulationRequest}
           />
         </TabsContent>
       </Tabs>
