@@ -32,6 +32,7 @@ function buildCacheKey(body: Partial<SimulationRequestInput>): string {
     locationType: body.locationType || "suburban",
     includeDepreciation: body.includeDepreciation !== false,
     franchiseRate: sanitizeRate(body.franchiseRate ?? body.royaltyRate),
+    populationByRadius: body.populationByRadius ?? null,
   })
 }
 

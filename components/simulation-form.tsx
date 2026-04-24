@@ -88,6 +88,11 @@ export type FormSubmitData = {
     }>
   }
   demographicsError?: string
+  populationByRadius?: {
+    km1Ring: number
+    km3Ring: number
+    km5Ring: number
+  }
 }
 
 const TABS = [
@@ -389,26 +394,46 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
       let demographics: FormSubmitData["demographics"] | undefined
       let demographicsError: string | undefined
+      let populationByRadius: FormSubmitData["populationByRadius"] | undefined
 
-      try {
-        const response = await fetch("/api/e-stat/demographics", {
+      // demographics と meshPopulation を並列取得
+      const [demographicsResult, meshPopResult] = await Promise.allSettled([
+        fetch("/api/e-stat/demographics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ address: targetAddress }),
-        })
+        }).then(async (res) => {
+          const payload = await res.json()
+          if (!res.ok) throw new Error(getErrorMessage(payload, "人口統計データの取得に失敗しました。"))
+          return payload
+        }),
+        fetch("/api/e-stat/mesh-population", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            latitude: geocodePayload.latitude,
+            longitude: geocodePayload.longitude,
+          }),
+        }).then(async (res) => {
+          const payload = await res.json()
+          if (!res.ok) throw new Error(payload?.error ?? "メッシュ人口データの取得に失敗しました。")
+          return payload as { km1Ring: number; km3Ring: number; km5Ring: number }
+        }),
+      ])
 
-        const payload = await response.json()
-        if (!response.ok) {
-          demographicsError = getErrorMessage(payload, "人口統計データの取得に失敗しました。")
-          console.warn(demographicsError)
-        } else {
-          demographics = payload
-        }
-      } catch (demographicsFetchError) {
-        demographicsError = demographicsFetchError instanceof Error
-          ? demographicsFetchError.message
+      if (demographicsResult.status === "fulfilled") {
+        demographics = demographicsResult.value
+      } else {
+        demographicsError = demographicsResult.reason instanceof Error
+          ? demographicsResult.reason.message
           : "人口統計データの取得に失敗しました。"
         console.warn(demographicsError)
+      }
+
+      if (meshPopResult.status === "fulfilled") {
+        populationByRadius = meshPopResult.value
+      } else {
+        console.warn(meshPopResult.reason instanceof Error ? meshPopResult.reason.message : "メッシュ人口データの取得に失敗しました。試算を続行します。")
       }
 
       const investmentByField = Object.fromEntries(
@@ -472,6 +497,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         },
         demographics,
         demographicsError,
+        populationByRadius,
       }
 
       await onSubmitWithData?.(formData)

@@ -228,15 +228,78 @@ function applyDepreciation(rows: RegressionMonthlyRow[], initialInvestment: numb
   }))
 }
 
+/**
+ * 見込み人数テーブル VLOOKUP (見込み人数テーブル.csv A5:C77)
+ * 20〜59歳人口 → 見込み人数係数（負の割合）
+ * 0→-16%, 5000→-17%, ..., 360000(72ステップ)→-88%
+ */
+function lookupMemberCoefficient(population: number): number {
+  const steps = Math.min(72, Math.floor(Math.max(0, population) / 5000))
+  return -(16 + steps) / 100
+}
+
+/**
+ * 初月見込み入会人数を計算する
+ * =IF(B38="都市型",E60*(1+E38),IF(B38="郊外型",(E60+F60)*(1+E38),IF(B38="田舎型",(E60+F60+G60)*(1+E38))))*(1-E78)
+ *
+ * E60 = km1Ring × 1.20%、F60 = km3Ring × 0.80%、G60 = km5Ring × 0.10%
+ * E38 = VLOOKUP(累計人口, 見込み人数テーブル) ← 立地タイプで累計範囲が変わる
+ * E78 = 競合影響率
+ *
+ * populationByRadius が未設定の場合は従来ロジック（固定シード値ベース）にフォールバック
+ */
+function resolveInitialJoiners(input: SimulateInput): number {
+  const pop = input.populationByRadius
+  const locationType = input.locationType ?? "suburban"
+  const competitorCount = Math.max(0, input.competitorCount ?? 0)
+
+  if (!pop) {
+    // フォールバック: 従来の立地タイプ×坪数ベース
+    const locationMultiplier = getDemandMultiplier(locationType, competitorCount)
+    const floorArea = Number(input.floorAreaTsubo)
+    const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
+    return Math.round(Math.max(0.2, locationMultiplier * areaMultiplier) * BASE_SUBURBAN_FIRST_MONTH_JOINERS)
+  }
+
+  const { km1Ring, km3Ring, km5Ring } = pop
+
+  // E60/F60/G60: 各圏の見込み入会人数（距離別見込%）
+  const e60 = km1Ring * 0.012  // 1km圏: 1.20%
+  const f60 = km3Ring * 0.008  // 3km圏リング: 0.80%
+  const g60 = km5Ring * 0.001  // 5km圏リング: 0.10%
+
+  // C38: VLOOKUPの検索値（立地タイプ別の累計人口）
+  const lookupPop =
+    locationType === "urban"
+      ? km1Ring
+      : locationType === "suburban"
+        ? km1Ring + km3Ring
+        : km1Ring + km3Ring + km5Ring
+
+  // E38: 見込み人数係数（負値）
+  const e38 = lookupMemberCoefficient(lookupPop)
+
+  // J38: 見込み入会人数
+  let baseJoiners: number
+  if (locationType === "urban") {
+    baseJoiners = e60 * (1 + e38)
+  } else if (locationType === "suburban") {
+    baseJoiners = (e60 + f60) * (1 + e38)
+  } else {
+    baseJoiners = (e60 + f60 + g60) * (1 + e38)
+  }
+
+  // E78: 競合影響補正
+  const competitorImpact = getCompetitorImpactRate(competitorCount)
+  return Math.max(1, Math.round(baseJoiners * (1 - competitorImpact)))
+}
+
 function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): RegressionMonthlyRow[] {
   if (!input) return rows
 
   const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
-  const competitorCount = Math.max(0, input.competitorCount ?? 0)
-  const locationMultiplier = getDemandMultiplier(input.locationType ?? "suburban", competitorCount)
-  const floorArea = Number(input.floorAreaTsubo)
-  const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
-  const demandMultiplier = Math.max(0.2, locationMultiplier * areaMultiplier)
+  const initialJoiners = resolveInitialJoiners(input)
+  const demandMultiplier = Math.max(0.2, initialJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS)
   const monthlyRent = resolveMonthlyRent(input)
   const monthlyRunning = resolveMonthlyRunning(input)
   const fixedNonAdCost = monthlyRent + monthlyRunning

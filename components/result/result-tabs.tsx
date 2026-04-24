@@ -206,16 +206,25 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     if (!isSettledState || isScenarioLoading) return
 
     async function prefetchScenarioRates() {
-      const rates: Array<0 | 10 | 15> = [0, 10, 15]
-      const targets = rates.filter(
-        (rate) =>
-          rate !== currentRoyaltyRate &&
-          !scenarioCacheRef.current.has(buildScenarioCacheKey(scenario, rate, includeDepreciation)),
+      const allScenarios: ScenarioType[] = ["conservative", "standard", "aggressive"]
+      const allRates: Array<0 | 10 | 15> = [0, 10, 15]
+
+      // 他ロイヤリティ率 × 現在のシナリオ ＋ 他シナリオ × 現在のロイヤリティ率 をプリフェッチ
+      const targets: Array<{ scenario: ScenarioType; rate: 0 | 10 | 15 }> = [
+        ...allRates
+          .filter((rate) => rate !== currentRoyaltyRate)
+          .map((rate) => ({ scenario, rate })),
+        ...allScenarios
+          .filter((s) => s !== scenario)
+          .map((s) => ({ scenario: s, rate: currentRoyaltyRate })),
+      ].filter(({ scenario: s, rate }) =>
+        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation)),
       )
+
       if (targets.length === 0) return
 
-      await Promise.all(targets.map(async (rate) => {
-        const cacheKey = buildScenarioCacheKey(scenario, rate, includeDepreciation)
+      await Promise.all(targets.map(async ({ scenario: targetScenario, rate }) => {
+        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation)
         const requestValues = resolveRequestValues(rate)
         try {
           const response = await fetch("/api/simulate", {
@@ -225,7 +234,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               ...simulationRequest,
               storeName: simulationRequest?.storeName ?? initialData.storeName,
               location: simulationRequest?.location ?? initialData.location,
-              scenario,
+              scenario: targetScenario,
               royaltyRate: rate,
               franchiseRate: rate,
               runningCostTotal: requestValues.runningCostTotal,

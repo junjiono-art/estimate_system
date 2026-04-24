@@ -91,6 +91,12 @@ export interface SimulationRequestInput {
   initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
   franchiseRate?: 0 | 10 | 15
   includeDepreciation?: boolean
+  /** 住所から半径別の20〜59歳人口（e-Statメッシュ統計） */
+  populationByRadius?: {
+    km1Ring: number  // 半径0〜1km圏
+    km3Ring: number  // 半径1〜3km圏（リング）
+    km5Ring: number  // 半径3〜5km圏（リング）
+  }
 }
 
 export interface AreaDemographics {
