@@ -518,7 +518,7 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
               </div>
             )}
 
-            {/* フィットネス適齢期の詳細 */}}
+            {/* フィットネス適齢期の詳細 */}
             <div className="rounded-lg border border-border bg-card overflow-hidden">
               <div className="border-b border-border px-5 py-3">
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
