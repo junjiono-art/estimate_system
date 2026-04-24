@@ -97,6 +97,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [selectedYear, setSelectedYear] = useState("3")
   const [rating, setRating] = useState<number | undefined>(initialData.rating)
   const [franchiseRate, setFranchiseRate] = useState<string>(String(initialData.franchiseRate ?? 0))
+  const [locationType, setLocationType] = useState<"urban" | "suburban" | "rural">(simulationRequest?.locationType ?? "suburban")
   const [includeDepreciation, setIncludeDepreciation] = useState(true)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
   const [createdBy, setCreatedBy] = useState("")
@@ -109,8 +110,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const prevIncludeDepreciation = useRef(true)
   const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
 
-  function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean): string {
-    return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}`
+  function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean, nextLocationType: string): string {
+    return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}|${nextLocationType}`
   }
 
   function resolveRequestValues(nextRoyaltyRate: 0 | 10 | 15): {
@@ -183,12 +184,13 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     setScenarioData(seededData)
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
+    setLocationType(simulationRequest?.locationType ?? "suburban")
     setIncludeDepreciation(true)
     prevIncludeDepreciation.current = true
     setScenarioError("")
     scenarioCacheRef.current.clear()
     scenarioCacheRef.current.set(
-      buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true),
+      buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true, simulationRequest?.locationType ?? "suburban"),
       seededData,
     )
   }, [initialData, masterValues, simulationRequest])
@@ -201,7 +203,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     const isSettledState =
       scenario === scenarioData.scenario &&
       currentRoyaltyRate === (scenarioData.franchiseRate ?? 0) &&
-      includeDepreciation === prevIncludeDepreciation.current
+      includeDepreciation === prevIncludeDepreciation.current &&
+      locationType === (scenarioData.locationType ?? simulationRequest?.locationType ?? "suburban")
 
     if (!isSettledState || isScenarioLoading) return
 
@@ -218,7 +221,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           .filter((s) => s !== scenario)
           .map((s) => ({ scenario: s, rate: currentRoyaltyRate })),
       ].filter(({ scenario: s, rate }) =>
-        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation)),
+        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation, locationType)),
       )
 
       if (targets.length === 0) return
@@ -268,6 +271,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     initialData.location,
     initialData.storeName,
     isScenarioLoading,
+    locationType,
     masterValues,
     scenario,
     scenarioData.franchiseRate,
@@ -280,7 +284,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     const controlsAreSame =
       scenario === scenarioData.scenario &&
       nextFranchiseRate === (scenarioData.franchiseRate ?? 0) &&
-      includeDepreciation === prevIncludeDepreciation.current
+      includeDepreciation === prevIncludeDepreciation.current &&
+      locationType === (scenarioData.locationType ?? simulationRequest?.locationType ?? "suburban")
 
     if (controlsAreSame) return
 
@@ -292,7 +297,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       try {
         const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
         const requestValues = resolveRequestValues(nextRoyaltyRate)
-        const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation)
+        const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType)
         const cached = scenarioCacheRef.current.get(cacheKey)
 
         if (cached) {
@@ -321,6 +326,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             scenario,
             royaltyRate: nextRoyaltyRate,
             franchiseRate: nextFranchiseRate,
+            locationType,
             runningCostTotal: requestValues.runningCostTotal,
             initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
             includeDepreciation,
@@ -359,9 +365,11 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     includeDepreciation,
     initialData.location,
     initialData.storeName,
+    locationType,
     masterValues,
     scenario,
     scenarioData.franchiseRate,
+    scenarioData.locationType,
     scenarioData.scenario,
     simulationRequest,
   ])
@@ -520,6 +528,20 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             </SelectContent>
           </Select>
           {isScenarioLoading && <span className="text-[10px] text-muted-foreground">再計算中...</span>}
+        </div>
+        <div className="h-4 w-px bg-border" />
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">立地タイプ</span>
+          <Select value={locationType} onValueChange={(v) => setLocationType(v as "urban" | "suburban" | "rural")}>
+            <SelectTrigger className="h-7 w-24 text-xs" disabled={isScenarioLoading}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="urban" className="text-xs">都市型</SelectItem>
+              <SelectItem value="suburban" className="text-xs">郊外型</SelectItem>
+              <SelectItem value="rural" className="text-xs">田舎型</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">
