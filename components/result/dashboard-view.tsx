@@ -198,17 +198,38 @@ export function DashboardView({
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">初期投資明細</p>
           </div>
           <div className="flex flex-col">
-            {[
-              { label: "マシン購入費",  value: data.machinesCost },
-              { label: "内装工事費",    value: data.interiorCost },
-              { label: "FC初期費用",    value: data.franchiseInitialCost },
-              { label: "その他初期費用",value: data.otherInitialCost },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between border-b border-border/50 px-5 py-2.5 last:border-0">
-                <span className="text-xs text-foreground">{item.label}</span>
-                <span className="font-mono text-xs text-muted-foreground">{fmt(item.value)}</span>
-              </div>
-            ))}
+            {(() => {
+              const INVESTMENT_LABELS: Record<string, string> = {
+                fitnessMachineCost:  "フィットネスマシン費",
+                interiorCost:        "内装工事費",
+                flapperGateCost:     "フラッパーゲート",
+                bodyCompositionCost: "体組成計",
+                waterServerCost:     "ウォーターサーバー",
+                franchiseFeeCost:    "フランチャイズ加盟費用",
+                systemCost:          "システム導入費",
+                openingPrepCost:     "開業準備費",
+                openingPackageCost:  "開業前パッケージ費",
+                securityCost:        "ALSOK/USEN導入費",
+                otherInitialCost:    "その他",
+              }
+              const breakdown = data.investmentBreakdown
+              const items = breakdown
+                ? Object.entries(breakdown)
+                    .filter(([, v]) => v > 0)
+                    .map(([k, v]) => ({ label: INVESTMENT_LABELS[k] ?? k, value: v }))
+                : [
+                    { label: "マシン購入費",   value: data.machinesCost },
+                    { label: "内装工事費",     value: data.interiorCost },
+                    { label: "FC初期費用",     value: data.franchiseInitialCost },
+                    { label: "その他初期費用", value: data.otherInitialCost },
+                  ]
+              return items.map((item) => (
+                <div key={item.label} className="flex items-center justify-between border-b border-border/50 px-5 py-2.5 last:border-0">
+                  <span className="text-xs text-foreground">{item.label}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{fmt(item.value)}</span>
+                </div>
+              ))
+            })()}
             <div className="flex items-center justify-between bg-muted/30 px-5 py-2.5">
               <span className="text-xs font-semibold text-foreground">合計</span>
               <span className="font-mono text-xs font-bold text-primary">{fmt(data.totalInitialInvestment)}</span>

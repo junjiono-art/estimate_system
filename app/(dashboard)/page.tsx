@@ -71,6 +71,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
     interiorCost,
     franchiseInitialCost,
     otherInitialCost,
+      investmentBreakdown: submittedData?.investmentCosts.byField,
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,
@@ -157,6 +158,7 @@ export default function NewSimulationPage() {
       franchiseRate: data.calcParams.royaltyRate,
       includeDepreciation: true,
       populationByRadius: data.populationByRadius,
+    investmentBreakdown: data.investmentCosts.byField,
     }
   }
 

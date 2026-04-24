@@ -97,6 +97,8 @@ export interface SimulationRequestInput {
     km3Ring: number  // 半径1〜3km圏（リング）
     km5Ring: number  // 半径3〜5km圏（リング）
   }
+  /** 投資コスト内訳（フィールドID → 金額） */
+  investmentBreakdown?: Record<string, number>
 }
 
 export interface AreaDemographics {
@@ -135,6 +137,8 @@ export interface SimulationResult {
   interiorCost: number
   franchiseInitialCost: number
   otherInitialCost: number
+    /** 投資コスト内訳（フィールドID → 金額）。入力時の値をそのまま保持 */
+    investmentBreakdown?: Record<string, number>
   // 月間
   monthlyRevenue: number
   monthlyRent: number

@@ -430,6 +430,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
     interiorCost: INTERIOR_COST,
     franchiseInitialCost: 0,
     otherInitialCost: Math.max(0, initialInvestment - (machinesCost + INTERIOR_COST)),
+      investmentBreakdown: input.investmentBreakdown,
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,
