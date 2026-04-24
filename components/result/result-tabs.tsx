@@ -24,6 +24,7 @@ import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
 import { extractCity } from "@/lib/utils"
+import { calculateSimulation } from "@/lib/server/calc-engine"
 
 interface ResultTabsProps {
   data: SimulationResult
@@ -104,7 +105,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [scenarioError, setScenarioError] = useState("")
-  const [isScenarioLoading, setIsScenarioLoading] = useState(false)
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const prevIncludeDepreciation = useRef(true)
@@ -195,100 +195,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     )
   }, [initialData, masterValues, simulationRequest])
 
-  useEffect(() => {
-    if (!simulationRequest) return
 
-    let isCancelled = false
-    const currentRoyaltyRate = (parseInt(franchiseRate) || 0) as 0 | 10 | 15
-    const isSettledState =
-      scenario === scenarioData.scenario &&
-      currentRoyaltyRate === (scenarioData.franchiseRate ?? 0) &&
-      includeDepreciation === prevIncludeDepreciation.current &&
-      locationType === (scenarioData.locationType ?? simulationRequest?.locationType ?? "suburban")
-
-    if (!isSettledState || isScenarioLoading) return
-
-    async function prefetchScenarioRates() {
-      const allScenarios: ScenarioType[] = ["conservative", "standard", "aggressive"]
-      const allRates: Array<0 | 10 | 15> = [0, 10, 15]
-      const allLocationTypes: Array<"urban" | "suburban" | "rural"> = ["urban", "suburban", "rural"]
-
-      // 他ロイヤリティ率 × 現在シナリオ × 現在立地
-      // ＋ 他シナリオ × 現在ロイヤリティ率 × 現在立地
-      // ＋ 他立地タイプ × 現在シナリオ × 現在ロイヤリティ率 をプリフェッチ
-      const targets: Array<{ scenario: ScenarioType; rate: 0 | 10 | 15; locationType: "urban" | "suburban" | "rural" }> = [
-        ...allRates
-          .filter((rate) => rate !== currentRoyaltyRate)
-          .map((rate) => ({ scenario, rate, locationType })),
-        ...allScenarios
-          .filter((s) => s !== scenario)
-          .map((s) => ({ scenario: s, rate: currentRoyaltyRate, locationType })),
-        ...allLocationTypes
-          .filter((lt) => lt !== locationType)
-          .map((lt) => ({ scenario, rate: currentRoyaltyRate, locationType: lt })),
-      ].filter(({ scenario: s, rate, locationType: lt }) =>
-        !scenarioCacheRef.current.has(buildScenarioCacheKey(s, rate, includeDepreciation, lt)),
-      )
-
-      if (targets.length === 0) return
-
-      await Promise.all(targets.map(async ({ scenario: targetScenario, rate, locationType: targetLocationType }) => {
-        const cacheKey = buildScenarioCacheKey(targetScenario, rate, includeDepreciation, targetLocationType)
-        const requestValues = resolveRequestValues(rate)
-        try {
-          const response = await fetch("/api/simulate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...simulationRequest,
-              storeName: simulationRequest?.storeName ?? initialData.storeName,
-              location: simulationRequest?.location ?? initialData.location,
-              scenario: targetScenario,
-              royaltyRate: rate,
-              franchiseRate: rate,
-              locationType: targetLocationType,
-              runningCostTotal: requestValues.runningCostTotal,
-              initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
-              includeDepreciation,
-            }),
-          })
-
-          const payload = await response.json().catch(() => null)
-          if (!response.ok || !payload?.data || isCancelled) return
-
-          const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, rate, requestValues.requestInitialInvestmentTotal)
-          scenarioCacheRef.current.set(cacheKey, { ...computed, locationType: targetLocationType })
-        } catch {
-          // プリフェッチ失敗時は無視して都度計算にフォールバック
-        }
-      }))
-    }
-
-    const prefetchTimer = setTimeout(() => {
-      void prefetchScenarioRates()
-    }, 400)
-
-    return () => {
-      isCancelled = true
-      clearTimeout(prefetchTimer)
-    }
-  }, [
-    franchiseRate,
-    includeDepreciation,
-    initialData.location,
-    initialData.storeName,
-    isScenarioLoading,
-    locationType,
-    masterValues,
-    scenario,
-    scenarioData.franchiseRate,
-    scenarioData.scenario,
-    simulationRequest,
-  ])
 
   useEffect(() => {
-    if (isScenarioLoading) return
-
     const nextFranchiseRate = parseInt(franchiseRate) || 0
     const controlsAreSame =
       scenario === scenarioData.scenario &&
@@ -298,78 +207,35 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
     if (controlsAreSame) return
 
-    let isCancelled = false
+    setScenarioError("")
 
-    async function refreshScenario() {
-      setScenarioError("")
+    const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
+    const requestValues = resolveRequestValues(nextRoyaltyRate)
+    const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType)
+    const cached = scenarioCacheRef.current.get(cacheKey)
 
-      try {
-        const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
-        const requestValues = resolveRequestValues(nextRoyaltyRate)
-        const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType)
-        const cached = scenarioCacheRef.current.get(cacheKey)
-
-        if (cached) {
-          if (!isCancelled) {
-            setScenarioData(cached)
-            prevIncludeDepreciation.current = includeDepreciation
-          }
-          return
-        }
-
-        setIsScenarioLoading(true)
-
-        setScenarioData((current) => applyResolvedBreakdown({
-          ...current,
-          scenario,
-          franchiseRate: nextFranchiseRate,
-          locationType,
-        }, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal))
-
-        const response = await fetch("/api/simulate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...simulationRequest,
-            storeName: simulationRequest?.storeName ?? initialData.storeName,
-            location: simulationRequest?.location ?? initialData.location,
-            scenario,
-            royaltyRate: nextRoyaltyRate,
-            franchiseRate: nextFranchiseRate,
-            locationType,
-            runningCostTotal: requestValues.runningCostTotal,
-            initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
-            includeDepreciation,
-          }),
-        })
-
-        const payload = await response.json().catch(() => null)
-        if (!response.ok || !payload?.data) {
-          throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
-        }
-
-        if (!isCancelled) {
-          const computed = applyResolvedBreakdown(payload.data as SimulationResult, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal)
-          scenarioCacheRef.current.set(cacheKey, computed)
-          setScenarioData({ ...computed, locationType })
-          prevIncludeDepreciation.current = includeDepreciation
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          setScenarioError(error instanceof Error ? error.message : "シナリオ再計算に失敗しました。")
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsScenarioLoading(false)
-        }
-      }
+    if (cached) {
+      setScenarioData(cached)
+      prevIncludeDepreciation.current = includeDepreciation
+      return
     }
 
-    void refreshScenario()
-
-    return () => {
-      isCancelled = true
-    }
+    const result = calculateSimulation({
+      ...(simulationRequest ?? {}),
+      storeName: simulationRequest?.storeName ?? initialData.storeName,
+      location: simulationRequest?.location ?? initialData.location,
+      scenario,
+      royaltyRate: nextRoyaltyRate,
+      franchiseRate: nextFranchiseRate as 0 | 10 | 15,
+      locationType,
+      runningCostTotal: requestValues.runningCostTotal,
+      initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
+      includeDepreciation,
+    })
+    const computed = applyResolvedBreakdown(result, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal)
+    scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
+    setScenarioData({ ...computed, locationType })
+    prevIncludeDepreciation.current = includeDepreciation
   }, [
     franchiseRate,
     includeDepreciation,
@@ -382,7 +248,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     scenarioData.locationType,
     scenarioData.scenario,
     simulationRequest,
-    isScenarioLoading,
   ])
 
   const activeBaseData = scenarioData
@@ -529,7 +394,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</span>
           <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
-            <SelectTrigger className="h-7 w-36 text-xs" disabled={isScenarioLoading}>
+            <SelectTrigger className="h-7 w-36 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -538,13 +403,12 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               <SelectItem value="aggressive" className="text-xs">アグレッシブ</SelectItem>
             </SelectContent>
           </Select>
-          {isScenarioLoading && <span className="text-[10px] text-muted-foreground">再計算中...</span>}
         </div>
         <div className="h-4 w-px bg-border" />
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">立地タイプ</span>
           <Select value={locationType} onValueChange={(v) => setLocationType(v as "urban" | "suburban" | "rural")}>
-            <SelectTrigger className="h-7 w-24 text-xs" disabled={isScenarioLoading}>
+            <SelectTrigger className="h-7 w-24 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
