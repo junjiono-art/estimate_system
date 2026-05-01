@@ -38,6 +38,7 @@ const navMain = [
       { title: "FC費用",        href: "/master/franchise",     icon: DatabaseIcon },
       { title: "投資コスト",    href: "/master/investment-cost", icon: DatabaseIcon },
       { title: "ランニングコスト", href: "/master/running-cost", icon: DatabaseIcon },
+      { title: "計算パラメータ", href: "/master/calc-params", icon: DatabaseIcon },
       { title: "出店済み店舗",  href: "/master/stores",        icon: DatabaseIcon },
     ],
   },

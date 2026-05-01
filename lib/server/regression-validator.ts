@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs"
 import path from "node:path"
 import { buildRegressionRows } from "@/lib/server/calc-engine"
+import { getCalcParamsFromDb } from "@/lib/server/calc-params-client"
 import type { ScenarioType } from "@/lib/types"
 
 type ExpectedRow = {
@@ -114,8 +115,8 @@ function parseExpectedAnnualCsv(csvText: string): ExpectedAnnualRow[] {
   return rows
 }
 
-function buildActualAnnualRows(scenario: ScenarioType): ExpectedAnnualRow[] {
-  const rows = buildRegressionRows(scenario)
+function buildActualAnnualRows(scenario: ScenarioType, calcParams: Awaited<ReturnType<typeof getCalcParamsFromDb>>): ExpectedAnnualRow[] {
+  const rows = buildRegressionRows(scenario, undefined, calcParams)
   const annual: ExpectedAnnualRow[] = []
 
   for (let year = 1; year <= 10; year += 1) {
@@ -210,12 +211,13 @@ export async function validateScenarioRegression(scenario: ScenarioType): Promis
     fs.readFile(annualPath, "utf-8"),
   ])
 
+  const calcParams = await getCalcParamsFromDb()
   const expectedMonthly = parseExpectedCsv(monthlyCsv)
-  const actualMonthly = buildRegressionRows(scenario).slice(0, 12)
+  const actualMonthly = buildRegressionRows(scenario, undefined, calcParams).slice(0, 12)
   const monthly = compareMonthly(expectedMonthly, actualMonthly)
 
   const expectedAnnual = parseExpectedAnnualCsv(annualCsv)
-  const actualAnnual = buildActualAnnualRows(scenario)
+  const actualAnnual = buildActualAnnualRows(scenario, calcParams)
   const annual = compareAnnual(expectedAnnual, actualAnnual)
 
   const diffCount = monthly.diffs.length + annual.diffs.length

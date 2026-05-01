@@ -24,7 +24,6 @@ import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
 import { extractCity } from "@/lib/utils"
-import { calculateSimulation } from "@/lib/server/calc-engine"
 
 interface ResultTabsProps {
   data: SimulationResult
@@ -220,22 +219,55 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       return
     }
 
-    const result = calculateSimulation({
-      ...(simulationRequest ?? {}),
-      storeName: simulationRequest?.storeName ?? initialData.storeName,
-      location: simulationRequest?.location ?? initialData.location,
-      scenario,
-      royaltyRate: nextRoyaltyRate,
-      franchiseRate: nextFranchiseRate as 0 | 10 | 15,
-      locationType,
-      runningCostTotal: requestValues.runningCostTotal,
-      initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
-      includeDepreciation,
-    })
-    const computed = applyResolvedBreakdown(result, masterValues, nextRoyaltyRate, requestValues.requestInitialInvestmentTotal)
-    scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
-    setScenarioData({ ...computed, locationType })
-    prevIncludeDepreciation.current = includeDepreciation
+    let cancelled = false
+
+    async function recalculateScenario() {
+      try {
+        const requestBody = {
+          ...(simulationRequest ?? {}),
+          storeName: simulationRequest?.storeName ?? initialData.storeName,
+          location: simulationRequest?.location ?? initialData.location,
+          scenario,
+          royaltyRate: nextRoyaltyRate,
+          franchiseRate: nextFranchiseRate as 0 | 10 | 15,
+          locationType,
+          runningCostTotal: requestValues.runningCostTotal,
+          initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
+          includeDepreciation,
+        }
+
+        const response = await fetch("/api/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        })
+
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.data) {
+          throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
+        }
+
+        if (cancelled) return
+
+        const computed = applyResolvedBreakdown(
+          payload.data as SimulationResult,
+          masterValues,
+          nextRoyaltyRate,
+          requestValues.requestInitialInvestmentTotal,
+        )
+        scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
+        setScenarioData({ ...computed, locationType })
+        prevIncludeDepreciation.current = includeDepreciation
+      } catch (error) {
+        if (cancelled) return
+        setScenarioError(error instanceof Error ? error.message : "シナリオ再計算に失敗しました。")
+      }
+    }
+
+    void recalculateScenario()
+    return () => {
+      cancelled = true
+    }
   }, [
     franchiseRate,
     includeDepreciation,

@@ -166,3 +166,29 @@ export interface SimulationResult {
     cumulativeProfit: number
   }[]
 }
+
+export interface CalcCompetitorImpactConfig {
+  upTo2: number
+  for3: number
+  for4: number
+  over4: number
+}
+
+export interface CalcAdCostConfig {
+  year1Month1: number
+  year1Month2: number
+  year1Month3To4: number
+  year1Month5To12: number
+  year2Monthly: number
+  year3PlusMonthly: number
+}
+
+export interface CalcParameterConfig {
+  id?: string
+  updatedAt?: string
+  paymentFeeRate: number
+  royaltyCapMonthly: number
+  appFeeMonthly: number
+  competitorImpact: CalcCompetitorImpactConfig
+  adCost: CalcAdCostConfig
+}

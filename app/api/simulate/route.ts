@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { calculateSimulation } from "@/lib/server/calc-engine"
+import { getCalcParamsFromDb } from "@/lib/server/calc-params-client"
 import type { SimulationRequestInput } from "@/lib/types"
 
 const SIMULATION_CACHE_TTL_MS = 5 * 60 * 1000
@@ -19,7 +20,7 @@ function sanitizeRate(value: unknown): 0 | 10 | 15 {
   return 0
 }
 
-function buildCacheKey(body: Partial<SimulationRequestInput>): string {
+function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: string): string {
   return JSON.stringify({
     storeName: body.storeName?.trim() || "",
     location: body.location?.trim() || "",
@@ -33,6 +34,7 @@ function buildCacheKey(body: Partial<SimulationRequestInput>): string {
     includeDepreciation: body.includeDepreciation !== false,
     franchiseRate: sanitizeRate(body.franchiseRate ?? body.royaltyRate),
     populationByRadius: body.populationByRadius ?? null,
+    calcParamsVersion: paramsUpdatedAt || "unknown",
   })
 }
 
@@ -64,7 +66,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const cacheKey = buildCacheKey(body)
+    const calcParams = await getCalcParamsFromDb()
+    const cacheKey = buildCacheKey(body, calcParams.updatedAt)
     const cached = simulationCache.get(cacheKey)
 
     if (cached && cached.expiresAt > Date.now()) {
@@ -87,7 +90,7 @@ export async function POST(request: Request) {
     const result = calculateSimulation({
       ...body,
       storeName: body.storeName,
-    })
+    }, calcParams)
 
     setCachedSimulation(cacheKey, result)
 

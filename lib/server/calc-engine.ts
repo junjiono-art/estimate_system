@@ -1,4 +1,5 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
+import type { CalcParameterConfig } from "@/lib/types"
 import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
@@ -36,8 +37,6 @@ const MONTHLY_MEMBER_FEE_EX_TAX = 2_980
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
 const BASE_FLOOR_AREA_TSUBO = 50
-const ROYALTY_CAP_MONTHLY = 5_000_000
-const PAYMENT_FEE_RATE = 0.035
 const BASE_SUBURBAN_FIRST_MONTH_JOINERS = 334
 const BASE_URBAN_ESTIMATED_JOINERS = 137
 const BASE_SUBURBAN_ESTIMATED_JOINERS = 137 + 316
@@ -147,22 +146,22 @@ function buildMemberSeries(start: number, end: number): number[] {
   return members
 }
 
-function getCompetitorImpactRate(competitorCount: number): number {
+function getCompetitorImpactRate(competitorCount: number, calcParams: CalcParameterConfig): number {
   if (competitorCount <= 0) return 0
-  if (competitorCount <= 2) return 0.1
-  if (competitorCount === 3) return 0.15
-  if (competitorCount === 4) return 0.2
-  return 0.25
+  if (competitorCount <= 2) return calcParams.competitorImpact.upTo2
+  if (competitorCount === 3) return calcParams.competitorImpact.for3
+  if (competitorCount === 4) return calcParams.competitorImpact.for4
+  return calcParams.competitorImpact.over4
 }
 
-function getDemandMultiplier(locationType: SimulateInput["locationType"], competitorCount: number): number {
+function getDemandMultiplier(locationType: SimulateInput["locationType"], competitorCount: number, calcParams: CalcParameterConfig): number {
   if (locationType === "urban") {
     const urbanJoiners = BASE_URBAN_ESTIMATED_JOINERS * POPULATION_FACTOR
     return urbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
   }
 
   if (locationType === "rural") {
-    const ruralJoiners = BASE_RURAL_ESTIMATED_JOINERS * POPULATION_FACTOR * (1 - getCompetitorImpactRate(competitorCount))
+    const ruralJoiners = BASE_RURAL_ESTIMATED_JOINERS * POPULATION_FACTOR * (1 - getCompetitorImpactRate(competitorCount, calcParams))
     return ruralJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
   }
 
@@ -170,23 +169,23 @@ function getDemandMultiplier(locationType: SimulateInput["locationType"], compet
   return suburbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
 }
 
-function getPaymentFee(revenue: number): number {
-  return Math.round(revenue * PAYMENT_FEE_RATE)
+function getPaymentFee(revenue: number, calcParams: CalcParameterConfig): number {
+  return Math.round(revenue * calcParams.paymentFeeRate)
 }
 
-function getMonthlyAdCost(month: number): number {
+function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig): number {
   const year = Math.ceil(month / 12)
   const monthInYear = ((month - 1) % 12) + 1
 
   if (year === 1) {
-    if (monthInYear === 1) return 520_000
-    if (monthInYear === 2) return 280_000
-    if (monthInYear === 3 || monthInYear === 4) return 240_000
-    return 180_000
+    if (monthInYear === 1) return calcParams.adCost.year1Month1
+    if (monthInYear === 2) return calcParams.adCost.year1Month2
+    if (monthInYear === 3 || monthInYear === 4) return calcParams.adCost.year1Month3To4
+    return calcParams.adCost.year1Month5To12
   }
 
-  if (year === 2) return 180_000
-  return 120_000
+  if (year === 2) return calcParams.adCost.year2Monthly
+  return calcParams.adCost.year3PlusMonthly
 }
 
 function resolveMonthlyRent(input?: SimulateInput): number {
@@ -248,14 +247,14 @@ function lookupMemberCoefficient(population: number): number {
  *
  * populationByRadius が未設定の場合は従来ロジック（固定シード値ベース）にフォールバック
  */
-function resolveInitialJoiners(input: SimulateInput): number {
+function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterConfig): number {
   const pop = input.populationByRadius
   const locationType = input.locationType ?? "suburban"
   const competitorCount = Math.max(0, input.competitorCount ?? 0)
 
   if (!pop) {
     // フォールバック: 従来の立地タイプ×坪数ベース
-    const locationMultiplier = getDemandMultiplier(locationType, competitorCount)
+    const locationMultiplier = getDemandMultiplier(locationType, competitorCount, calcParams)
     const floorArea = Number(input.floorAreaTsubo)
     const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
     return Math.round(Math.max(0.2, locationMultiplier * areaMultiplier) * BASE_SUBURBAN_FIRST_MONTH_JOINERS)
@@ -292,15 +291,15 @@ function resolveInitialJoiners(input: SimulateInput): number {
   }
 
   // E78: 競合影響補正
-  const competitorImpact = getCompetitorImpactRate(competitorCount)
+  const competitorImpact = getCompetitorImpactRate(competitorCount, calcParams)
   return Math.max(1, Math.round(baseJoiners * (1 - competitorImpact)))
 }
 
-function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): RegressionMonthlyRow[] {
+function applyCalcParams(rows: RegressionMonthlyRow[], input: SimulateInput | undefined, calcParams: CalcParameterConfig): RegressionMonthlyRow[] {
   if (!input) return rows
 
   const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
-  const initialJoiners = resolveInitialJoiners(input)
+  const initialJoiners = resolveInitialJoiners(input, calcParams)
   const demandMultiplier = Math.max(0.2, initialJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS)
   const monthlyRent = resolveMonthlyRent(input)
   const monthlyRunning = resolveMonthlyRunning(input)
@@ -309,11 +308,11 @@ function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): R
   return rows.map((row) => {
     const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
     const members = Math.max(0, Math.round(row.members * demandMultiplier))
-    const adCost = getMonthlyAdCost(row.month)
-    const paymentFee = getPaymentFee(revenue)
+    const adCost = getMonthlyAdCost(row.month, calcParams)
+    const paymentFee = getPaymentFee(revenue, calcParams)
     const royaltyRaw = Math.round(revenue * royaltyRate)
-    const royalty = Math.min(royaltyRaw, ROYALTY_CAP_MONTHLY)
-    const appFee = royalty > 0 ? 50 : 0
+    const royalty = Math.min(royaltyRaw, calcParams.royaltyCapMonthly)
+    const appFee = royalty > 0 ? calcParams.appFeeMonthly : 0
     const cost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
 
     return {
@@ -326,7 +325,7 @@ function applyCalcParams(rows: RegressionMonthlyRow[], input?: SimulateInput): R
   })
 }
 
-export function buildRegressionRows(scenario: ScenarioType, input?: SimulateInput): RegressionMonthlyRow[] {
+export function buildRegressionRows(scenario: ScenarioType, input: SimulateInput | undefined, calcParams: CalcParameterConfig): RegressionMonthlyRow[] {
   const year1 = MONTHLY_SEEDS[scenario].map((row) => ({ ...row }))
   const annualSeeds = ANNUAL_SEEDS[scenario]
   const rows: RegressionMonthlyRow[] = [...year1]
@@ -360,7 +359,7 @@ export function buildRegressionRows(scenario: ScenarioType, input?: SimulateInpu
     previousYearEndMembers = year.yearEndMembers
   }
 
-  return applyCalcParams(rows, input)
+  return applyCalcParams(rows, input, calcParams)
 }
 
 function estimatePaybackMonths(rows: RegressionMonthlyRow[], initialInvestment: number): number {
@@ -387,7 +386,7 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment:
   })
 }
 
-export function calculateSimulation(input: SimulateInput): SimulationResult {
+export function calculateSimulation(input: SimulateInput, calcParams: CalcParameterConfig): SimulationResult {
   const scenario = input.scenario ?? "standard"
   const machinesCost = resolveFitnessMachineCostByAddress(input.location)
   const machineDelta = machinesCost - FITNESS_MACHINE_BASE_COST
@@ -397,7 +396,7 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const franchiseRate = resolveFranchiseRate(input)
   const royaltyRate = Math.max(0, franchiseRate) / 100
   const includeDepreciation = input.includeDepreciation !== false
-  const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate })
+  const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams)
   const rows = applyDepreciation(baseRows, initialInvestment, includeDepreciation)
   const monthlyProjection = buildMonthlyProjection(rows, initialInvestment)
   const year1Last = monthlyProjection[11]
@@ -405,16 +404,16 @@ export function calculateSimulation(input: SimulateInput): SimulationResult {
   const monthlyRevenue = year1Last?.revenue ?? 0
   const monthlyProfit = year1Last?.profit ?? 0
   const projectedMembers = Math.max(0, year1Last?.members ?? 0)
-  const monthlyPaymentFee = getPaymentFee(monthlyRevenue)
-  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), ROYALTY_CAP_MONTHLY)
-  const monthlyAppFee = monthlyRoyalty > 0 ? 50 : 0
+  const monthlyPaymentFee = getPaymentFee(monthlyRevenue, calcParams)
+  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), calcParams.royaltyCapMonthly)
+  const monthlyAppFee = monthlyRoyalty > 0 ? calcParams.appFeeMonthly : 0
   const monthlyDepreciation = includeDepreciation ? Math.round(initialInvestment / 6 / 12) : 0
   const simpleBreakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / MONTHLY_MEMBER_FEE_EX_TAX)
   const averageRevenuePerMember = projectedMembers > 0 ? monthlyRevenue / projectedMembers : MONTHLY_MEMBER_FEE_EX_TAX
   const paymentFeePerMember = projectedMembers > 0 ? monthlyPaymentFee / projectedMembers : 0
   const royaltyPerMember = projectedMembers > 0 ? monthlyRoyalty / projectedMembers : 0
   const netRevenuePerMember = averageRevenuePerMember - paymentFeePerMember - royaltyPerMember
-  const fixedCostForBreakeven = monthlyRent + monthlyRunningCost + getMonthlyAdCost(12) + monthlyDepreciation + monthlyAppFee
+  const fixedCostForBreakeven = monthlyRent + monthlyRunningCost + getMonthlyAdCost(12, calcParams) + monthlyDepreciation + monthlyAppFee
   const breakevenMembers = netRevenuePerMember > 0
     ? Math.ceil(fixedCostForBreakeven / netRevenuePerMember)
     : DEFAULT_BREAKEVEN_MEMBERS
