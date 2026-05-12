@@ -1,61 +1,34 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { ArrowRightIcon, CheckCircleIcon, ClockIcon, FunctionSquareIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Badge } from "@/components/ui/badge"
 
-// ── モックデータ ────────────────────────────────────────
+type FormulaSummary = {
+  key: string
+  label: string
+  description: string
+  activeVersion: string
+  updatedAt: string
+  updatedBy: string
+  tokenCount: number
+}
 
-const FORMULAS = [
-  {
-    key: "monthlyRevenue",
-    label: "月次収益",
-    description: "会員数・月会費・入会費月按分をもとに月次粗収益を算出",
-    activeVersion: "v0042",
-    updatedAt: "2026-05-10",
-    updatedBy: "田中",
-    status: "active" as const,
-    tokenCount: 9,
-  },
-  {
-    key: "monthlyRunningCost",
-    label: "月次ランニングコスト",
-    description: "家賃・人件費・広告費・ロイヤリティ等を合算した月次コスト",
-    activeVersion: "v0018",
-    updatedAt: "2026-04-25",
-    updatedBy: "鈴木",
-    status: "active" as const,
-    tokenCount: 14,
-  },
-  {
-    key: "initialInvestment",
-    label: "初期投資合計",
-    description: "物件取得・内装・設備・フランチャイズ加盟金の合計",
-    activeVersion: "v0007",
-    updatedAt: "2026-03-20",
-    updatedBy: "山田",
-    status: "active" as const,
-    tokenCount: 6,
-  },
-  {
-    key: "breakEvenMembers",
-    label: "損益分岐会員数",
-    description: "ランニングコストを月次会費で割り、最低必要会員数を算出",
-    activeVersion: "v0003",
-    updatedAt: "2026-03-01",
-    updatedBy: "山田",
-    status: "active" as const,
-    tokenCount: 5,
-  },
-]
+type ApiFormulaSet = {
+  setVersion: string
+  createdAt: string
+  createdBy: string
+  formulas: Record<string, { key: string; label: string; tokens: unknown[] }>
+}
 
 // ── カードコンポーネント ────────────────────────────────
 
 function FormulaCard({
   formula,
 }: {
-  formula: (typeof FORMULAS)[number]
+  formula: FormulaSummary
 }) {
   return (
     <Link
@@ -98,6 +71,58 @@ function FormulaCard({
 // ── ページ ──────────────────────────────────────────────
 
 export default function CalcFormulasPage() {
+  const [formulas, setFormulas] = useState<FormulaSummary[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function loadCurrentFormulaSet() {
+      try {
+        setIsLoading(true)
+        setErrorMessage(null)
+
+        const response = await fetch("/api/master/calc-formulas/sets/current", {
+          method: "GET",
+          cache: "no-store",
+        })
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            setFormulas([])
+            return
+          }
+          throw new Error("計算式セットの取得に失敗しました。")
+        }
+
+        const data = (await response.json()) as { formulaSet?: ApiFormulaSet }
+        const formulaSet = data.formulaSet
+        if (!formulaSet?.formulas) {
+          setFormulas([])
+          return
+        }
+
+        const mapped = Object.entries(formulaSet.formulas).map(([key, formula]) => ({
+          key,
+          label: formula.label || key,
+          description: "式セットから読み込んだ計算式",
+          activeVersion: formulaSet.setVersion,
+          updatedAt: formulaSet.createdAt,
+          updatedBy: formulaSet.createdBy,
+          tokenCount: Array.isArray(formula.tokens) ? formula.tokens.length : 0,
+        }))
+
+        setFormulas(mapped)
+      } catch (error) {
+        setFormulas([])
+        setErrorMessage(error instanceof Error ? error.message : "計算式セットの取得に失敗しました。")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    void loadCurrentFormulaSet()
+  }, [])
+
   return (
     <>
       <PageHeader
@@ -121,9 +146,27 @@ export default function CalcFormulasPage() {
 
           {/* 計算式一覧 */}
           <div className="grid grid-cols-1 gap-3">
-            {FORMULAS.map((f) => (
-              <FormulaCard key={f.key} formula={f} />
-            ))}
+            {isLoading ? (
+              <div className="rounded-lg border border-border bg-muted/20 px-5 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">計算式データを読み込み中です</p>
+              </div>
+            ) : formulas.length > 0 ? (
+              formulas.map((f) => (
+                <FormulaCard key={f.key} formula={f} />
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-muted/20 px-5 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">計算式データがありません</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {errorMessage ?? "現行計算式セットが未作成です。まず式セットを作成してください。"}
+                </p>
+                <div className="mt-3">
+                  <Link href="/master/calc-params" className="text-xs text-primary hover:underline">
+                    計算パラメータ管理を開く
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

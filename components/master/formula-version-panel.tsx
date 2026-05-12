@@ -15,46 +15,6 @@ export interface FormulaVersion {
   status: "draft" | "active" | "archived"
 }
 
-// ── モックデータ ────────────────────────────────────────
-
-export const MOCK_VERSIONS: FormulaVersion[] = [
-  {
-    version: "v0042",
-    createdBy: "田中",
-    createdAt: "2026-05-10",
-    comment: "入会費の月按分ロジックを追加",
-    status: "active",
-  },
-  {
-    version: "v0041",
-    createdBy: "鈴木",
-    createdAt: "2026-04-20",
-    comment: "支払手数料率の反映を修正",
-    status: "archived",
-  },
-  {
-    version: "v0038",
-    createdBy: "田中",
-    createdAt: "2026-03-31",
-    comment: "競合影響率を乗算方式に変更",
-    status: "archived",
-  },
-  {
-    version: "v0021",
-    createdBy: "山田",
-    createdAt: "2026-02-14",
-    comment: "ロイヤリティ上限キャップを追加",
-    status: "archived",
-  },
-  {
-    version: "v0001",
-    createdBy: "山田",
-    createdAt: "2026-03-15",
-    comment: "初期バージョン",
-    status: "archived",
-  },
-]
-
 // ── ステータスバッジ ─────────────────────────────────────
 
 function StatusBadge({ status }: { status: FormulaVersion["status"] }) {
@@ -86,7 +46,7 @@ interface FormulaVersionPanelProps {
 }
 
 export function FormulaVersionPanel({
-  versions = MOCK_VERSIONS,
+  versions = [],
   activeVersion,
   onClose,
   onView,
@@ -116,7 +76,14 @@ export function FormulaVersionPanel({
 
       {/* バージョンリスト */}
       <div className="flex-1 overflow-y-auto divide-y divide-border/60">
-        {versions.map((ver) => {
+        {versions.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-xs font-medium text-foreground">バージョン履歴はありません</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              モックデータは削除済みです。API連携後に履歴が表示されます。
+            </p>
+          </div>
+        ) : versions.map((ver) => {
           const isActive = ver.version === currentActive
           return (
             <div

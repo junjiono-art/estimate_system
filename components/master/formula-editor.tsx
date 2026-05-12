@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   PlusIcon,
   XIcon,
@@ -29,18 +29,23 @@ export interface FormulaToken {
   label?: string  // 表示用ラベル
 }
 
-// ── 変数マスタ（モック） ────────────────────────────────
+// ── 変数候補 ───────────────────────────────────────────
 
 const AVAILABLE_VARS: { key: string; label: string }[] = [
-  { key: "memberCount",    label: "会員数" },
-  { key: "monthlyFee",     label: "月会費" },
-  { key: "enrollmentFee",  label: "入会費" },
-  { key: "tsubo",          label: "坪数" },
-  { key: "rentPerTsubo",   label: "家賃/坪" },
-  { key: "competitorCount",label: "競合数" },
-  { key: "adCostMonthly",  label: "月次広告費" },
-  { key: "royaltyRate",    label: "ロイヤリティ率" },
-  { key: "appFeeMonthly",  label: "アプリ利用料" },
+  // SimulationRequestInput
+  { key: "floorAreaTsubo", label: "坪数 (floorAreaTsubo)" },
+  { key: "rentPerTsubo", label: "月額家賃 (rentPerTsubo)" },
+  { key: "competitorCount", label: "競合数 (competitorCount)" },
+  { key: "royaltyRate", label: "ロイヤリティ率 (royaltyRate)" },
+  { key: "franchiseRate", label: "フランチャイズ率 (franchiseRate)" },
+  { key: "runningCostTotal", label: "ランニング費合計 (runningCostTotal)" },
+  { key: "initialInvestmentTotal", label: "初期投資合計 (initialInvestmentTotal)" },
+
+  // calc-constants / CalcParams derived values used in calc-engine
+  { key: "monthlyMemberFeeExTax", label: "月会費(税抜)定数 (MONTHLY_MEMBER_FEE_EX_TAX)" },
+  { key: "paymentFeeRate", label: "決済手数料率 (paymentFeeRate)" },
+  { key: "royaltyCapMonthly", label: "ロイヤリティ上限(月) (royaltyCapMonthly)" },
+  { key: "appFeeMonthly", label: "アプリ利用料(月) (appFeeMonthly)" },
 ]
 
 const OPERATORS = [
@@ -104,6 +109,7 @@ interface FormulaEditorProps {
   label: string
   initialTokens?: FormulaToken[]
   activeVersion?: string
+  requirePreviewBeforeActivate?: boolean
   onSaveDraft?: (tokens: FormulaToken[], comment: string) => Promise<void>
   onActivate?: (tokens: FormulaToken[], comment: string) => Promise<void>
 }
@@ -112,6 +118,7 @@ export function FormulaEditor({
   label,
   initialTokens = [],
   activeVersion = "v0001",
+  requirePreviewBeforeActivate = true,
   onSaveDraft,
   onActivate,
 }: FormulaEditorProps) {
@@ -123,6 +130,12 @@ export function FormulaEditor({
   const [previewDone, setPreviewDone] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isActivating, setIsActivating] = useState(false)
+
+  useEffect(() => {
+    setTokens(initialTokens)
+    setSelectedIndex(null)
+    setPreviewDone(false)
+  }, [initialTokens])
 
   // ── トークン操作 ─────────────────────────────────────
 
@@ -160,29 +173,12 @@ export function FormulaEditor({
     setConstInput("")
   }
 
-  // ── プレビュー計算（eval不使用・簡易スタック） ────────
+  // ── プレビュー計算 ───────────────────────────────────
 
   function runPreview() {
-    // サンプル変数値
-    const sampleVars: Record<string, number> = {
-      memberCount:     150,
-      monthlyFee:      8800,
-      enrollmentFee:   16500,
-      tsubo:           50,
-      rentPerTsubo:    12000,
-      competitorCount: 2,
-      adCostMonthly:   80000,
-      royaltyRate:     0.05,
-      appFeeMonthly:   20000,
-    }
-
-    try {
-      const result = evaluateTokens(tokens, sampleVars)
-      setPreviewResult(result)
-      setPreviewDone(true)
-    } catch (e) {
-      toast.error(`プレビュー計算エラー: ${(e as Error).message}`)
-    }
+    setPreviewResult(null)
+    setPreviewDone(false)
+    toast.error("プレビュー計算はAPI連携後に有効化されます。")
   }
 
   async function handleSaveDraft() {
@@ -202,7 +198,7 @@ export function FormulaEditor({
   }
 
   async function handleActivate() {
-    if (!previewDone) {
+    if (requirePreviewBeforeActivate && !previewDone) {
       toast.error("本番反映前にプレビュー計算を実行してください。")
       return
     }
@@ -350,12 +346,9 @@ export function FormulaEditor({
       {/* プレビュー結果 */}
       {previewDone && previewResult !== null && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-          <p className="text-xs font-semibold text-green-700 mb-1">プレビュー計算結果（サンプル値）</p>
+          <p className="text-xs font-semibold text-green-700 mb-1">プレビュー計算結果</p>
           <p className="text-2xl font-mono font-bold text-green-800">
             {previewResult.toLocaleString("ja-JP")}
-          </p>
-          <p className="mt-1 text-[10px] text-green-600">
-            会員数150人・月会費8,800円・入会費16,500円などのサンプル値で計算
           </p>
         </div>
       )}
@@ -399,15 +392,15 @@ export function FormulaEditor({
           size="sm"
           className="gap-1.5 text-xs ml-auto"
           onClick={handleActivate}
-          disabled={!previewDone || isActivating}
-          title={!previewDone ? "先にプレビュー計算を実行してください" : undefined}
+          disabled={(requirePreviewBeforeActivate && !previewDone) || isActivating}
+          title={requirePreviewBeforeActivate && !previewDone ? "先にプレビュー計算を実行してください" : undefined}
         >
           本番に反映
           <ArrowRightIcon className="size-3.5" />
         </Button>
       </div>
 
-      {!previewDone && (
+      {requirePreviewBeforeActivate && !previewDone && (
         <p className="text-[10px] text-muted-foreground text-right -mt-3">
           ※ プレビュー計算完了後に「本番に反映」が有効になります
         </p>
