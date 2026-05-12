@@ -1,5 +1,6 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 import type { CalcParameterConfig } from "@/lib/types"
+import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
 import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
@@ -32,8 +33,6 @@ export type RegressionMonthlyRow = {
 
 const INITIAL_INVESTMENT = 23_110_000
 const INTERIOR_COST = 15_000_000
-const DEFAULT_BREAKEVEN_MEMBERS = 374
-const MONTHLY_MEMBER_FEE_EX_TAX = 2_980
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
 const BASE_FLOOR_AREA_TSUBO = 50
@@ -414,9 +413,15 @@ export function calculateSimulation(input: SimulateInput, calcParams: CalcParame
   const royaltyPerMember = projectedMembers > 0 ? monthlyRoyalty / projectedMembers : 0
   const netRevenuePerMember = averageRevenuePerMember - paymentFeePerMember - royaltyPerMember
   const fixedCostForBreakeven = monthlyRent + monthlyRunningCost + getMonthlyAdCost(12, calcParams) + monthlyDepreciation + monthlyAppFee
-  const breakevenMembers = netRevenuePerMember > 0
-    ? Math.ceil(fixedCostForBreakeven / netRevenuePerMember)
-    : DEFAULT_BREAKEVEN_MEMBERS
+  if (netRevenuePerMember <= 0 || !Number.isFinite(netRevenuePerMember)) {
+    throw new Error("BREAKEVEN_UNCALCULABLE: 会員1人あたり純売上が0以下のため損益分岐会員数を計算できません。")
+  }
+  const breakevenMembers = Math.ceil(fixedCostForBreakeven / netRevenuePerMember)
+
+  const interiorCostInput = Number(input.investmentBreakdown?.interiorCost)
+  const interiorCost = Number.isFinite(interiorCostInput) && interiorCostInput >= 0
+    ? Math.round(interiorCostInput)
+    : INTERIOR_COST
 
   return {
     id: `calc-${Date.now()}`,
@@ -429,9 +434,9 @@ export function calculateSimulation(input: SimulateInput, calcParams: CalcParame
     franchiseRate,
     totalInitialInvestment: initialInvestment,
     machinesCost,
-    interiorCost: INTERIOR_COST,
+    interiorCost,
     franchiseInitialCost: 0,
-    otherInitialCost: Math.max(0, initialInvestment - (machinesCost + INTERIOR_COST)),
+    otherInitialCost: Math.max(0, initialInvestment - (machinesCost + interiorCost)),
       investmentBreakdown: input.investmentBreakdown,
     monthlyRevenue,
     monthlyRent,
@@ -439,8 +444,8 @@ export function calculateSimulation(input: SimulateInput, calcParams: CalcParame
     monthlyFranchiseCost: monthlyRoyalty + monthlyAppFee,
     monthlyProfit,
     paybackMonths: estimatePaybackMonths(rows, initialInvestment),
-    breakevenMembers: Number.isFinite(breakevenMembers) ? breakevenMembers : DEFAULT_BREAKEVEN_MEMBERS,
-    simpleBreakevenMembers: Number.isFinite(simpleBreakevenMembers) ? simpleBreakevenMembers : DEFAULT_BREAKEVEN_MEMBERS,
+    breakevenMembers,
+    simpleBreakevenMembers,
     monthlyProjection,
   }
 }

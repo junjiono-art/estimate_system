@@ -1,0 +1,1 @@
+export const MONTHLY_MEMBER_FEE_EX_TAX = 2_980

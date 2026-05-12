@@ -433,7 +433,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       if (meshPopResult.status === "fulfilled") {
         populationByRadius = meshPopResult.value
       } else {
-        console.warn(meshPopResult.reason instanceof Error ? meshPopResult.reason.message : "メッシュ人口データの取得に失敗しました。試算を続行します。")
+        throw new Error("メッシュ人口データの取得に失敗しました。")
       }
 
       const investmentByField = Object.fromEntries(

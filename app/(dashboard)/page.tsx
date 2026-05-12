@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import type { SimulationRequestInput, SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
+import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
 
 function buildPreviewResult(submittedData: FormSubmitData | null): SimulationResult {
   const now = new Date().toISOString()
@@ -39,7 +40,7 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   
   // 損益分岐点（会員数）の計算
   // 月額会員費は税抜2,980円で計算
-  const monthlyMemberFee = 2980
+  const monthlyMemberFee = MONTHLY_MEMBER_FEE_EX_TAX
   const estimatedMembers = monthlyMemberFee > 0 ? Math.round(monthlyRevenue / monthlyMemberFee) : 0
   const totalMonthlyCost = monthlyRent + monthlyRunningCost + monthlyFranchiseCost
   const breakevenMembers = monthlyMemberFee > 0 ? Math.ceil(totalMonthlyCost / monthlyMemberFee) : 0

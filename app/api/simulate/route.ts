@@ -106,6 +106,9 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : "試算に失敗しました。"
+    if (message.startsWith("BREAKEVEN_UNCALCULABLE:")) {
+      return errorResponse(ErrorCode.VALIDATION_ERROR, message.replace("BREAKEVEN_UNCALCULABLE:", "").trim(), 422)
+    }
     return errorResponse(ErrorCode.INTERNAL_ERROR, message, 500)
   }
 }

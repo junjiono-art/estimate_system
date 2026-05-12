@@ -2,6 +2,7 @@
 
 import { BanknoteIcon, TrendingUpIcon, CalendarIcon, WalletIcon, UsersIcon } from "lucide-react"
 import type { SimulationResult } from "@/lib/types"
+import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
 
 interface KpiCardsProps {
   data: SimulationResult
@@ -12,7 +13,7 @@ const formatYen = (n: number) =>
 
 export function KpiCards({ data }: KpiCardsProps) {
   const projectedMonth12Members = data.monthlyProjection[11]?.members
-  const estimatedMonthlyFee = 2980
+  const estimatedMonthlyFee = MONTHLY_MEMBER_FEE_EX_TAX
   const estimatedMembers =
     Number.isFinite(projectedMonth12Members)
       ? Math.max(0, Math.round(projectedMonth12Members ?? 0))
