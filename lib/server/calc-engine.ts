@@ -1,6 +1,8 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 import type { CalcParameterConfig } from "@/lib/types"
+import type { FormulaSetRecordLike } from "@/lib/formula-types"
 import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
+import { buildFormulaContext, evaluateFormulaByKey } from "@/lib/server/formula-runtime"
 import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
@@ -294,7 +296,12 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
   return Math.max(1, Math.round(baseJoiners * (1 - competitorImpact)))
 }
 
-function applyCalcParams(rows: RegressionMonthlyRow[], input: SimulateInput | undefined, calcParams: CalcParameterConfig): RegressionMonthlyRow[] {
+function applyCalcParams(
+  rows: RegressionMonthlyRow[],
+  input: SimulateInput | undefined,
+  calcParams: CalcParameterConfig,
+  formulaSet?: FormulaSetRecordLike,
+): RegressionMonthlyRow[] {
   if (!input) return rows
 
   const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
@@ -308,11 +315,75 @@ function applyCalcParams(rows: RegressionMonthlyRow[], input: SimulateInput | un
     const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
     const members = Math.max(0, Math.round(row.members * demandMultiplier))
     const adCost = getMonthlyAdCost(row.month, calcParams)
-    const paymentFee = getPaymentFee(revenue, calcParams)
-    const royaltyRaw = Math.round(revenue * royaltyRate)
-    const royalty = Math.min(royaltyRaw, calcParams.royaltyCapMonthly)
-    const appFee = royalty > 0 ? calcParams.appFeeMonthly : 0
-    const cost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
+    const defaultPaymentFee = getPaymentFee(revenue, calcParams)
+    const defaultRoyaltyRaw = Math.round(revenue * royaltyRate)
+    const defaultRoyalty = Math.min(defaultRoyaltyRaw, calcParams.royaltyCapMonthly)
+    const defaultAppFee = defaultRoyalty > 0 ? calcParams.appFeeMonthly : 0
+
+    const baseContext = buildFormulaContext({
+      input,
+      calcParams,
+      derived: {
+        month: row.month,
+        members,
+        monthlyRevenue: revenue,
+        monthlyRent,
+        monthlyRunningCost: monthlyRunning,
+        adCostMonthly: adCost,
+      },
+    })
+
+    const paymentFee = (() => {
+      try {
+        const evaluated = evaluateFormulaByKey(formulaSet, "paymentFee", baseContext)
+        if (evaluated == null) return defaultPaymentFee
+        return Math.max(0, Math.round(evaluated))
+      } catch {
+        return defaultPaymentFee
+      }
+    })()
+
+    const royalty = (() => {
+      try {
+        const evaluated = evaluateFormulaByKey(formulaSet, "monthlyRoyalty", {
+          ...baseContext,
+          paymentFee,
+        })
+        if (evaluated == null) return defaultRoyalty
+        return Math.max(0, Math.round(Math.min(evaluated, calcParams.royaltyCapMonthly)))
+      } catch {
+        return defaultRoyalty
+      }
+    })()
+
+    const appFee = (() => {
+      try {
+        const evaluated = evaluateFormulaByKey(formulaSet, "appFee", {
+          ...baseContext,
+          paymentFee,
+          monthlyRoyalty: royalty,
+        })
+        if (evaluated == null) return defaultAppFee
+        return Math.max(0, Math.round(evaluated))
+      } catch {
+        return defaultAppFee
+      }
+    })()
+
+    const defaultCost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
+    const cost = (() => {
+      try {
+        const evaluated = evaluateFormulaByKey(formulaSet, "monthlyCost", {
+          ...baseContext,
+          paymentFee,
+          monthlyRoyalty: royalty,
+        })
+        if (evaluated == null) return defaultCost
+        return Math.max(0, Math.round(evaluated))
+      } catch {
+        return defaultCost
+      }
+    })()
 
     return {
       month: row.month,
@@ -324,7 +395,12 @@ function applyCalcParams(rows: RegressionMonthlyRow[], input: SimulateInput | un
   })
 }
 
-export function buildRegressionRows(scenario: ScenarioType, input: SimulateInput | undefined, calcParams: CalcParameterConfig): RegressionMonthlyRow[] {
+export function buildRegressionRows(
+  scenario: ScenarioType,
+  input: SimulateInput | undefined,
+  calcParams: CalcParameterConfig,
+  formulaSet?: FormulaSetRecordLike,
+): RegressionMonthlyRow[] {
   const year1 = MONTHLY_SEEDS[scenario].map((row) => ({ ...row }))
   const annualSeeds = ANNUAL_SEEDS[scenario]
   const rows: RegressionMonthlyRow[] = [...year1]
@@ -358,7 +434,7 @@ export function buildRegressionRows(scenario: ScenarioType, input: SimulateInput
     previousYearEndMembers = year.yearEndMembers
   }
 
-  return applyCalcParams(rows, input, calcParams)
+  return applyCalcParams(rows, input, calcParams, formulaSet)
 }
 
 function estimatePaybackMonths(rows: RegressionMonthlyRow[], initialInvestment: number): number {
@@ -385,7 +461,11 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment:
   })
 }
 
-export function calculateSimulation(input: SimulateInput, calcParams: CalcParameterConfig): SimulationResult {
+export function calculateSimulation(
+  input: SimulateInput,
+  calcParams: CalcParameterConfig,
+  options?: { formulaSet?: FormulaSetRecordLike },
+): SimulationResult {
   const scenario = input.scenario ?? "standard"
   const machinesCost = resolveFitnessMachineCostByAddress(input.location)
   const machineDelta = machinesCost - FITNESS_MACHINE_BASE_COST
@@ -395,7 +475,7 @@ export function calculateSimulation(input: SimulateInput, calcParams: CalcParame
   const franchiseRate = resolveFranchiseRate(input)
   const royaltyRate = Math.max(0, franchiseRate) / 100
   const includeDepreciation = input.includeDepreciation !== false
-  const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams)
+  const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams, options?.formulaSet)
   const rows = applyDepreciation(baseRows, initialInvestment, includeDepreciation)
   const monthlyProjection = buildMonthlyProjection(rows, initialInvestment)
   const year1Last = monthlyProjection[11]
@@ -446,6 +526,7 @@ export function calculateSimulation(input: SimulateInput, calcParams: CalcParame
     paybackMonths: estimatePaybackMonths(rows, initialInvestment),
     breakevenMembers,
     simpleBreakevenMembers,
+    formulaSetVersion: options?.formulaSet?.setVersion,
     monthlyProjection,
   }
 }

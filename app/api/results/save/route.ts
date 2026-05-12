@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
     | {
         resultId?: string
+      formulaSetVersion?: string
         storeName?: string
         username?: string
         scenario?: "conservative" | "standard" | "aggressive"

@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { FORMULA_FUNCTIONS, FORMULA_VAR_REGISTRY } from "@/lib/formula-vars"
 import { toast } from "sonner"
 
 // ── トークン型定義 ──────────────────────────────────────
@@ -31,22 +32,10 @@ export interface FormulaToken {
 
 // ── 変数候補 ───────────────────────────────────────────
 
-const AVAILABLE_VARS: { key: string; label: string }[] = [
-  // SimulationRequestInput
-  { key: "floorAreaTsubo", label: "坪数 (floorAreaTsubo)" },
-  { key: "rentPerTsubo", label: "月額家賃 (rentPerTsubo)" },
-  { key: "competitorCount", label: "競合数 (competitorCount)" },
-  { key: "royaltyRate", label: "ロイヤリティ率 (royaltyRate)" },
-  { key: "franchiseRate", label: "フランチャイズ率 (franchiseRate)" },
-  { key: "runningCostTotal", label: "ランニング費合計 (runningCostTotal)" },
-  { key: "initialInvestmentTotal", label: "初期投資合計 (initialInvestmentTotal)" },
-
-  // calc-constants / CalcParams derived values used in calc-engine
-  { key: "monthlyMemberFeeExTax", label: "月会費(税抜)定数 (MONTHLY_MEMBER_FEE_EX_TAX)" },
-  { key: "paymentFeeRate", label: "決済手数料率 (paymentFeeRate)" },
-  { key: "royaltyCapMonthly", label: "ロイヤリティ上限(月) (royaltyCapMonthly)" },
-  { key: "appFeeMonthly", label: "アプリ利用料(月) (appFeeMonthly)" },
-]
+const AVAILABLE_VARS: { key: string; label: string }[] = FORMULA_VAR_REGISTRY.map((v) => ({
+  key: v.key,
+  label: `${v.label} (${v.key})`,
+}))
 
 const OPERATORS = [
   { value: "+", label: "＋" },
@@ -60,11 +49,7 @@ const PARENS = [
   { value: ")", label: "）" },
 ]
 
-const FUNCTIONS = [
-  { name: "round", label: "round()" },
-  { name: "ceil",  label: "ceil()" },
-  { name: "floor", label: "floor()" },
-]
+const FUNCTIONS = FORMULA_FUNCTIONS
 
 // ── ユーティリティ ──────────────────────────────────────
 
@@ -110,6 +95,7 @@ interface FormulaEditorProps {
   initialTokens?: FormulaToken[]
   activeVersion?: string
   requirePreviewBeforeActivate?: boolean
+  onPreview?: (tokens: FormulaToken[]) => Promise<number>
   onSaveDraft?: (tokens: FormulaToken[], comment: string) => Promise<void>
   onActivate?: (tokens: FormulaToken[], comment: string) => Promise<void>
 }
@@ -119,6 +105,7 @@ export function FormulaEditor({
   initialTokens = [],
   activeVersion = "v0001",
   requirePreviewBeforeActivate = true,
+  onPreview,
   onSaveDraft,
   onActivate,
 }: FormulaEditorProps) {
@@ -175,10 +162,25 @@ export function FormulaEditor({
 
   // ── プレビュー計算 ───────────────────────────────────
 
-  function runPreview() {
+  async function runPreview() {
+    if (!onPreview) {
+      toast.error("プレビューAPIが未接続です。")
+      return
+    }
+
     setPreviewResult(null)
     setPreviewDone(false)
-    toast.error("プレビュー計算はAPI連携後に有効化されます。")
+
+    try {
+      const value = await onPreview(tokens)
+      setPreviewResult(value)
+      setPreviewDone(true)
+      toast.success("プレビュー計算を実行しました。")
+    } catch (error) {
+      setPreviewResult(null)
+      setPreviewDone(false)
+      toast.error(error instanceof Error ? error.message : "プレビュー計算に失敗しました。")
+    }
   }
 
   async function handleSaveDraft() {
@@ -373,7 +375,7 @@ export function FormulaEditor({
           variant="outline"
           size="sm"
           className="gap-1.5 text-xs"
-          onClick={runPreview}
+          onClick={() => { void runPreview() }}
         >
           <PlayIcon className="size-3.5" />
           プレビュー計算
@@ -407,48 +409,4 @@ export function FormulaEditor({
       )}
     </div>
   )
-}
-
-// ── トークン評価器（eval不使用） ────────────────────────
-
-export function evaluateTokens(
-  tokens: FormulaToken[],
-  vars: Record<string, number>
-): number {
-  // 変数・定数をまず数値展開し、数式文字列を組み立ててから
-  // スタックベースで計算するシンプルな実装
-  const parts: string[] = tokens.map((t) => {
-    if (t.type === "var") {
-      const v = vars[t.key ?? ""]
-      if (v === undefined) throw new Error(`変数 "${t.key}" が見つかりません`)
-      return String(v)
-    }
-    if (t.type === "const") return String(t.value)
-    if (t.type === "op") return String(t.value)
-    if (t.type === "paren") return String(t.value)
-    if (t.type === "fn") return String(t.name)
-    return ""
-  })
-
-  // 安全な評価: Function コンストラクタで math関数のみ許可
-  const expr = parts.join(" ")
-  // Math.round / ceil / floor のみ置換して使用可能にする
-  const safeExpr = expr
-    .replace(/\bround\b/g, "Math.round")
-    .replace(/\bceil\b/g, "Math.ceil")
-    .replace(/\bfloor\b/g, "Math.floor")
-
-  // 安全性チェック: 許可されていないトークンが含まれていないか
-  const allowed = /^[\d\s\.\+\-\*\/\(\)Math\.roundceilfloor]+$/
-  if (!allowed.test(safeExpr)) {
-    throw new Error("計算式に不正な文字が含まれています")
-  }
-
-  // eslint-disable-next-line no-new-func
-  const fn = new Function(`return (${safeExpr})`)
-  const result = fn() as unknown
-  if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error("計算結果が数値ではありません")
-  }
-  return result
 }

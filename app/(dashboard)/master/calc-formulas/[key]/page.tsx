@@ -9,17 +9,10 @@ import { Button } from "@/components/ui/button"
 import { FormulaEditor } from "@/components/master/formula-editor"
 import { FormulaVersionPanel, type FormulaVersion } from "@/components/master/formula-version-panel"
 import type { FormulaToken } from "@/components/master/formula-editor"
+import type { FormulaToken as RuntimeFormulaToken } from "@/lib/formula-types"
 import { toast } from "sonner"
 
-type ApiFormulaToken = {
-  type: "var" | "const" | "op" | "fn" | "paren"
-  varKey?: string
-  value?: number
-  op?: string
-  fnName?: string
-  paren?: "(" | ")"
-  label?: string
-}
+type ApiFormulaToken = RuntimeFormulaToken
 
 type ApiFormulaDefinition = {
   key: string
@@ -39,8 +32,9 @@ type ApiFormulaSet = {
 
 function toEditorToken(token: ApiFormulaToken, index: number): FormulaToken {
   if (token.type === "var") return { id: `t-${index}`, type: "var", key: token.varKey, label: token.label }
-  if (token.type === "const") return { id: `t-${index}`, type: "const", value: token.value }
-  if (token.type === "op") return { id: `t-${index}`, type: "op", value: token.op, label: token.label }
+  if (token.type === "namedConst") return { id: `t-${index}`, type: "var", key: token.namedConstKey, label: token.label }
+  if (token.type === "const") return { id: `t-${index}`, type: "const", value: Number(token.value ?? 0) }
+  if (token.type === "op") return { id: `t-${index}`, type: "op", value: token.op || String(token.value ?? ""), label: token.label }
   if (token.type === "fn") return { id: `t-${index}`, type: "fn", name: token.fnName, label: token.label }
   return { id: `t-${index}`, type: "paren", value: token.paren, label: token.label }
 }
@@ -191,6 +185,31 @@ export default function FormulaEditorPage() {
     toast.success(`${latest} を本番反映しました。`)
   }
 
+  async function handlePreview(tokens: FormulaToken[]): Promise<number> {
+    const response = await fetch("/api/master/calc-formulas/preview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        tokens: tokens.map(toApiToken),
+      }),
+    })
+
+    const payload = (await response.json().catch(() => null)) as { value?: number; error?: { message?: string } } | null
+
+    if (!response.ok) {
+      throw new Error(payload?.error?.message || "プレビュー計算に失敗しました。")
+    }
+
+    const value = Number(payload?.value)
+    if (!Number.isFinite(value)) {
+      throw new Error("プレビュー計算結果が不正です。")
+    }
+
+    return value
+  }
+
   async function handleRestore(version: string) {
     const activateRes = await fetch(`/api/master/calc-formulas/sets/${version}/activate`, {
       method: "PUT",
@@ -259,7 +278,7 @@ export default function FormulaEditorPage() {
                 label={label}
                 initialTokens={initialTokens}
                 activeVersion={selectedVersion}
-                requirePreviewBeforeActivate={false}
+                onPreview={handlePreview}
                 onSaveDraft={handleSaveDraft}
                 onActivate={handleActivate}
               />

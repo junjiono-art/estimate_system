@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { calculateSimulation } from "@/lib/server/calc-engine"
 import { getCalcParamsFromDb } from "@/lib/server/calc-params-client"
+import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
+import type { FormulaSetRecordLike } from "@/lib/formula-types"
 import type { SimulationRequestInput } from "@/lib/types"
 
 const SIMULATION_CACHE_TTL_MS = 5 * 60 * 1000
@@ -13,6 +15,7 @@ type CachedSimulation = {
 }
 
 const simulationCache = new Map<string, CachedSimulation>()
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
 
 function sanitizeRate(value: unknown): 0 | 10 | 15 {
   const rate = Number(value)
@@ -20,7 +23,7 @@ function sanitizeRate(value: unknown): 0 | 10 | 15 {
   return 0
 }
 
-function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: string): string {
+function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: string, formulaSetVersion?: string): string {
   return JSON.stringify({
     storeName: body.storeName?.trim() || "",
     location: body.location?.trim() || "",
@@ -35,7 +38,20 @@ function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: 
     franchiseRate: sanitizeRate(body.franchiseRate ?? body.royaltyRate),
     populationByRadius: body.populationByRadius ?? null,
     calcParamsVersion: paramsUpdatedAt || "unknown",
+    formulaSetVersion: formulaSetVersion || "none",
   })
+}
+
+async function getActiveFormulaSet(): Promise<FormulaSetRecordLike | undefined> {
+  if (!hasLambdaGatewayConfigured()) return undefined
+
+  const result = await invokeLambdaGateway<{ formulaSet?: FormulaSetRecordLike }>({
+    method: "GET",
+    path: `${lambdaFormulaSetsBasePath}/current`,
+  })
+
+  if (!result.ok || !result.data?.formulaSet) return undefined
+  return result.data.formulaSet
 }
 
 function setCachedSimulation(key: string, data: ReturnType<typeof calculateSimulation>) {
@@ -67,7 +83,8 @@ export async function POST(request: Request) {
 
   try {
     const calcParams = await getCalcParamsFromDb()
-    const cacheKey = buildCacheKey(body, calcParams.updatedAt)
+    const activeFormulaSet = await getActiveFormulaSet()
+    const cacheKey = buildCacheKey(body, calcParams.updatedAt, activeFormulaSet?.setVersion)
     const cached = simulationCache.get(cacheKey)
 
     if (cached && cached.expiresAt > Date.now()) {
@@ -87,10 +104,14 @@ export async function POST(request: Request) {
       simulationCache.delete(cacheKey)
     }
 
-    const result = calculateSimulation({
-      ...body,
-      storeName: body.storeName,
-    }, calcParams)
+    const result = calculateSimulation(
+      {
+        ...body,
+        storeName: body.storeName,
+      },
+      calcParams,
+      { formulaSet: activeFormulaSet },
+    )
 
     setCachedSimulation(cacheKey, result)
 

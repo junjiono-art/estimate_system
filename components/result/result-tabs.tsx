@@ -308,6 +308,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
       const payload = {
         resultId: currentData.id,
+        formulaSetVersion: currentData.formulaSetVersion,
         storeName: currentData.storeName,
         username: createdBy.trim(),
         scenario,

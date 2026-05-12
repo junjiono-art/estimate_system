@@ -123,6 +123,7 @@ export interface AreaDemographics {
 /** 試算結果 */
 export interface SimulationResult {
   id: string
+  formulaSetVersion?: string
   storeName: string
   /** 住所（市区町村の人口統計表示に使用） */
   location?: string
