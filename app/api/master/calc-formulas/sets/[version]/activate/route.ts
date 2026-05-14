@@ -4,7 +4,7 @@ import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/la
 
 export const runtime = "nodejs"
 
-const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
+const FORMULA_SETS_PATH = "/api/master/formula-sets"
 
 type Context = {
   params: Promise<{ version: string }>
@@ -26,7 +26,7 @@ export async function PUT(request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ pointer: unknown }>({
       method: "PUT",
-      path: `${lambdaFormulaSetsBasePath}/${version}/activate`,
+      path: `${FORMULA_SETS_PATH}/${version}/activate`,
       body: { updatedBy },
     })
 
