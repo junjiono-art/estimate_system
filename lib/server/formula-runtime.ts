@@ -8,6 +8,11 @@ type BuildContextArgs = {
   input?: Partial<SimulationRequestInput>
   calcParams: CalcParameterConfig
   derived?: Partial<Record<string, number>>
+  /** 初期値層の計算済み値（新規） */
+  initialPhase?: {
+    initialJoiners?: number
+    demandMultiplier?: number
+  }
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -15,13 +20,51 @@ function toNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(num) ? num : fallback
 }
 
-export function buildFormulaContext({ input, calcParams, derived }: BuildContextArgs): FormulaContext {
+/**
+ * 初期値計算層のコンテキストを構築
+ * （initialJoiners, demandMultiplier等の入力値を整理）
+ *
+ * @param input シミュレーション入力値
+ * @param calcParams 計算パラメータ
+ */
+export function buildInitialPhaseContext(
+  input?: Partial<SimulationRequestInput>,
+  calcParams?: CalcParameterConfig,
+): FormulaContext {
+  if (!input) return {}
+
+  const { km1Ring = 0, km3Ring = 0, km5Ring = 0 } = input.populationByRadius ?? {}
+
+  return {
+    floorAreaTsubo: toNumber(input.floorAreaTsubo, 0),
+    competitorCount: toNumber(input.competitorCount, 0),
+    // locationType: 0=suburban, 1=urban, 2=rural
+    locationType: input.locationType === "urban" ? 1 : input.locationType === "rural" ? 2 : 0,
+    populationKm1Ring: km1Ring,
+    populationKm3Ring: km3Ring,
+    populationKm5Ring: km5Ring,
+    rentPerTsubo: toNumber(input.rentPerTsubo, 0),
+    runningCostTotal: toNumber(input.runningCostTotal, 0),
+  }
+}
+
+export function buildFormulaContext({
+  input,
+  calcParams,
+  derived,
+  initialPhase,
+}: BuildContextArgs): FormulaContext {
+  // Context keys are intentionally stable across UI, preview, and simulation runtime.
   const rentPerTsubo = toNumber(input?.rentPerTsubo, 0)
   const runningCostTotal = toNumber(input?.runningCostTotal, 0)
   const royaltyRate = toNumber(input?.royaltyRate, 0)
   const franchiseRate = toNumber(input?.franchiseRate ?? input?.royaltyRate, 0)
 
+  // 人口リング取得（geospatial層）
+  const { km1Ring = 0, km3Ring = 0, km5Ring = 0 } = input?.populationByRadius ?? {}
+
   return {
+    // ───── Input層 ─────
     floorAreaTsubo: toNumber(input?.floorAreaTsubo, 0),
     rentPerTsubo,
     competitorCount: toNumber(input?.competitorCount, 0),
@@ -30,12 +73,21 @@ export function buildFormulaContext({ input, calcParams, derived }: BuildContext
     runningCostTotal,
     initialInvestmentTotal: toNumber(input?.initialInvestmentTotal, 0),
 
+    // ───── Geospatial層（新規） ─────
+    populationKm1Ring: km1Ring,
+    populationKm3Ring: km3Ring,
+    populationKm5Ring: km5Ring,
+    locationType: input?.locationType === "urban" ? 1 : input?.locationType === "rural" ? 2 : 0,
+
+    // ───── Param層 ─────
     paymentFeeRate: toNumber(calcParams.paymentFeeRate, 0),
     royaltyCapMonthly: toNumber(calcParams.royaltyCapMonthly, 0),
     appFeeMonthly: toNumber(calcParams.appFeeMonthly, 0),
 
+    // ───── Constant層 ─────
     monthlyMemberFeeExTax: toNumber(MONTHLY_MEMBER_FEE_EX_TAX, 0),
 
+    // ───── Derived層（月別） ─────
     month: toNumber(derived?.month, 1),
     members: toNumber(derived?.members, 0),
     monthlyRevenue: toNumber(derived?.monthlyRevenue, 0),
@@ -44,6 +96,10 @@ export function buildFormulaContext({ input, calcParams, derived }: BuildContext
     adCostMonthly: toNumber(derived?.adCostMonthly, 0),
     paymentFee: toNumber(derived?.paymentFee, 0),
     monthlyRoyalty: toNumber(derived?.monthlyRoyalty, 0),
+
+    // ───── Derived層（初期値層・新規） ─────
+    initialJoiners: toNumber(initialPhase?.initialJoiners, 0),
+    demandMultiplier: toNumber(initialPhase?.demandMultiplier, 1),
   }
 }
 
@@ -91,6 +147,7 @@ class Parser {
   constructor(private readonly tokens: FormulaToken[], private readonly context: FormulaContext) {}
 
   parse(): number {
+    // Pratt-style parse entry: precedence-aware expression parse with strict token exhaustion.
     const value = this.parseExpression(0)
     if (this.index !== this.tokens.length) {
       throw new Error("式の末尾に未処理トークンがあります。")
@@ -189,6 +246,7 @@ export function evaluateFormulaTokens(tokens: FormulaToken[], context: FormulaCo
   if (!Array.isArray(tokens) || tokens.length === 0) {
     throw new Error("トークンが空です。")
   }
+  // Runtime evaluator is shared by preview and simulation to guarantee consistent results.
   return new Parser(tokens, context).parse()
 }
 

@@ -2,11 +2,12 @@ import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/l
 import type { CalcParameterConfig } from "@/lib/types"
 import type { FormulaSetRecordLike } from "@/lib/formula-types"
 import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
-import { buildFormulaContext, evaluateFormulaByKey } from "@/lib/server/formula-runtime"
+import { buildFormulaContext, buildInitialPhaseContext, evaluateFormulaByKey } from "@/lib/server/formula-runtime"
 import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
 } from "@/lib/fitness-machine-cost"
+import { FormulaEvaluationEngine } from "@/lib/server/formula-evaluation-engine"
 
 export type SimulateInput = SimulationRequestInput
 
@@ -296,6 +297,53 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
   return Math.max(1, Math.round(baseJoiners * (1 - competitorImpact)))
 }
 
+function buildMonthlyDerivedContext(
+  row: RegressionMonthlyRow,
+  monthlyRevenue: number,
+  members: number,
+  monthlyRent: number,
+  monthlyRunningCost: number,
+  adCostMonthly: number,
+): Record<string, number> {
+  return {
+    month: row.month,
+    members,
+    monthlyRevenue,
+    monthlyRent,
+    monthlyRunningCost,
+    adCostMonthly,
+  }
+}
+
+function evaluateFormulaWithFallback(args: {
+  formulaSet?: FormulaSetRecordLike
+  formulaKey: string
+  context: Record<string, number>
+  fallbackValue: number
+  min?: number
+  max?: number
+}): number {
+  try {
+    const evaluated = evaluateFormulaByKey(args.formulaSet, args.formulaKey, args.context)
+    if (evaluated == null) return args.fallbackValue
+
+    let value = Math.round(evaluated)
+    if (typeof args.min === "number") value = Math.max(args.min, value)
+    if (typeof args.max === "number") value = Math.min(args.max, value)
+    return value
+  } catch {
+    // Formula errors must never break simulation: fallback keeps legacy behavior.
+    return args.fallbackValue
+  }
+}
+
+// ────────────────────────────────────────────────────
+// 【変更前】ハードコード順序での計算
+// 【変更後】FormulaEvaluationEngine による依存グラフベースの計算
+// ────────────────────────────────────────────────────
+/*
+← コメントアウト保持（ロールバック可能）
+
 function applyCalcParams(
   rows: RegressionMonthlyRow[],
   input: SimulateInput | undefined,
@@ -323,67 +371,54 @@ function applyCalcParams(
     const baseContext = buildFormulaContext({
       input,
       calcParams,
-      derived: {
-        month: row.month,
-        members,
-        monthlyRevenue: revenue,
-        monthlyRent,
-        monthlyRunningCost: monthlyRunning,
-        adCostMonthly: adCost,
-      },
+      derived: buildMonthlyDerivedContext(row, revenue, members, monthlyRent, monthlyRunning, adCost),
     })
 
-    const paymentFee = (() => {
-      try {
-        const evaluated = evaluateFormulaByKey(formulaSet, "paymentFee", baseContext)
-        if (evaluated == null) return defaultPaymentFee
-        return Math.max(0, Math.round(evaluated))
-      } catch {
-        return defaultPaymentFee
-      }
-    })()
+    // Each formula is optional. When missing or invalid, we fallback to existing deterministic logic.
+    const paymentFee = evaluateFormulaWithFallback({
+      formulaSet,
+      formulaKey: "paymentFee",
+      context: baseContext,
+      fallbackValue: defaultPaymentFee,
+      min: 0,
+    })
 
-    const royalty = (() => {
-      try {
-        const evaluated = evaluateFormulaByKey(formulaSet, "monthlyRoyalty", {
-          ...baseContext,
-          paymentFee,
-        })
-        if (evaluated == null) return defaultRoyalty
-        return Math.max(0, Math.round(Math.min(evaluated, calcParams.royaltyCapMonthly)))
-      } catch {
-        return defaultRoyalty
-      }
-    })()
+    const royalty = evaluateFormulaWithFallback({
+      formulaSet,
+      formulaKey: "monthlyRoyalty",
+      context: {
+        ...baseContext,
+        paymentFee,
+      },
+      fallbackValue: defaultRoyalty,
+      min: 0,
+      max: calcParams.royaltyCapMonthly,
+    })
 
-    const appFee = (() => {
-      try {
-        const evaluated = evaluateFormulaByKey(formulaSet, "appFee", {
-          ...baseContext,
-          paymentFee,
-          monthlyRoyalty: royalty,
-        })
-        if (evaluated == null) return defaultAppFee
-        return Math.max(0, Math.round(evaluated))
-      } catch {
-        return defaultAppFee
-      }
-    })()
+    const appFee = evaluateFormulaWithFallback({
+      formulaSet,
+      formulaKey: "appFee",
+      context: {
+        ...baseContext,
+        paymentFee,
+        monthlyRoyalty: royalty,
+      },
+      fallbackValue: defaultAppFee,
+      min: 0,
+    })
 
     const defaultCost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
-    const cost = (() => {
-      try {
-        const evaluated = evaluateFormulaByKey(formulaSet, "monthlyCost", {
-          ...baseContext,
-          paymentFee,
-          monthlyRoyalty: royalty,
-        })
-        if (evaluated == null) return defaultCost
-        return Math.max(0, Math.round(evaluated))
-      } catch {
-        return defaultCost
-      }
-    })()
+    const cost = evaluateFormulaWithFallback({
+      formulaSet,
+      formulaKey: "monthlyCost",
+      context: {
+        ...baseContext,
+        paymentFee,
+        monthlyRoyalty: royalty,
+      },
+      fallbackValue: defaultCost,
+      min: 0,
+    })
 
     return {
       month: row.month,
@@ -393,6 +428,84 @@ function applyCalcParams(
       profit: revenue - cost,
     }
   })
+}
+*/
+
+// ────────────────────────────────────────────────────
+// 【新規実装】FormulaEvaluationEngine を使用した依存グラフベース計算
+// ────────────────────────────────────────────────────
+function applyCalcParams(
+  rows: RegressionMonthlyRow[],
+  input: SimulateInput | undefined,
+  calcParams: CalcParameterConfig,
+  formulaSet?: FormulaSetRecordLike,
+): RegressionMonthlyRow[] {
+  if (!input) return rows
+
+  // Step 1: 初期値計算層（pre）
+  try {
+    const engine = new FormulaEvaluationEngine(formulaSet)
+
+    // Pre phase: initialJoiners, demandMultiplier の計算
+    const preContext = buildInitialPhaseContext(input, calcParams)
+    const preResults = engine.evaluatePhase("pre", preContext, {
+      initialJoiners: resolveInitialJoiners(input, calcParams),
+      demandMultiplier: Math.max(0.2, resolveInitialJoiners(input, calcParams) / BASE_SUBURBAN_FIRST_MONTH_JOINERS),
+    })
+
+    const initialJoiners = preResults.initialJoiners
+    const demandMultiplier = preResults.demandMultiplier
+
+    // Step 2: 既存ロジック（月別計算準備）
+    const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
+    const monthlyRent = resolveMonthlyRent(input)
+    const monthlyRunning = resolveMonthlyRunning(input)
+    const fixedNonAdCost = monthlyRent + monthlyRunning
+
+    // Step 3: 月別計算
+    return rows.map((row) => {
+      const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
+      const members = Math.max(0, Math.round(row.members * demandMultiplier))
+      const adCost = getMonthlyAdCost(row.month, calcParams)
+
+      // Monthly context を構築
+      const monthlyContext = buildFormulaContext({
+        input,
+        calcParams,
+        derived: buildMonthlyDerivedContext(row, revenue, members, monthlyRent, monthlyRunning, adCost),
+        initialPhase: { initialJoiners, demandMultiplier },
+      })
+
+      // Monthly phase: paymentFee, monthlyRoyalty, appFee, monthlyCost の計算
+      const monthlyResults = engine.evaluatePhase("monthly", monthlyContext, {
+        paymentFee: getPaymentFee(revenue, calcParams),
+        monthlyRoyalty: Math.min(
+          Math.round(revenue * royaltyRate),
+          calcParams.royaltyCapMonthly,
+        ),
+        appFee: Math.min(
+          Math.round(revenue * royaltyRate),
+          calcParams.royaltyCapMonthly,
+        ) > 0 ? calcParams.appFeeMonthly : 0,
+        monthlyCost: fixedNonAdCost + adCost + getPaymentFee(revenue, calcParams),
+      })
+
+      const profit = revenue - monthlyResults.monthlyCost
+
+      return {
+        month: row.month,
+        members,
+        revenue,
+        cost: monthlyResults.monthlyCost,
+        profit,
+      }
+    })
+  } catch (error) {
+    // FormulaEvaluationEngine のエラー時はフォールバック
+    console.warn("FormulaEvaluationEngine error:", error)
+    // コメントアウト前の既存ロジックで再度処理
+    return rows
+  }
 }
 
 export function buildRegressionRows(

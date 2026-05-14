@@ -10,6 +10,11 @@ import { FormulaEditor } from "@/components/master/formula-editor"
 import { FormulaVersionPanel, type FormulaVersion } from "@/components/master/formula-version-panel"
 import type { FormulaToken } from "@/components/master/formula-editor"
 import type { FormulaToken as RuntimeFormulaToken } from "@/lib/formula-types"
+import {
+  PREVIEW_CONTEXT_OVERRIDES_DEFAULTS,
+  PREVIEW_SIMULATION_INPUT_DEFAULTS,
+} from "@/lib/formula-preview-defaults"
+import { toEditorToken, toRuntimeToken } from "@/lib/formula-token-mapper"
 import { toast } from "sonner"
 
 type ApiFormulaToken = RuntimeFormulaToken
@@ -28,23 +33,6 @@ type ApiFormulaSet = {
   createdAt: string
   basedOnVersion?: string
   formulas: Record<string, ApiFormulaDefinition>
-}
-
-function toEditorToken(token: ApiFormulaToken, index: number): FormulaToken {
-  if (token.type === "var") return { id: `t-${index}`, type: "var", key: token.varKey, label: token.label }
-  if (token.type === "namedConst") return { id: `t-${index}`, type: "var", key: token.namedConstKey, label: token.label }
-  if (token.type === "const") return { id: `t-${index}`, type: "const", value: Number(token.value ?? 0) }
-  if (token.type === "op") return { id: `t-${index}`, type: "op", value: token.op || String(token.value ?? ""), label: token.label }
-  if (token.type === "fn") return { id: `t-${index}`, type: "fn", name: token.fnName, label: token.label }
-  return { id: `t-${index}`, type: "paren", value: token.paren, label: token.label }
-}
-
-function toApiToken(token: FormulaToken): ApiFormulaToken {
-  if (token.type === "var") return { type: "var", varKey: token.key, label: token.label }
-  if (token.type === "const") return { type: "const", value: Number(token.value ?? 0) }
-  if (token.type === "op") return { type: "op", op: String(token.value ?? ""), label: token.label }
-  if (token.type === "fn") return { type: "fn", fnName: token.name, label: token.label }
-  return { type: "paren", paren: token.value === ")" ? ")" : "(", label: token.label }
 }
 
 // ── ページ ──────────────────────────────────────────────
@@ -135,7 +123,7 @@ export default function FormulaEditorPage() {
         [formulaKey]: {
           key: formulaKey,
           label,
-          tokens: tokens.map(toApiToken),
+          tokens: tokens.map(toRuntimeToken),
         },
       },
     }
@@ -186,13 +174,16 @@ export default function FormulaEditorPage() {
   }
 
   async function handlePreview(tokens: FormulaToken[]): Promise<number> {
+    // Preview executes with fixed baseline inputs so different formula versions are comparable.
     const response = await fetch("/api/master/calc-formulas/preview", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        tokens: tokens.map(toApiToken),
+        tokens: tokens.map(toRuntimeToken),
+        simulationInput: PREVIEW_SIMULATION_INPUT_DEFAULTS,
+        contextOverrides: PREVIEW_CONTEXT_OVERRIDES_DEFAULTS,
       }),
     })
 
