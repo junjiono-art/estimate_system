@@ -137,7 +137,7 @@ export async function POST(request: Request) {
   const appId = process.env.ESTAT_APP_ID;
   if (!appId) {
     return NextResponse.json(
-      { error: "ESTAT_APP_ID が未設定です。.env.local に e-Stat アプリIDを設定してください。", requestBody: reqBody },
+      { error: "ESTAT_APP_ID が未設定です。実行環境の環境変数を設定してください。", requestBody: reqBody },
       { status: 500 },
     );
   }

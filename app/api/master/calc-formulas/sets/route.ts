@@ -4,7 +4,7 @@ import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/la
 
 export const runtime = "nodejs"
 
-const FORMULA_SETS_PATH = "/api/master/formula-sets"
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
 
 type FormulaSetPostPayload = {
   comment?: string
@@ -21,7 +21,7 @@ export async function GET() {
 
     const result = await invokeLambdaGateway<{ formulaSets: unknown[] }>({
       method: "GET",
-      path: FORMULA_SETS_PATH,
+      path: lambdaFormulaSetsBasePath,
     })
 
     if (!result.ok || !result.data) {
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const result = await invokeLambdaGateway<{ formulaSet: unknown }>({
       method: "POST",
-      path: FORMULA_SETS_PATH,
+      path: lambdaFormulaSetsBasePath,
       body: {
         comment,
         createdBy,

@@ -4,7 +4,7 @@ import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/la
 
 export const runtime = "nodejs"
 
-const FORMULA_SETS_PATH = "/api/master/formula-sets"
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
 
 export async function GET() {
   try {
@@ -14,7 +14,7 @@ export async function GET() {
 
     const result = await invokeLambdaGateway<{ formulaSet: unknown }>({
       method: "GET",
-      path: `${FORMULA_SETS_PATH}/current`,
+      path: `${lambdaFormulaSetsBasePath}/current`,
     })
 
     if (!result.ok || !result.data) {

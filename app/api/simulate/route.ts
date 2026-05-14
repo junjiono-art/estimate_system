@@ -8,7 +8,6 @@ import type { SimulationRequestInput } from "@/lib/types"
 
 const SIMULATION_CACHE_TTL_MS = 5 * 60 * 1000
 const SIMULATION_CACHE_MAX_ENTRIES = 200
-const FORMULA_SETS_PATH = "/api/master/formula-sets"
 
 type CachedSimulation = {
   expiresAt: number
@@ -16,6 +15,7 @@ type CachedSimulation = {
 }
 
 const simulationCache = new Map<string, CachedSimulation>()
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
 
 function sanitizeRate(value: unknown): 0 | 10 | 15 {
   const rate = Number(value)
@@ -47,7 +47,7 @@ async function getActiveFormulaSet(): Promise<FormulaSetRecordLike | undefined> 
 
   const result = await invokeLambdaGateway<{ formulaSet?: FormulaSetRecordLike }>({
     method: "GET",
-    path: `${FORMULA_SETS_PATH}/current`,
+    path: `${lambdaFormulaSetsBasePath}/current`,
   })
 
   if (!result.ok || !result.data?.formulaSet) return undefined

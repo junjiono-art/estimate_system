@@ -131,7 +131,7 @@ export async function POST(request: Request) {
   const statsDataId = process.env.ESTAT_MESH_STATS_DATA_ID
   if (!statsDataId) {
     return NextResponse.json(
-      { error: "ESTAT_MESH_STATS_DATA_ID が未設定です。.env.local にメッシュ統計の statsDataId を設定してください。" },
+      { error: "ESTAT_MESH_STATS_DATA_ID が未設定です。実行環境の環境変数を設定してください。" },
       { status: 500 },
     )
   }
