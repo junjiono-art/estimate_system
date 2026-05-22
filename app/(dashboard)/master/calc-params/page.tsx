@@ -121,7 +121,7 @@ export default function CalcParamsPage() {
     <>
       <PageHeader
         title="計算パラメータ"
-        description="レベル1: 定数・係数のみをGUIで編集します。保存後、次回試算から反映されます。"
+        description="定数・係数をGUIで編集します。保存後、次回試算から反映されます。"
       />
       <div className="overflow-auto">
         {!form ? (
