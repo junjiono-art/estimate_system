@@ -98,123 +98,11 @@ function MetaCard({ title, value, note }: { title: string; value: string | numbe
   )
 }
 
-function formatRate(value: number): string {
-  return `${Math.round(value * 10_000) / 100}%`
-}
-
-function formatMoney(value: number): string {
-  return `¥${value.toLocaleString("ja-JP")}`
-}
-
 function parseRequiredNumber(raw: string): number | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   const value = Number(trimmed)
   return Number.isFinite(value) ? value : null
-}
-
-type EditableParamRow = {
-  key: string
-  label: string
-  currentValue: string
-  useCase: string
-  group: string
-}
-
-function buildEditableParams(params: CalcParameterConfig): EditableParamRow[] {
-  return [
-    {
-      key: "paymentFeeRate",
-      label: "決済手数料率",
-      currentValue: formatRate(params.paymentFeeRate),
-      useCase: "月次売上に対する決済手数料の係数",
-      group: "手数料・上限",
-    },
-    {
-      key: "royaltyCapMonthly",
-      label: "ロイヤリティ月額上限",
-      currentValue: formatMoney(params.royaltyCapMonthly),
-      useCase: "月次ロイヤリティのキャップ値",
-      group: "手数料・上限",
-    },
-    {
-      key: "appFeeMonthly",
-      label: "アプリ利用料",
-      currentValue: formatMoney(params.appFeeMonthly),
-      useCase: "ロイヤリティ発生月に加算される固定費",
-      group: "手数料・上限",
-    },
-    {
-      key: "competitorImpact.upTo2",
-      label: "競合影響率（1〜2店舗）",
-      currentValue: formatRate(params.competitorImpact.upTo2),
-      useCase: "競合数が1〜2店舗のときの需要減衰率",
-      group: "競合影響率",
-    },
-    {
-      key: "competitorImpact.for3",
-      label: "競合影響率（3店舗）",
-      currentValue: formatRate(params.competitorImpact.for3),
-      useCase: "競合数が3店舗のときの需要減衰率",
-      group: "競合影響率",
-    },
-    {
-      key: "competitorImpact.for4",
-      label: "競合影響率（4店舗）",
-      currentValue: formatRate(params.competitorImpact.for4),
-      useCase: "競合数が4店舗のときの需要減衰率",
-      group: "競合影響率",
-    },
-    {
-      key: "competitorImpact.over4",
-      label: "競合影響率（5店舗以上）",
-      currentValue: formatRate(params.competitorImpact.over4),
-      useCase: "競合数が5店舗以上のときの需要減衰率",
-      group: "競合影響率",
-    },
-    {
-      key: "adCost.year1Month1",
-      label: "広告費（1年目 1月）",
-      currentValue: formatMoney(params.adCost.year1Month1),
-      useCase: "オープン初月の広告宣伝費",
-      group: "広告費テーブル",
-    },
-    {
-      key: "adCost.year1Month2",
-      label: "広告費（1年目 2月）",
-      currentValue: formatMoney(params.adCost.year1Month2),
-      useCase: "オープン2ヶ月目の広告宣伝費",
-      group: "広告費テーブル",
-    },
-    {
-      key: "adCost.year1Month3To4",
-      label: "広告費（1年目 3〜4月）",
-      currentValue: formatMoney(params.adCost.year1Month3To4),
-      useCase: "オープン3〜4ヶ月目の広告宣伝費",
-      group: "広告費テーブル",
-    },
-    {
-      key: "adCost.year1Month5To12",
-      label: "広告費（1年目 5〜12月）",
-      currentValue: formatMoney(params.adCost.year1Month5To12),
-      useCase: "オープン5〜12ヶ月目の広告宣伝費",
-      group: "広告費テーブル",
-    },
-    {
-      key: "adCost.year2Monthly",
-      label: "広告費（2年目 毎月）",
-      currentValue: formatMoney(params.adCost.year2Monthly),
-      useCase: "2年目の月次広告宣伝費",
-      group: "広告費テーブル",
-    },
-    {
-      key: "adCost.year3PlusMonthly",
-      label: "広告費（3年目以降 毎月）",
-      currentValue: formatMoney(params.adCost.year3PlusMonthly),
-      useCase: "3年目以降の月次広告宣伝費",
-      group: "広告費テーブル",
-    },
-  ]
 }
 
 function toCalcUnitLabel(unit: LogicVisualizationResponse["formulas"][number]["phase"]): string {
@@ -567,7 +455,6 @@ export function LogicVisualizationView() {
     return null
   }
 
-  const editableParams = calcParams ? buildEditableParams(calcParams) : []
   const formulaLabelMap = new Map(data.formulas.map((formula) => [formula.key, formula.label]))
   const toFormulaLabel = (key: string): string => formulaLabelMap.get(key) || "未定義の式"
 
@@ -635,38 +522,6 @@ export function LogicVisualizationView() {
           note={data.source.formulaSetSource}
         />
       </div>
-
-      <section className="rounded-lg border border-border bg-card p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">編集候補の計算パラメータ</h2>
-          <p className="text-xs text-muted-foreground">係数・定数の棚卸し（計算式パラメータの編集対象）</p>
-        </div>
-
-        {calcParams ? (
-          <div className="rounded-lg border border-border/60 overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-border bg-muted/10 hover:bg-transparent">
-                  <TableHead>グループ</TableHead>
-                  <TableHead>項目</TableHead>
-                  <TableHead>現在値</TableHead>
-                  <TableHead className="min-w-[280px]">用途</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {editableParams.map((item) => (
-                  <TableRow key={item.key} className="border-b border-border/50 hover:bg-muted/20">
-                    <TableCell className="text-xs">{item.group}</TableCell>
-                    <TableCell className="text-xs">{item.label}</TableCell>
-                    <TableCell className="text-xs">{item.currentValue}</TableCell>
-                    <TableCell className="text-xs whitespace-normal text-muted-foreground">{item.useCase}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : null}
-      </section>
 
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
@@ -963,58 +818,72 @@ export function LogicVisualizationView() {
         <Card>
           <CardHeader>
             <CardTitle>変数定義</CardTitle>
-            <CardDescription>入力・定数・派生値・地理情報の一覧</CardDescription>
+            <CardDescription>入力・定数・派生値・地理情報の一覧（折りたたみ表示）</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ラベル</TableHead>
-                  <TableHead>ソース</TableHead>
-                  <TableHead>単位</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.variables.map((item) => (
-                  <TableRow key={item.key}>
-                    <TableCell>{item.label}</TableCell>
-                    <TableCell>{item.source}</TableCell>
-                    <TableCell>{item.unit || "-"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <details className="group rounded-md border border-border/60">
+              <summary className="cursor-pointer list-none px-3 py-2 text-sm text-foreground [&::-webkit-details-marker]:hidden">
+                変数定義を表示する
+              </summary>
+              <div className="border-t border-border/60 p-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ラベル</TableHead>
+                      <TableHead>ソース</TableHead>
+                      <TableHead>単位</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.variables.map((item) => (
+                      <TableRow key={item.key}>
+                        <TableCell>{item.label}</TableCell>
+                        <TableCell>{item.source}</TableCell>
+                        <TableCell>{item.unit || "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </details>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>依存関係</CardTitle>
-            <CardDescription>式同士の依存定義（デフォルト定義ベース）</CardDescription>
+            <CardDescription>式同士の依存定義（折りたたみ表示）</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>対象式</TableHead>
-                  <TableHead>計算区分</TableHead>
-                  <TableHead>依存先</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.dependencies.map((item) => (
-                  <TableRow key={item.key}>
-                    <TableCell>{toFormulaLabel(item.key)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{toCalcUnitLabel(item.phase)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {item.dependsOn.length > 0 ? item.dependsOn.map(toFormulaLabel).join("、") : "-"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <details className="group rounded-md border border-border/60">
+              <summary className="cursor-pointer list-none px-3 py-2 text-sm text-foreground [&::-webkit-details-marker]:hidden">
+                依存関係を表示する
+              </summary>
+              <div className="border-t border-border/60 p-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>対象式</TableHead>
+                      <TableHead>計算区分</TableHead>
+                      <TableHead>依存先</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.dependencies.map((item) => (
+                      <TableRow key={item.key}>
+                        <TableCell>{toFormulaLabel(item.key)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{toCalcUnitLabel(item.phase)}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {item.dependsOn.length > 0 ? item.dependsOn.map(toFormulaLabel).join("、") : "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </details>
           </CardContent>
         </Card>
       </div>
