@@ -25,10 +25,20 @@ export async function POST(request: Request) {
     )
   }
 
+  if (body.resultId?.trim()) {
+    return errorResponse(
+      ErrorCode.VALIDATION_ERROR,
+      "resultId は指定できません。",
+      400,
+    )
+  }
+
   try {
     if (!hasLambdaGatewayConfigured()) {
       return errorResponse(ErrorCode.EXTERNAL_API_ERROR, "LAMBDA_API_BASE_URL が未設定です。", 500)
     }
+
+    const { resultId: _resultId, ...payload } = body
 
     const result = await invokeLambdaGateway<{
       message: string
@@ -37,7 +47,7 @@ export async function POST(request: Request) {
     }>({
       method: "POST",
       path: lambdaResultsSavePath,
-      body,
+      body: payload,
     })
 
     if (!result.ok || !result.data) {

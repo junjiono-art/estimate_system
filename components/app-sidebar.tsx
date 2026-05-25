@@ -40,6 +40,7 @@ const navMain = [
       { title: "ランニングコスト", href: "/master/running-cost", icon: DatabaseIcon },
       { title: "計算パラメータ", href: "/master/calc-params", icon: DatabaseIcon },
       { title: "計算式パラメータ", href: "/master/formula-params", icon: DatabaseIcon },
+      { title: "ロジック可視化", href: "/master/logic-visualization", icon: DatabaseIcon },
       { title: "出店済み店舗",  href: "/master/stores",        icon: DatabaseIcon },
     ],
   },
