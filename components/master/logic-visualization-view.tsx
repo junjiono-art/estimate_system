@@ -230,9 +230,9 @@ function buildFormulaLines(
   const formulaMap = new Map(formulas.map((formula) => [formula.key, formula]))
   return pairs.map(({ key, label, fallback }) => {
     const formula = formulaMap.get(key)
-    if (!formula?.expression) return `${label} (${key}) = ${fallback}`
+    if (!formula?.expression) return `${label}: ${fallback}`
     const formulaLabel = formula.label || label
-    return `${formulaLabel} (${formula.key}) = ${formula.expression}`
+    return `${formulaLabel}: 有効な式セット定義を適用中`
   })
 }
 
@@ -568,21 +568,24 @@ export function LogicVisualizationView() {
   }
 
   const editableParams = calcParams ? buildEditableParams(calcParams) : []
+  const formulaLabelMap = new Map(data.formulas.map((formula) => [formula.key, formula.label]))
+  const toFormulaLabel = (key: string): string => formulaLabelMap.get(key) || "未定義の式"
+
   const feeFormulaLines = buildFormulaLines(data.formulas, [
-    { key: "paymentFee", label: "決済手数料", fallback: "salesTotal * paymentFeeRate" },
-    { key: "monthlyRoyalty", label: "月次ロイヤリティ", fallback: "min(royaltyBase, royaltyCapMonthly)" },
-    { key: "appFee", label: "アプリ利用料", fallback: "monthlyRoyalty > 0 ? appFeeMonthly : 0" },
+    { key: "paymentFee", label: "決済手数料", fallback: "有効な式セット定義を参照" },
+    { key: "monthlyRoyalty", label: "月次ロイヤリティ", fallback: "有効な式セット定義を参照" },
+    { key: "appFee", label: "アプリ利用料", fallback: "有効な式セット定義を参照" },
   ])
   const competitorFormulaLines = buildFormulaLines(data.formulas, [
-    { key: "initialJoiners", label: "初月入会人数", fallback: "f(location, population, competitors)" },
-    { key: "demandMultiplier", label: "需要乗数", fallback: "f(initialJoiners, competitorImpactRate)" },
+    { key: "initialJoiners", label: "初月入会人数", fallback: "有効な式セット定義を参照" },
+    { key: "demandMultiplier", label: "需要乗数", fallback: "有効な式セット定義を参照" },
   ])
   const adCostFormulaLines = buildFormulaLines(data.formulas, [
-    { key: "adCostMonthly", label: "月次広告費", fallback: "adCostTable(monthFromOpen)" },
+    { key: "adCostMonthly", label: "月次広告費", fallback: "有効な式セット定義を参照" },
     {
       key: "monthlyCost",
       label: "月次総コスト",
-      fallback: "runningCost + adCostMonthly + paymentFee + monthlyRoyalty + appFee",
+      fallback: "有効な式セット定義を参照",
     },
   ])
 
@@ -645,7 +648,6 @@ export function LogicVisualizationView() {
               <TableHeader>
                 <TableRow className="border-b border-border bg-muted/10 hover:bg-transparent">
                   <TableHead>グループ</TableHead>
-                  <TableHead>キー</TableHead>
                   <TableHead>項目</TableHead>
                   <TableHead>現在値</TableHead>
                   <TableHead className="min-w-[280px]">用途</TableHead>
@@ -655,7 +657,6 @@ export function LogicVisualizationView() {
                 {editableParams.map((item) => (
                   <TableRow key={item.key} className="border-b border-border/50 hover:bg-muted/20">
                     <TableCell className="text-xs">{item.group}</TableCell>
-                    <TableCell className="font-mono text-xs">{item.key}</TableCell>
                     <TableCell className="text-xs">{item.label}</TableCell>
                     <TableCell className="text-xs">{item.currentValue}</TableCell>
                     <TableCell className="text-xs whitespace-normal text-muted-foreground">{item.useCase}</TableCell>
@@ -688,11 +689,11 @@ export function LogicVisualizationView() {
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">paymentFeeRate / royaltyCapMonthly / appFeeMonthly</p>
+            <p className="mt-1 text-xs leading-relaxed">決済手数料率 / ロイヤリティ月額上限 / アプリ利用料</p>
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">paymentFee, royalty, monthlyProfit など</p>
+            <p className="mt-1 text-xs leading-relaxed">決済手数料 / 月次ロイヤリティ / 月次損益 など</p>
           </div>
         </div>
 
@@ -758,11 +759,11 @@ export function LogicVisualizationView() {
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">competitorImpact.upTo2 / for3 / for4 / over4</p>
+            <p className="mt-1 text-xs leading-relaxed">競合影響率（1〜2店舗 / 3店舗 / 4店舗 / 5店舗以上）</p>
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">demandMultiplier, expectedSales, monthlyProfit など</p>
+            <p className="mt-1 text-xs leading-relaxed">需要乗数 / 売上予測 / 月次損益 など</p>
           </div>
         </div>
 
@@ -838,11 +839,11 @@ export function LogicVisualizationView() {
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">adCost.year1Month1 ... adCost.year3PlusMonthly</p>
+            <p className="mt-1 text-xs leading-relaxed">広告費テーブル（1年目1月〜3年目以降）</p>
           </div>
           <div className="rounded-md border border-border/70 bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">adCost, monthlyProfit, cumulativeCashFlow など</p>
+            <p className="mt-1 text-xs leading-relaxed">月次広告費 / 月次損益 / 累積キャッシュフロー など</p>
           </div>
         </div>
 
@@ -926,32 +927,30 @@ export function LogicVisualizationView() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>キー</TableHead>
                 <TableHead>ラベル</TableHead>
                 <TableHead>計算区分</TableHead>
                 <TableHead>依存</TableHead>
-                <TableHead className="min-w-[360px]">式</TableHead>
+                <TableHead>定義</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.formulas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground">
+                  <TableCell colSpan={4} className="text-muted-foreground">
                     取得可能な式セットがありません。
                   </TableCell>
                 </TableRow>
               ) : (
                 data.formulas.map((formula) => (
                   <TableRow key={formula.key}>
-                    <TableCell className="font-mono text-xs">{formula.key}</TableCell>
                     <TableCell>{formula.label}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{toCalcUnitLabel(formula.phase)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs">
-                      {formula.dependsOn.length > 0 ? formula.dependsOn.join(", ") : "-"}
+                      {formula.dependsOn.length > 0 ? formula.dependsOn.map(toFormulaLabel).join("、") : "-"}
                     </TableCell>
-                    <TableCell className="font-mono text-xs whitespace-normal">{formula.expression || "-"}</TableCell>
+                    <TableCell className="text-xs whitespace-normal text-muted-foreground">有効な式セット定義を参照</TableCell>
                   </TableRow>
                 ))
               )}
@@ -970,7 +969,6 @@ export function LogicVisualizationView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>キー</TableHead>
                   <TableHead>ラベル</TableHead>
                   <TableHead>ソース</TableHead>
                   <TableHead>単位</TableHead>
@@ -979,7 +977,6 @@ export function LogicVisualizationView() {
               <TableBody>
                 {data.variables.map((item) => (
                   <TableRow key={item.key}>
-                    <TableCell className="font-mono text-xs">{item.key}</TableCell>
                     <TableCell>{item.label}</TableCell>
                     <TableCell>{item.source}</TableCell>
                     <TableCell>{item.unit || "-"}</TableCell>
@@ -999,7 +996,7 @@ export function LogicVisualizationView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>キー</TableHead>
+                  <TableHead>対象式</TableHead>
                   <TableHead>計算区分</TableHead>
                   <TableHead>依存先</TableHead>
                 </TableRow>
@@ -1007,12 +1004,12 @@ export function LogicVisualizationView() {
               <TableBody>
                 {data.dependencies.map((item) => (
                   <TableRow key={item.key}>
-                    <TableCell className="font-mono text-xs">{item.key}</TableCell>
+                    <TableCell>{toFormulaLabel(item.key)}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{toCalcUnitLabel(item.phase)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs">
-                      {item.dependsOn.length > 0 ? item.dependsOn.join(", ") : "-"}
+                      {item.dependsOn.length > 0 ? item.dependsOn.map(toFormulaLabel).join("、") : "-"}
                     </TableCell>
                   </TableRow>
                 ))}
