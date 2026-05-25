@@ -217,6 +217,25 @@ function buildEditableParams(params: CalcParameterConfig): EditableParamRow[] {
   ]
 }
 
+function toCalcUnitLabel(unit: LogicVisualizationResponse["formulas"][number]["phase"]): string {
+  if (unit === "pre") return "初期計算"
+  if (unit === "monthly") return "月次計算"
+  return "集計"
+}
+
+function buildFormulaLines(
+  formulas: LogicVisualizationResponse["formulas"],
+  pairs: Array<{ key: string; label: string; fallback: string }>,
+): string[] {
+  const formulaMap = new Map(formulas.map((formula) => [formula.key, formula]))
+  return pairs.map(({ key, label, fallback }) => {
+    const formula = formulaMap.get(key)
+    if (!formula?.expression) return `${label} (${key}) = ${fallback}`
+    const formulaLabel = formula.label || label
+    return `${formulaLabel} (${formula.key}) = ${formula.expression}`
+  })
+}
+
 export function LogicVisualizationView() {
   const [data, setData] = useState<LogicVisualizationResponse | null>(null)
   const [calcParams, setCalcParams] = useState<CalcParameterConfig | null>(null)
@@ -549,6 +568,23 @@ export function LogicVisualizationView() {
   }
 
   const editableParams = calcParams ? buildEditableParams(calcParams) : []
+  const feeFormulaLines = buildFormulaLines(data.formulas, [
+    { key: "paymentFee", label: "決済手数料", fallback: "salesTotal * paymentFeeRate" },
+    { key: "monthlyRoyalty", label: "月次ロイヤリティ", fallback: "min(royaltyBase, royaltyCapMonthly)" },
+    { key: "appFee", label: "アプリ利用料", fallback: "monthlyRoyalty > 0 ? appFeeMonthly : 0" },
+  ])
+  const competitorFormulaLines = buildFormulaLines(data.formulas, [
+    { key: "initialJoiners", label: "初月入会人数", fallback: "f(location, population, competitors)" },
+    { key: "demandMultiplier", label: "需要乗数", fallback: "f(initialJoiners, competitorImpactRate)" },
+  ])
+  const adCostFormulaLines = buildFormulaLines(data.formulas, [
+    { key: "adCostMonthly", label: "月次広告費", fallback: "adCostTable(monthFromOpen)" },
+    {
+      key: "monthlyCost",
+      label: "月次総コスト",
+      fallback: "runningCost + adCostMonthly + paymentFee + monthlyRoyalty + appFee",
+    },
+  ])
 
   return (
     <div className="space-y-4 p-6">
@@ -600,7 +636,7 @@ export function LogicVisualizationView() {
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">編集候補の計算パラメータ</h2>
-          <p className="text-xs text-muted-foreground">phase 2 で編集対象に寄せていく係数・定数の棚卸し</p>
+          <p className="text-xs text-muted-foreground">係数・定数の棚卸し（計算式パラメータの編集対象）</p>
         </div>
 
         {calcParams ? (
@@ -633,8 +669,31 @@ export function LogicVisualizationView() {
 
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">phase 2-① 手数料・上限</h2>
+          <h2 className="text-sm font-semibold text-foreground">手数料・上限</h2>
           <p className="text-xs text-muted-foreground">決済手数料率、ロイヤリティ上限、アプリ利用料を管理します。</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">式</p>
+            {feeFormulaLines.map((line, index) => (
+              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">影響範囲</p>
+            <p className="mt-1 text-xs leading-relaxed">月次損益、ロイヤリティ計算、キャッシュフローに影響</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">インプット</p>
+            <p className="mt-1 text-xs leading-relaxed">paymentFeeRate / royaltyCapMonthly / appFeeMonthly</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">アウトプット</p>
+            <p className="mt-1 text-xs leading-relaxed">paymentFee, royalty, monthlyProfit など</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -680,8 +739,31 @@ export function LogicVisualizationView() {
 
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">phase 2-② 競合影響率</h2>
+          <h2 className="text-sm font-semibold text-foreground">競合影響率</h2>
           <p className="text-xs text-muted-foreground">競合店舗数に応じた需要減衰率を設定します。</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">式</p>
+            {competitorFormulaLines.map((line, index) => (
+              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">影響範囲</p>
+            <p className="mt-1 text-xs leading-relaxed">需要予測、売上予測、損益シミュレーション全体に影響</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">インプット</p>
+            <p className="mt-1 text-xs leading-relaxed">competitorImpact.upTo2 / for3 / for4 / over4</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">アウトプット</p>
+            <p className="mt-1 text-xs leading-relaxed">demandMultiplier, expectedSales, monthlyProfit など</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -737,8 +819,31 @@ export function LogicVisualizationView() {
 
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">phase 2-③ 広告費テーブル</h2>
+          <h2 className="text-sm font-semibold text-foreground">広告費テーブル</h2>
           <p className="text-xs text-muted-foreground">月次広告費のルールを年次・月次区分で設定します。</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">式</p>
+            {adCostFormulaLines.map((line, index) => (
+              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
+                {line}
+              </p>
+            ))}
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">影響範囲</p>
+            <p className="mt-1 text-xs leading-relaxed">月次販促費、損益推移、投資回収期間に影響</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">インプット</p>
+            <p className="mt-1 text-xs leading-relaxed">adCost.year1Month1 ... adCost.year3PlusMonthly</p>
+          </div>
+          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">アウトプット</p>
+            <p className="mt-1 text-xs leading-relaxed">adCost, monthlyProfit, cumulativeCashFlow など</p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -823,7 +928,7 @@ export function LogicVisualizationView() {
               <TableRow>
                 <TableHead>キー</TableHead>
                 <TableHead>ラベル</TableHead>
-                <TableHead>フェーズ</TableHead>
+                <TableHead>計算区分</TableHead>
                 <TableHead>依存</TableHead>
                 <TableHead className="min-w-[360px]">式</TableHead>
               </TableRow>
@@ -841,7 +946,7 @@ export function LogicVisualizationView() {
                     <TableCell className="font-mono text-xs">{formula.key}</TableCell>
                     <TableCell>{formula.label}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{formula.phase}</Badge>
+                      <Badge variant="outline">{toCalcUnitLabel(formula.phase)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs">
                       {formula.dependsOn.length > 0 ? formula.dependsOn.join(", ") : "-"}
@@ -895,7 +1000,7 @@ export function LogicVisualizationView() {
               <TableHeader>
                 <TableRow>
                   <TableHead>キー</TableHead>
-                  <TableHead>フェーズ</TableHead>
+                  <TableHead>計算区分</TableHead>
                   <TableHead>依存先</TableHead>
                 </TableRow>
               </TableHeader>
@@ -904,7 +1009,7 @@ export function LogicVisualizationView() {
                   <TableRow key={item.key}>
                     <TableCell className="font-mono text-xs">{item.key}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{item.phase}</Badge>
+                      <Badge variant="outline">{toCalcUnitLabel(item.phase)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs">
                       {item.dependsOn.length > 0 ? item.dependsOn.join(", ") : "-"}
