@@ -12,6 +12,15 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { CalcParameterConfig } from "@/lib/types"
 import { toast } from "sonner"
+import { DependencyGraph } from "@/components/master/dependency-graph"
+
+type SectionKey = "fee" | "competitor" | "adCost"
+
+const SECTION_HIGHLIGHT_KEYS: Record<SectionKey, string[]> = {
+  fee: ["paymentFeeRate", "royaltyCapMonthly", "appFeeMonthly", "paymentFee", "monthlyRoyalty", "appFee"],
+  competitor: ["initialJoiners", "demandMultiplier"],
+  adCost: ["adCostMonthly"],
+}
 
 type LogicVisualizationResponse = {
   generatedAt: string
@@ -147,21 +156,34 @@ export function LogicVisualizationView() {
   const [adCostYear1Month5To12, setAdCostYear1Month5To12] = useState("")
   const [adCostYear2Monthly, setAdCostYear2Monthly] = useState("")
   const [adCostYear3PlusMonthly, setAdCostYear3PlusMonthly] = useState("")
+  const [activeSection, setActiveSection] = useState<SectionKey | null>(null)
 
-  function syncStep1Form(params: CalcParameterConfig) {
-    setPaymentFeeRatePercent(String(Math.round(params.paymentFeeRate * 10_000) / 100))
+  function syncFeeParams(params: CalcParameterConfig) {
+    setPaymentFeeRatePercent(String(params.paymentFeeRate * 100))
     setRoyaltyCapMonthly(String(params.royaltyCapMonthly))
     setAppFeeMonthly(String(params.appFeeMonthly))
-    setCompetitorUpTo2Percent(String(Math.round(params.competitorImpact.upTo2 * 10_000) / 100))
-    setCompetitorFor3Percent(String(Math.round(params.competitorImpact.for3 * 10_000) / 100))
-    setCompetitorFor4Percent(String(Math.round(params.competitorImpact.for4 * 10_000) / 100))
-    setCompetitorOver4Percent(String(Math.round(params.competitorImpact.over4 * 10_000) / 100))
+  }
+
+  function syncCompetitorParams(params: CalcParameterConfig) {
+    setCompetitorUpTo2Percent(String(params.competitorImpact.upTo2 * 100))
+    setCompetitorFor3Percent(String(params.competitorImpact.for3 * 100))
+    setCompetitorFor4Percent(String(params.competitorImpact.for4 * 100))
+    setCompetitorOver4Percent(String(params.competitorImpact.over4 * 100))
+  }
+
+  function syncAdCostParams(params: CalcParameterConfig) {
     setAdCostYear1Month1(String(params.adCost.year1Month1))
     setAdCostYear1Month2(String(params.adCost.year1Month2))
     setAdCostYear1Month3To4(String(params.adCost.year1Month3To4))
     setAdCostYear1Month5To12(String(params.adCost.year1Month5To12))
     setAdCostYear2Monthly(String(params.adCost.year2Monthly))
     setAdCostYear3PlusMonthly(String(params.adCost.year3PlusMonthly))
+  }
+
+  function syncAllParams(params: CalcParameterConfig) {
+    syncFeeParams(params)
+    syncCompetitorParams(params)
+    syncAdCostParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -226,7 +248,7 @@ export function LogicVisualizationView() {
       }
 
       setCalcParams(payload.params)
-      syncStep1Form(payload.params)
+      syncFeeParams(payload.params)
       toast.success("手数料・上限パラメータを保存しました。")
     } catch {
       toast.error("計算パラメータの保存に失敗しました。")
@@ -282,7 +304,7 @@ export function LogicVisualizationView() {
       }
 
       setCalcParams(payload.params)
-      syncStep1Form(payload.params)
+      syncCompetitorParams(payload.params)
       toast.success("競合影響率パラメータを保存しました。")
     } catch {
       toast.error("計算パラメータの保存に失敗しました。")
@@ -350,7 +372,7 @@ export function LogicVisualizationView() {
       }
 
       setCalcParams(payload.params)
-      syncStep1Form(payload.params)
+      syncAdCostParams(payload.params)
       toast.success("広告費パラメータを保存しました。")
     } catch {
       toast.error("計算パラメータの保存に失敗しました。")
@@ -396,7 +418,7 @@ export function LogicVisualizationView() {
             setCalcParams(DEMO_CALC_PARAMS)
             setIsDemoMode(true)
             setCalcWarning(message)
-            syncStep1Form(DEMO_CALC_PARAMS)
+            syncAllParams(DEMO_CALC_PARAMS)
           }
           return
         }
@@ -407,7 +429,7 @@ export function LogicVisualizationView() {
           setCalcParams(params)
           setIsDemoMode(false)
           if (params) {
-            syncStep1Form(params)
+            syncAllParams(params)
           }
         }
       } catch (err) {
@@ -526,6 +548,25 @@ export function LogicVisualizationView() {
 
       <section className="rounded-lg border border-border bg-card p-5 space-y-4">
         <div>
+          <h2 className="text-sm font-semibold text-foreground">依存関係グラフ</h2>
+          <p className="text-xs text-muted-foreground">
+            式同士の依存関係を計算フェーズ別に表示します。下のセクションにマウスを乗せると、そのパラメータが影響する式がハイライトされます。
+          </p>
+        </div>
+        <DependencyGraph
+          formulas={data.formulas}
+          highlightedParamKeys={activeSection ? SECTION_HIGHLIGHT_KEYS[activeSection] : []}
+        />
+      </section>
+
+      <section
+        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        onMouseEnter={() => setActiveSection("fee")}
+        onMouseLeave={() => setActiveSection((current) => (current === "fee" ? null : current))}
+        onFocus={() => setActiveSection("fee")}
+        onBlur={() => setActiveSection((current) => (current === "fee" ? null : current))}
+      >
+        <div>
           <h2 className="text-sm font-semibold text-foreground">手数料・上限</h2>
           <p className="text-xs text-muted-foreground">決済手数料率、ロイヤリティ上限、アプリ利用料を管理します。</p>
         </div>
@@ -594,7 +635,13 @@ export function LogicVisualizationView() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <section
+        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        onMouseEnter={() => setActiveSection("competitor")}
+        onMouseLeave={() => setActiveSection((current) => (current === "competitor" ? null : current))}
+        onFocus={() => setActiveSection("competitor")}
+        onBlur={() => setActiveSection((current) => (current === "competitor" ? null : current))}
+      >
         <div>
           <h2 className="text-sm font-semibold text-foreground">競合影響率</h2>
           <p className="text-xs text-muted-foreground">競合店舗数に応じた需要減衰率を設定します。</p>
@@ -674,7 +721,13 @@ export function LogicVisualizationView() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <section
+        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        onMouseEnter={() => setActiveSection("adCost")}
+        onMouseLeave={() => setActiveSection((current) => (current === "adCost" ? null : current))}
+        onFocus={() => setActiveSection("adCost")}
+        onBlur={() => setActiveSection((current) => (current === "adCost" ? null : current))}
+      >
         <div>
           <h2 className="text-sm font-semibold text-foreground">広告費テーブル</h2>
           <p className="text-xs text-muted-foreground">月次広告費のルールを年次・月次区分で設定します。</p>

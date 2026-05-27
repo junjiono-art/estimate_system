@@ -4,6 +4,7 @@ import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/la
 import { FORMULA_VAR_REGISTRY } from "@/lib/formula-vars"
 import { DEFAULT_FORMULA_DEPENDENCIES } from "@/lib/formula-dependencies"
 import type { FormulaDefinition, FormulaSetRecordLike, FormulaToken } from "@/lib/formula-types"
+import { extractVariablesFromTokens } from "@/lib/formula-validation"
 
 const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/master/formula-sets"
 
@@ -68,7 +69,9 @@ export async function GET() {
         label: formula.label || key,
         tokenCount,
         expression: tokenCount > 0 ? formulaToExpression(formula) : "",
-        inputVars: formula.inputVars || [],
+        inputVars: formula.inputVars != null
+          ? formula.inputVars
+          : extractVariablesFromTokens(formula.tokens || []),
         dependsOn: dep?.dependsOn || [],
         phase: dep?.phase || "monthly",
       }
