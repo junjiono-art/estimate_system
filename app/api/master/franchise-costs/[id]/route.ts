@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaFranchiseCostsBasePath = process.env.LAMBDA_FRANCHISE_COSTS_BASE_PATH?.trim() || "/api/master/franchise-costs"
+const lambdaFranchiseCostsBasePath = process.env.LAMBDA_FRANCHISE_COSTS_BASE_PATH?.trim() || "/master/franchise-costs"
 
 type Context = {
   params: Promise<{ id: string }>

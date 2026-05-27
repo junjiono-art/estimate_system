@@ -3,7 +3,7 @@ import { createStore, listStores } from "@/lib/server/store-repository"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaStoreBasePath = process.env.LAMBDA_STORES_BASE_PATH?.trim() || "/api/master/stores"
+const lambdaStoreBasePath = process.env.LAMBDA_STORES_BASE_PATH?.trim() || "/master/stores"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

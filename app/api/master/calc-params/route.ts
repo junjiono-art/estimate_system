@@ -5,7 +5,7 @@ import type { CalcParameterConfig } from "@/lib/types"
 
 export const runtime = "nodejs"
 
-const lambdaCalcParamsBasePath = process.env.LAMBDA_CALC_PARAMS_BASE_PATH?.trim() || "/api/master/calc-params"
+const lambdaCalcParamsBasePath = process.env.LAMBDA_CALC_PARAMS_BASE_PATH?.trim() || "/master/calc-params"
 
 type CalcParamsPayload = Partial<CalcParameterConfig>
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaHistoryPath = process.env.LAMBDA_HISTORY_PATH?.trim() || "/api/history"
+const lambdaHistoryPath = process.env.LAMBDA_HISTORY_PATH?.trim() || "/history"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

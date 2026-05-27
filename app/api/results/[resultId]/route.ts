@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaResultsBasePath = process.env.LAMBDA_RESULTS_BASE_PATH?.trim() || "/api/results"
+const lambdaResultsBasePath = process.env.LAMBDA_RESULTS_BASE_PATH?.trim() || "/results"
 
 type Context = {
   params: Promise<{ resultId: string }>

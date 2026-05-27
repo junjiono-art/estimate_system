@@ -3,7 +3,7 @@ import { deleteStore, getStoreById, updateStore } from "@/lib/server/store-repos
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaStoreBasePath = process.env.LAMBDA_STORES_BASE_PATH?.trim() || "/api/master/stores"
+const lambdaStoreBasePath = process.env.LAMBDA_STORES_BASE_PATH?.trim() || "/master/stores"
 
 type Context = {
   params: Promise<{ id: string }>

@@ -15,7 +15,7 @@ type CachedSimulation = {
 }
 
 const simulationCache = new Map<string, CachedSimulation>()
-const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/master/formula-sets"
 
 function sanitizeRate(value: unknown): 0 | 10 | 15 {
   const rate = Number(value)

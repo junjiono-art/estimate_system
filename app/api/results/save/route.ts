@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 
-const lambdaResultsSavePath = process.env.LAMBDA_RESULTS_SAVE_PATH?.trim() || "/api/results/save"
+const lambdaResultsSavePath = process.env.LAMBDA_RESULTS_SAVE_PATH?.trim() || "/results/save"
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as

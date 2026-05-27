@@ -5,7 +5,7 @@ import { FORMULA_VAR_REGISTRY } from "@/lib/formula-vars"
 import { DEFAULT_FORMULA_DEPENDENCIES } from "@/lib/formula-dependencies"
 import type { FormulaDefinition, FormulaSetRecordLike, FormulaToken } from "@/lib/formula-types"
 
-const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/api/master/formula-sets"
+const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/master/formula-sets"
 
 type FormulaSetCurrentPayload = {
   formulaSet?: FormulaSetRecordLike & {
