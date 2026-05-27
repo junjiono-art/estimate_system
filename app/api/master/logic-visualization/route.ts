@@ -17,11 +17,18 @@ type FormulaSetCurrentPayload = {
   }
 }
 
+const VAR_LABEL_MAP = new Map(FORMULA_VAR_REGISTRY.map((v) => [v.key, v.label]))
+
 function tokenToText(token: FormulaToken): string {
-  if (token.type === "var") return token.varKey || token.label || "var"
-  if (token.type === "namedConst") return token.namedConstKey || token.label || "namedConst"
+  if (token.type === "var") return VAR_LABEL_MAP.get(token.varKey || "") || token.label || token.varKey || "var"
+  if (token.type === "namedConst") return VAR_LABEL_MAP.get(token.namedConstKey || "") || token.label || token.namedConstKey || "namedConst"
   if (token.type === "const") return String(token.value ?? 0)
-  if (token.type === "op") return token.op || String(token.value ?? "?")
+  if (token.type === "op") {
+    const op = token.op || String(token.value ?? "?")
+    if (op === "*") return "×"
+    if (op === "/") return "÷"
+    return op
+  }
   if (token.type === "fn") return token.fnName || token.label || "fn"
   if (token.type === "paren") return token.paren || "("
   return "?"

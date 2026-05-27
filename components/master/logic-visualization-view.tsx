@@ -120,7 +120,7 @@ function buildFormulaLines(
     const formula = formulaMap.get(key)
     if (!formula?.expression) return `${label}: ${fallback}`
     const formulaLabel = formula.label || label
-    return `${formulaLabel}: 有効な式セット定義を適用中`
+    return `${formulaLabel}: ${formula.expression}`
   })
 }
 
@@ -133,6 +133,7 @@ export function LogicVisualizationView() {
   const [isDemoMode, setIsDemoMode] = useState(false)
   const [isSavingStep1, setIsSavingStep1] = useState(false)
   const [isSavingStep2, setIsSavingStep2] = useState(false)
+  const [isSavingStep3, setIsSavingStep3] = useState(false)
   const [paymentFeeRatePercent, setPaymentFeeRatePercent] = useState("")
   const [royaltyCapMonthly, setRoyaltyCapMonthly] = useState("")
   const [appFeeMonthly, setAppFeeMonthly] = useState("")
@@ -317,7 +318,7 @@ export function LogicVisualizationView() {
       return
     }
 
-    setIsSavingStep2(true)
+    setIsSavingStep3(true)
     try {
       const latestParams = await fetchLatestCalcParams()
       if (!latestParams) return
@@ -354,7 +355,7 @@ export function LogicVisualizationView() {
     } catch {
       toast.error("計算パラメータの保存に失敗しました。")
     } finally {
-      setIsSavingStep2(false)
+      setIsSavingStep3(false)
     }
   }
 
@@ -710,7 +711,7 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear1Month1}
               onChange={(event) => setAdCostYear1Month1(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
           <div className="space-y-1.5">
@@ -720,7 +721,7 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear1Month2}
               onChange={(event) => setAdCostYear1Month2(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
           <div className="space-y-1.5">
@@ -730,7 +731,7 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear1Month3To4}
               onChange={(event) => setAdCostYear1Month3To4(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
           <div className="space-y-1.5">
@@ -740,7 +741,7 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear1Month5To12}
               onChange={(event) => setAdCostYear1Month5To12(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
           <div className="space-y-1.5">
@@ -750,7 +751,7 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear2Monthly}
               onChange={(event) => setAdCostYear2Monthly(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
           <div className="space-y-1.5">
@@ -760,13 +761,13 @@ export function LogicVisualizationView() {
               inputMode="numeric"
               value={adCostYear3PlusMonthly}
               onChange={(event) => setAdCostYear3PlusMonthly(event.target.value)}
-              disabled={isSavingStep2}
+              disabled={isSavingStep3}
             />
           </div>
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={saveStep3Params} disabled={isSavingStep2} className="h-8 text-xs">
+          <Button onClick={saveStep3Params} disabled={isSavingStep3} className="h-8 text-xs">
             <SaveIcon className="size-4" />
             保存
           </Button>
@@ -805,7 +806,9 @@ export function LogicVisualizationView() {
                     <TableCell className="text-xs">
                       {formula.dependsOn.length > 0 ? formula.dependsOn.map(toFormulaLabel).join("、") : "-"}
                     </TableCell>
-                    <TableCell className="text-xs whitespace-normal text-muted-foreground">有効な式セット定義を参照</TableCell>
+                    <TableCell className="text-xs whitespace-normal text-muted-foreground">
+                      {formula.expression || "—"}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
