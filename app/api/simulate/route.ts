@@ -3,23 +3,18 @@ import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { calculateSimulation } from "@/lib/server/calc-engine"
 import { getCalcParamsFromDb } from "@/lib/server/calc-params-client"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
+import {
+  FORMULA_SET_CACHE_TTL_MS,
+  SIMULATION_CACHE_MAX_ENTRIES,
+  SIMULATION_CACHE_TTL_MS,
+  getCachedActiveFormulaSet,
+  setCachedActiveFormulaSet,
+  simulationCache,
+} from "@/lib/server/simulation-cache"
 import type { FormulaSetRecordLike } from "@/lib/formula-types"
 import type { SimulationRequestInput } from "@/lib/types"
 
-const SIMULATION_CACHE_TTL_MS = 5 * 60 * 1000
-const SIMULATION_CACHE_MAX_ENTRIES = 200
-
-type CachedSimulation = {
-  expiresAt: number
-  data: ReturnType<typeof calculateSimulation>
-}
-
-const simulationCache = new Map<string, CachedSimulation>()
 const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/master/formula-sets"
-
-const FORMULA_SET_CACHE_TTL_MS = 60 * 1000
-let cachedActiveFormulaSet: FormulaSetRecordLike | undefined = undefined
-let cachedActiveFormulaSetAt = 0
 
 function sanitizeRate(value: unknown): 0 | 10 | 15 {
   const rate = Number(value)
@@ -50,8 +45,9 @@ async function getActiveFormulaSet(): Promise<FormulaSetRecordLike | undefined> 
   if (!hasLambdaGatewayConfigured()) return undefined
 
   const now = Date.now()
-  if (cachedActiveFormulaSet !== undefined && now - cachedActiveFormulaSetAt < FORMULA_SET_CACHE_TTL_MS) {
-    return cachedActiveFormulaSet
+  const cached = getCachedActiveFormulaSet()
+  if (cached.value !== undefined && now - cached.cachedAt < FORMULA_SET_CACHE_TTL_MS) {
+    return cached.value
   }
 
   const result = await invokeLambdaGateway<{ formulaSet?: FormulaSetRecordLike }>({
@@ -61,12 +57,11 @@ async function getActiveFormulaSet(): Promise<FormulaSetRecordLike | undefined> 
 
   if (!result.ok || !result.data?.formulaSet) {
     // 取得失敗時はキャッシュ更新しない（前回値を返却し、次回再試行）
-    return cachedActiveFormulaSet
+    return cached.value
   }
 
-  cachedActiveFormulaSet = result.data.formulaSet
-  cachedActiveFormulaSetAt = now
-  return cachedActiveFormulaSet
+  setCachedActiveFormulaSet(result.data.formulaSet)
+  return result.data.formulaSet
 }
 
 function setCachedSimulation(key: string, data: ReturnType<typeof calculateSimulation>) {

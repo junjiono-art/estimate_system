@@ -12,6 +12,11 @@ let cachedParams: CalcParameterConfig | null = null
 let cachedAt = 0
 const CACHE_TTL_MS = 60 * 1000
 
+export function invalidateCalcParamsCache(): void {
+  cachedParams = null
+  cachedAt = 0
+}
+
 export async function getCalcParamsFromDb(options?: { forceRefresh?: boolean }): Promise<CalcParameterConfig> {
   const now = Date.now()
   if (!options?.forceRefresh && cachedParams && now - cachedAt < CACHE_TTL_MS) {

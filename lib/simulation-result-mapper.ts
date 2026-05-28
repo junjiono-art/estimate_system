@@ -1,4 +1,4 @@
-import type { AreaDemographics, ScenarioType, SimulationResult } from "@/lib/types"
+import type { AreaDemographics, LocationType, ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 
 export type HistoryApiResult = {
   resultId?: string
@@ -7,7 +7,27 @@ export type HistoryApiResult = {
   username?: string
   scenario?: ScenarioType
   input?: {
+    storeName?: string
     location?: string
+    prefecture?: string
+    city?: string
+    // 再計算復元用の拡張フィールド（旧履歴データには含まれない場合あり）
+    floorAreaTsubo?: number
+    rentPerTsubo?: number
+    competitorCount?: number
+    locationType?: LocationType
+    royaltyRate?: 0 | 10 | 15
+    franchiseRate?: 0 | 10 | 15
+    runningCostTotal?: number
+    initialInvestmentTotal?: number
+    initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
+    investmentBreakdown?: Record<string, number>
+    populationByRadius?: {
+      km1Ring: number
+      km3Ring: number
+      km5Ring: number
+    }
+    includeDepreciation?: boolean
   }
   result?: {
     totalInitialInvestment?: number
@@ -128,4 +148,41 @@ export function mapHistoryItemsToResults(items: unknown[]): SimulationResult[] {
   return items
     .map((item) => mapHistoryItemToResult(item as HistoryApiResult))
     .filter((item): item is SimulationResult => Boolean(item))
+}
+
+function isRoyaltyRate(value: unknown): value is 0 | 10 | 15 {
+  return value === 0 || value === 10 || value === 15
+}
+
+// 履歴 raw データから再計算用の SimulationRequestInput を組み立てる
+// 旧履歴データには input 拡張フィールドが含まれないため、SimulationResult の値で補完する
+export function mapHistoryItemToSimulationRequest(
+  item: HistoryApiResult,
+  fallback: SimulationResult,
+): SimulationRequestInput {
+  const input = item.input ?? {}
+  const rawRoyalty = input.royaltyRate ?? input.franchiseRate
+  const royaltyRate: 0 | 10 | 15 = isRoyaltyRate(rawRoyalty)
+    ? rawRoyalty
+    : isRoyaltyRate(fallback.franchiseRate)
+      ? fallback.franchiseRate
+      : 0
+
+  return {
+    storeName: fallback.storeName,
+    location: input.location ?? fallback.location,
+    scenario: item.scenario ?? fallback.scenario,
+    floorAreaTsubo: input.floorAreaTsubo,
+    rentPerTsubo: input.rentPerTsubo,
+    competitorCount: input.competitorCount,
+    locationType: input.locationType ?? fallback.locationType,
+    royaltyRate,
+    franchiseRate: royaltyRate,
+    runningCostTotal: input.runningCostTotal ?? fallback.monthlyRunningCost,
+    initialInvestmentTotal: input.initialInvestmentTotal ?? fallback.totalInitialInvestment,
+    initialInvestmentByRoyaltyRate: input.initialInvestmentByRoyaltyRate,
+    investmentBreakdown: input.investmentBreakdown ?? fallback.investmentBreakdown,
+    populationByRadius: input.populationByRadius,
+    includeDepreciation: input.includeDepreciation ?? true,
+  }
 }

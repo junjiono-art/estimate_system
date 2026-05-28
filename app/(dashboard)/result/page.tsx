@@ -8,25 +8,11 @@ import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
 import type { SimulationRequestInput, SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
-import { mapHistoryItemsToResults } from "@/lib/simulation-result-mapper"
-
-// 履歴データには元の入力（floorAreaTsubo, populationByRadius 等）が含まれないため、
-// SimulationResult から復元可能な範囲で simulationRequest を組み立てる
-function buildSimulationRequestFromResult(result: SimulationResult): SimulationRequestInput {
-  const royaltyRate = (result.franchiseRate ?? 0) as 0 | 10 | 15
-  return {
-    storeName: result.storeName,
-    location: result.location,
-    scenario: result.scenario,
-    locationType: result.locationType,
-    franchiseRate: royaltyRate,
-    royaltyRate,
-    runningCostTotal: result.monthlyRunningCost,
-    initialInvestmentTotal: result.totalInitialInvestment,
-    investmentBreakdown: result.investmentBreakdown,
-    includeDepreciation: true,
-  }
-}
+import {
+  type HistoryApiResult,
+  mapHistoryItemToResult,
+  mapHistoryItemToSimulationRequest,
+} from "@/lib/simulation-result-mapper"
 
 export default function ResultPage() {
   const [data, setData] = useState<SimulationResult | null>(null)
@@ -49,11 +35,11 @@ export default function ResultPage() {
         }
 
         const items = Array.isArray(payload?.items) ? payload.items : []
-        const mapped = mapHistoryItemsToResults(items)
+        const latestRaw = (items[0] ?? null) as HistoryApiResult | null
+        const latest = latestRaw ? mapHistoryItemToResult(latestRaw) : null
         if (!active) return
-        const latest = mapped[0] ?? null
         setData(latest)
-        setSimulationRequest(latest ? buildSimulationRequestFromResult(latest) : null)
+        setSimulationRequest(latest && latestRaw ? mapHistoryItemToSimulationRequest(latestRaw, latest) : null)
       } catch (error) {
         if (!active) return
         setData(null)

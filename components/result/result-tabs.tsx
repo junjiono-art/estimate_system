@@ -216,6 +216,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     if (cached) {
       setScenarioData(cached)
       prevIncludeDepreciation.current = includeDepreciation
+      // 前回 fetch が abort されたまま true 残留しうるため明示的にリセット
+      setIsRecalculating(false)
       return
     }
 
@@ -312,6 +314,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       const prefecture = prefMatch?.[1] ?? ""
       const city = extractCity(location)
 
+      const nextFranchiseRate = (parseInt(franchiseRate) || 0) as 0 | 10 | 15
+
       const payload = {
         resultId: currentData.id,
         formulaSetVersion: currentData.formulaSetVersion,
@@ -323,6 +327,19 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           location,
           prefecture,
           city,
+          // 再計算時の完全復元用：simulationRequest を保存（履歴経由でロード時に復元する）
+          floorAreaTsubo: simulationRequest?.floorAreaTsubo,
+          rentPerTsubo: simulationRequest?.rentPerTsubo,
+          competitorCount: simulationRequest?.competitorCount,
+          locationType,
+          royaltyRate: nextFranchiseRate,
+          franchiseRate: nextFranchiseRate,
+          runningCostTotal: simulationRequest?.runningCostTotal,
+          initialInvestmentTotal: simulationRequest?.initialInvestmentTotal,
+          initialInvestmentByRoyaltyRate: simulationRequest?.initialInvestmentByRoyaltyRate,
+          investmentBreakdown: simulationRequest?.investmentBreakdown ?? currentData.investmentBreakdown,
+          populationByRadius: simulationRequest?.populationByRadius,
+          includeDepreciation,
         },
         result: {
           ...currentData,

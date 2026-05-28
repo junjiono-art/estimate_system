@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
+import { invalidateCalcParamsCache } from "@/lib/server/calc-params-client"
+import { invalidateActiveFormulaSetCache, invalidateSimulationCache } from "@/lib/server/simulation-cache"
 import type { CalcParameterConfig } from "@/lib/types"
 
 export const runtime = "nodejs"
@@ -62,6 +64,11 @@ export async function PUT(request: Request) {
         { upstreamCode: result.errorCode, upstreamDetails: result.errorDetails },
       )
     }
+
+    // マスタ更新成功時は試算側の各種キャッシュを無効化して、次回試算で最新値を取得させる
+    invalidateCalcParamsCache()
+    invalidateActiveFormulaSetCache()
+    invalidateSimulationCache()
 
     return NextResponse.json(result.data)
   } catch (error) {
