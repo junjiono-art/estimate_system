@@ -92,7 +92,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const calcParams = await getCalcParamsFromDb()
+    // Lambda 障害時もデフォルト値で試算を続行（ログは calc-params-client 側で warn 出力）
+    const calcParams = await getCalcParamsFromDb({ fallbackOnError: true })
     const activeFormulaSet = await getActiveFormulaSet()
     const cacheKey = buildCacheKey(body, calcParams.updatedAt, activeFormulaSet?.setVersion)
     const cached = simulationCache.get(cacheKey)
@@ -140,6 +141,8 @@ export async function POST(request: Request) {
     if (message.startsWith("BREAKEVEN_UNCALCULABLE:")) {
       return errorResponse(ErrorCode.VALIDATION_ERROR, message.replace("BREAKEVEN_UNCALCULABLE:", "").trim(), 422)
     }
+    // サーバーログに詳細を残す（dev server コンソールで確認可能）
+    console.error("[simulate] 試算処理で例外:", error)
     return errorResponse(ErrorCode.INTERNAL_ERROR, message, 500)
   }
 }

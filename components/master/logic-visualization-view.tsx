@@ -1,7 +1,19 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangleIcon, SaveIcon } from "lucide-react"
+import {
+  AlertTriangleIcon,
+  ChevronRightIcon,
+  CreditCardIcon,
+  GitBranchIcon,
+  LayersIcon,
+  MegaphoneIcon,
+  NetworkIcon,
+  SaveIcon,
+  SparklesIcon,
+  UsersIcon,
+  VariableIcon,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -11,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { CalcParameterConfig } from "@/lib/types"
+import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import { DependencyGraph } from "@/components/master/dependency-graph"
 
@@ -71,32 +84,49 @@ type CalcParamsPayload = {
   error?: { message?: string }
 }
 
-const DEMO_CALC_PARAMS: CalcParameterConfig = {
-  paymentFeeRate: 0.035,
-  royaltyCapMonthly: 300_000,
-  appFeeMonthly: 10_000,
-  competitorImpact: {
-    upTo2: 0.1,
-    for3: 0.15,
-    for4: 0.2,
-    over4: 0.25,
-  },
-  adCost: {
-    year1Month1: 600_000,
-    year1Month2: 400_000,
-    year1Month3To4: 300_000,
-    year1Month5To12: 180_000,
-    year2Monthly: 120_000,
-    year3PlusMonthly: 80_000,
-  },
-}
+const DEMO_CALC_PARAMS: CalcParameterConfig = DEFAULT_CALC_PARAMS
 
-function MetaCard({ title, value, note }: { title: string; value: string | number; note?: string }) {
+function MetaCard({
+  title,
+  value,
+  note,
+  icon: Icon,
+  accent = "primary",
+}: {
+  title: string
+  value: string | number
+  note?: string
+  icon?: React.ComponentType<{ className?: string }>
+  accent?: "primary" | "chart-1" | "chart-2" | "chart-3" | "chart-4"
+}) {
+  const accentStyles: Record<string, string> = {
+    primary: "border-l-primary/60 bg-gradient-to-br from-primary/5 to-transparent",
+    "chart-1": "border-l-chart-1/60 bg-gradient-to-br from-chart-1/5 to-transparent",
+    "chart-2": "border-l-chart-2/60 bg-gradient-to-br from-chart-2/5 to-transparent",
+    "chart-3": "border-l-chart-3/60 bg-gradient-to-br from-chart-3/5 to-transparent",
+    "chart-4": "border-l-chart-4/60 bg-gradient-to-br from-chart-4/5 to-transparent",
+  }
+  const iconStyles: Record<string, string> = {
+    primary: "bg-primary/10 text-primary",
+    "chart-1": "bg-chart-1/10 text-chart-1",
+    "chart-2": "bg-chart-2/10 text-chart-2",
+    "chart-3": "bg-chart-3/10 text-chart-3",
+    "chart-4": "bg-chart-4/10 text-chart-4",
+  }
   return (
-    <Card>
+    <Card className={`border-l-4 transition-shadow hover:shadow-md ${accentStyles[accent]}`}>
       <CardHeader className="pb-2">
-        <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-xl">{value}</CardTitle>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <CardDescription className="text-[11px] uppercase tracking-wider">{title}</CardDescription>
+            <CardTitle className="mt-1 truncate text-lg font-bold">{value}</CardTitle>
+          </div>
+          {Icon && (
+            <div className={`flex size-9 shrink-0 items-center justify-center rounded-md ${iconStyles[accent]}`}>
+              <Icon className="size-4" />
+            </div>
+          )}
+        </div>
       </CardHeader>
       {note ? (
         <CardContent className="pt-0">
@@ -107,11 +137,106 @@ function MetaCard({ title, value, note }: { title: string; value: string | numbe
   )
 }
 
+function SectionHeader({
+  icon: Icon,
+  title,
+  description,
+  accent = "primary",
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  description: string
+  accent?: "primary" | "chart-1" | "chart-2" | "chart-3" | "chart-4"
+}) {
+  const iconStyles: Record<string, string> = {
+    primary: "bg-primary/10 text-primary",
+    "chart-1": "bg-chart-1/10 text-chart-1",
+    "chart-2": "bg-chart-2/10 text-chart-2",
+    "chart-3": "bg-chart-3/10 text-chart-3",
+    "chart-4": "bg-chart-4/10 text-chart-4",
+  }
+  return (
+    <div className="flex items-start gap-3">
+      <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconStyles[accent]}`}>
+        <Icon className="size-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+function InfoTile({
+  label,
+  children,
+  accent = "muted",
+}: {
+  label: string
+  children: React.ReactNode
+  accent?: "muted" | "chart-1" | "chart-2" | "chart-3" | "chart-4"
+}) {
+  const accentStyles: Record<string, string> = {
+    muted: "border-border/60 bg-muted/30",
+    "chart-1": "border-chart-1/30 bg-chart-1/5",
+    "chart-2": "border-chart-2/30 bg-chart-2/5",
+    "chart-3": "border-chart-3/30 bg-chart-3/5",
+    "chart-4": "border-chart-4/30 bg-chart-4/5",
+  }
+  return (
+    <div className={`rounded-lg border p-3 ${accentStyles[accent]}`}>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <div className="mt-1.5 text-xs leading-relaxed text-foreground">{children}</div>
+    </div>
+  )
+}
+
+function SuffixedInput({
+  id,
+  value,
+  onChange,
+  disabled,
+  suffix,
+  inputMode = "decimal",
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  suffix: string
+  inputMode?: "decimal" | "numeric"
+}) {
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        inputMode={inputMode}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
+        className="pr-10"
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+        {suffix}
+      </span>
+    </div>
+  )
+}
+
 function parseRequiredNumber(raw: string): number | null {
   const trimmed = raw.trim()
   if (!trimmed) return null
   const value = Number(trimmed)
   return Number.isFinite(value) ? value : null
+}
+
+// 比率（0.034567 など）を % 文字列に変換する際の浮動小数誤差を除去する
+// 例: 0.001 * 100 → 0.10000000000000002 を "0.1" に丸める
+function formatRatePercent(rate: number): string {
+  if (!Number.isFinite(rate)) return ""
+  // 小数点以下 6 桁で丸めてから Number 経由で末尾の余計な 0 と小数点を除去
+  return Number((rate * 100).toFixed(6)).toString()
 }
 
 function toCalcUnitLabel(unit: LogicVisualizationResponse["formulas"][number]["phase"]): string {
@@ -159,16 +284,16 @@ export function LogicVisualizationView() {
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null)
 
   function syncFeeParams(params: CalcParameterConfig) {
-    setPaymentFeeRatePercent(String(params.paymentFeeRate * 100))
+    setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
     setRoyaltyCapMonthly(String(params.royaltyCapMonthly))
     setAppFeeMonthly(String(params.appFeeMonthly))
   }
 
   function syncCompetitorParams(params: CalcParameterConfig) {
-    setCompetitorUpTo2Percent(String(params.competitorImpact.upTo2 * 100))
-    setCompetitorFor3Percent(String(params.competitorImpact.for3 * 100))
-    setCompetitorFor4Percent(String(params.competitorImpact.for4 * 100))
-    setCompetitorOver4Percent(String(params.competitorImpact.over4 * 100))
+    setCompetitorUpTo2Percent(formatRatePercent(params.competitorImpact.upTo2))
+    setCompetitorFor3Percent(formatRatePercent(params.competitorImpact.for3))
+    setCompetitorFor4Percent(formatRatePercent(params.competitorImpact.for4))
+    setCompetitorOver4Percent(formatRatePercent(params.competitorImpact.over4))
   }
 
   function syncAdCostParams(params: CalcParameterConfig) {
@@ -500,7 +625,7 @@ export function LogicVisualizationView() {
   ])
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-5 p-6">
       {isDemoMode ? (
         <Alert>
           <AlertTriangleIcon />
@@ -536,23 +661,27 @@ export function LogicVisualizationView() {
           title="アクティブ式セット"
           value={data.activeFormulaSet?.setVersion || "未取得"}
           note={data.activeFormulaSet?.status || "status: unknown"}
+          icon={SparklesIcon}
+          accent="primary"
         />
-        <MetaCard title="式数" value={data.summary.formulaCount} />
-        <MetaCard title="変数数" value={data.summary.variableCount} />
+        <MetaCard title="式数" value={data.summary.formulaCount} icon={LayersIcon} accent="chart-1" />
+        <MetaCard title="変数数" value={data.summary.variableCount} icon={VariableIcon} accent="chart-2" />
         <MetaCard
           title="取得時刻"
           value={new Date(data.generatedAt).toLocaleString("ja-JP")}
           note={data.source.formulaSetSource}
+          icon={GitBranchIcon}
+          accent="chart-4"
         />
       </div>
 
-      <section className="rounded-lg border border-border bg-card p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">依存関係グラフ</h2>
-          <p className="text-xs text-muted-foreground">
-            式同士の依存関係を計算フェーズ別に表示します。下のセクションにマウスを乗せると、そのパラメータが影響する式がハイライトされます。
-          </p>
-        </div>
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm">
+        <SectionHeader
+          icon={NetworkIcon}
+          title="依存関係グラフ"
+          description="式同士の依存関係を計算フェーズ別に表示します。下のセクションにマウスを乗せると、そのパラメータが影響する式がハイライトされます。"
+          accent="primary"
+        />
         <DependencyGraph
           formulas={data.formulas}
           highlightedParamKeys={activeSection ? SECTION_HIGHLIGHT_KEYS[activeSection] : []}
@@ -560,326 +689,321 @@ export function LogicVisualizationView() {
       </section>
 
       <section
-        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
         onMouseEnter={() => setActiveSection("fee")}
         onMouseLeave={() => setActiveSection((current) => (current === "fee" ? null : current))}
         onFocus={() => setActiveSection("fee")}
         onBlur={() => setActiveSection((current) => (current === "fee" ? null : current))}
       >
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">手数料・上限</h2>
-          <p className="text-xs text-muted-foreground">決済手数料率、ロイヤリティ上限、アプリ利用料を管理します。</p>
-        </div>
+        <SectionHeader
+          icon={CreditCardIcon}
+          title="手数料・上限"
+          description="決済手数料率、ロイヤリティ上限、アプリ利用料を管理します。"
+          accent="chart-1"
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">式</p>
-            {feeFormulaLines.map((line, index) => (
-              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
-                {line}
-              </p>
+          <InfoTile label="式" accent="chart-1">
+            {feeFormulaLines.map((line) => (
+              <p key={line}>{line}</p>
             ))}
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">影響範囲</p>
-            <p className="mt-1 text-xs leading-relaxed">月次損益、ロイヤリティ計算、キャッシュフローに影響</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">決済手数料率 / ロイヤリティ月額上限 / アプリ利用料</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">決済手数料 / 月次ロイヤリティ / 月次損益 など</p>
-          </div>
+          </InfoTile>
+          <InfoTile label="影響範囲">月次損益、ロイヤリティ計算、キャッシュフローに影響</InfoTile>
+          <InfoTile label="インプット">決済手数料率 / ロイヤリティ月額上限 / アプリ利用料</InfoTile>
+          <InfoTile label="アウトプット">決済手数料 / 月次ロイヤリティ / 月次損益 など</InfoTile>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="paymentFeeRateStep1">決済手数料率（%）</Label>
-            <Input
+            <Label htmlFor="paymentFeeRateStep1" className="text-xs font-medium">決済手数料率</Label>
+            <SuffixedInput
               id="paymentFeeRateStep1"
-              inputMode="decimal"
               value={paymentFeeRatePercent}
-              onChange={(event) => setPaymentFeeRatePercent(event.target.value)}
+              onChange={setPaymentFeeRatePercent}
               disabled={isSavingStep1}
+              suffix="%"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="royaltyCapMonthlyStep1">ロイヤリティ月額上限（円）</Label>
-            <Input
+            <Label htmlFor="royaltyCapMonthlyStep1" className="text-xs font-medium">ロイヤリティ月額上限</Label>
+            <SuffixedInput
               id="royaltyCapMonthlyStep1"
-              inputMode="numeric"
               value={royaltyCapMonthly}
-              onChange={(event) => setRoyaltyCapMonthly(event.target.value)}
+              onChange={setRoyaltyCapMonthly}
               disabled={isSavingStep1}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="appFeeMonthlyStep1">アプリ利用料（円/月）</Label>
-            <Input
+            <Label htmlFor="appFeeMonthlyStep1" className="text-xs font-medium">アプリ利用料</Label>
+            <SuffixedInput
               id="appFeeMonthlyStep1"
-              inputMode="numeric"
               value={appFeeMonthly}
-              onChange={(event) => setAppFeeMonthly(event.target.value)}
+              onChange={setAppFeeMonthly}
               disabled={isSavingStep1}
+              suffix="円/月"
+              inputMode="numeric"
             />
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Button onClick={saveStep1Params} disabled={isSavingStep1} className="h-8 text-xs">
-            <SaveIcon className="size-4" />
-            保存
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep1Params} disabled={isSavingStep1} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep1 ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>
 
       <section
-        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
         onMouseEnter={() => setActiveSection("competitor")}
         onMouseLeave={() => setActiveSection((current) => (current === "competitor" ? null : current))}
         onFocus={() => setActiveSection("competitor")}
         onBlur={() => setActiveSection((current) => (current === "competitor" ? null : current))}
       >
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">競合影響率</h2>
-          <p className="text-xs text-muted-foreground">競合店舗数に応じた需要減衰率を設定します。</p>
-        </div>
+        <SectionHeader
+          icon={UsersIcon}
+          title="競合影響率"
+          description="競合店舗数に応じた需要減衰率を設定します。"
+          accent="chart-2"
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">式</p>
-            {competitorFormulaLines.map((line, index) => (
-              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
-                {line}
-              </p>
+          <InfoTile label="式" accent="chart-2">
+            {competitorFormulaLines.map((line) => (
+              <p key={line}>{line}</p>
             ))}
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">影響範囲</p>
-            <p className="mt-1 text-xs leading-relaxed">需要予測、売上予測、損益シミュレーション全体に影響</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">競合影響率（1〜2店舗 / 3店舗 / 4店舗 / 5店舗以上）</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">需要乗数 / 売上予測 / 月次損益 など</p>
-          </div>
+          </InfoTile>
+          <InfoTile label="影響範囲">需要予測、売上予測、損益シミュレーション全体に影響</InfoTile>
+          <InfoTile label="インプット">競合影響率（1〜2店舗 / 3店舗 / 4店舗 / 5店舗以上）</InfoTile>
+          <InfoTile label="アウトプット">需要乗数 / 売上予測 / 月次損益 など</InfoTile>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1.5">
-            <Label htmlFor="competitorUpTo2Step2">競合1〜2店舗（%）</Label>
-            <Input
+            <Label htmlFor="competitorUpTo2Step2" className="text-xs font-medium">競合1〜2店舗</Label>
+            <SuffixedInput
               id="competitorUpTo2Step2"
-              inputMode="decimal"
               value={competitorUpTo2Percent}
-              onChange={(event) => setCompetitorUpTo2Percent(event.target.value)}
+              onChange={setCompetitorUpTo2Percent}
               disabled={isSavingStep2}
+              suffix="%"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="competitorFor3Step2">競合3店舗（%）</Label>
-            <Input
+            <Label htmlFor="competitorFor3Step2" className="text-xs font-medium">競合3店舗</Label>
+            <SuffixedInput
               id="competitorFor3Step2"
-              inputMode="decimal"
               value={competitorFor3Percent}
-              onChange={(event) => setCompetitorFor3Percent(event.target.value)}
+              onChange={setCompetitorFor3Percent}
               disabled={isSavingStep2}
+              suffix="%"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="competitorFor4Step2">競合4店舗（%）</Label>
-            <Input
+            <Label htmlFor="competitorFor4Step2" className="text-xs font-medium">競合4店舗</Label>
+            <SuffixedInput
               id="competitorFor4Step2"
-              inputMode="decimal"
               value={competitorFor4Percent}
-              onChange={(event) => setCompetitorFor4Percent(event.target.value)}
+              onChange={setCompetitorFor4Percent}
               disabled={isSavingStep2}
+              suffix="%"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="competitorOver4Step2">競合5店舗以上（%）</Label>
-            <Input
+            <Label htmlFor="competitorOver4Step2" className="text-xs font-medium">競合5店舗以上</Label>
+            <SuffixedInput
               id="competitorOver4Step2"
-              inputMode="decimal"
               value={competitorOver4Percent}
-              onChange={(event) => setCompetitorOver4Percent(event.target.value)}
+              onChange={setCompetitorOver4Percent}
               disabled={isSavingStep2}
+              suffix="%"
             />
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Button onClick={saveStep2Params} disabled={isSavingStep2} className="h-8 text-xs">
-            <SaveIcon className="size-4" />
-            保存
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep2Params} disabled={isSavingStep2} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep2 ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>
 
       <section
-        className="rounded-lg border border-border bg-card p-5 space-y-4"
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
         onMouseEnter={() => setActiveSection("adCost")}
         onMouseLeave={() => setActiveSection((current) => (current === "adCost" ? null : current))}
         onFocus={() => setActiveSection("adCost")}
         onBlur={() => setActiveSection((current) => (current === "adCost" ? null : current))}
       >
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">広告費テーブル</h2>
-          <p className="text-xs text-muted-foreground">月次広告費のルールを年次・月次区分で設定します。</p>
-        </div>
+        <SectionHeader
+          icon={MegaphoneIcon}
+          title="広告費テーブル"
+          description="月次広告費のルールを年次・月次区分で設定します。"
+          accent="chart-4"
+        />
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">式</p>
-            {adCostFormulaLines.map((line, index) => (
-              <p key={line} className={`${index === 0 ? "mt-1 " : ""}text-xs leading-relaxed`}>
-                {line}
-              </p>
+          <InfoTile label="式" accent="chart-4">
+            {adCostFormulaLines.map((line) => (
+              <p key={line}>{line}</p>
             ))}
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">影響範囲</p>
-            <p className="mt-1 text-xs leading-relaxed">月次販促費、損益推移、投資回収期間に影響</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">インプット</p>
-            <p className="mt-1 text-xs leading-relaxed">広告費テーブル（1年目1月〜3年目以降）</p>
-          </div>
-          <div className="rounded-md border border-border/70 bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">アウトプット</p>
-            <p className="mt-1 text-xs leading-relaxed">月次広告費 / 月次損益 / 累積キャッシュフロー など</p>
-          </div>
+          </InfoTile>
+          <InfoTile label="影響範囲">月次販促費、損益推移、投資回収期間に影響</InfoTile>
+          <InfoTile label="インプット">広告費テーブル（1年目1月〜3年目以降）</InfoTile>
+          <InfoTile label="アウトプット">月次広告費 / 月次損益 / 累積キャッシュフロー など</InfoTile>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear1Month1Step3">1年目 1月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear1Month1Step3" className="text-xs font-medium">1年目 1月</Label>
+            <SuffixedInput
               id="adCostYear1Month1Step3"
-              inputMode="numeric"
               value={adCostYear1Month1}
-              onChange={(event) => setAdCostYear1Month1(event.target.value)}
+              onChange={setAdCostYear1Month1}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear1Month2Step3">1年目 2月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear1Month2Step3" className="text-xs font-medium">1年目 2月</Label>
+            <SuffixedInput
               id="adCostYear1Month2Step3"
-              inputMode="numeric"
               value={adCostYear1Month2}
-              onChange={(event) => setAdCostYear1Month2(event.target.value)}
+              onChange={setAdCostYear1Month2}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear1Month34Step3">1年目 3〜4月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear1Month34Step3" className="text-xs font-medium">1年目 3〜4月</Label>
+            <SuffixedInput
               id="adCostYear1Month34Step3"
-              inputMode="numeric"
               value={adCostYear1Month3To4}
-              onChange={(event) => setAdCostYear1Month3To4(event.target.value)}
+              onChange={setAdCostYear1Month3To4}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear1Month512Step3">1年目 5〜12月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear1Month512Step3" className="text-xs font-medium">1年目 5〜12月</Label>
+            <SuffixedInput
               id="adCostYear1Month512Step3"
-              inputMode="numeric"
               value={adCostYear1Month5To12}
-              onChange={(event) => setAdCostYear1Month5To12(event.target.value)}
+              onChange={setAdCostYear1Month5To12}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear2MonthlyStep3">2年目 毎月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear2MonthlyStep3" className="text-xs font-medium">2年目 毎月</Label>
+            <SuffixedInput
               id="adCostYear2MonthlyStep3"
-              inputMode="numeric"
               value={adCostYear2Monthly}
-              onChange={(event) => setAdCostYear2Monthly(event.target.value)}
+              onChange={setAdCostYear2Monthly}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="adCostYear3PlusMonthlyStep3">3年目以降 毎月（円）</Label>
-            <Input
+            <Label htmlFor="adCostYear3PlusMonthlyStep3" className="text-xs font-medium">3年目以降 毎月</Label>
+            <SuffixedInput
               id="adCostYear3PlusMonthlyStep3"
-              inputMode="numeric"
               value={adCostYear3PlusMonthly}
-              onChange={(event) => setAdCostYear3PlusMonthly(event.target.value)}
+              onChange={setAdCostYear3PlusMonthly}
               disabled={isSavingStep3}
+              suffix="円"
+              inputMode="numeric"
             />
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Button onClick={saveStep3Params} disabled={isSavingStep3} className="h-8 text-xs">
-            <SaveIcon className="size-4" />
-            保存
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep3Params} disabled={isSavingStep3} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep3 ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
-          <CardTitle>式一覧</CardTitle>
-          <CardDescription>現在アクティブな式セットに含まれる定義（閲覧専用）</CardDescription>
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-chart-3/10 text-chart-3">
+              <LayersIcon className="size-4" />
+            </div>
+            <div>
+              <CardTitle className="text-base">式一覧</CardTitle>
+              <CardDescription className="text-xs">現在アクティブな式セットに含まれる定義（閲覧専用）</CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ラベル</TableHead>
-                <TableHead>計算区分</TableHead>
-                <TableHead>依存</TableHead>
-                <TableHead>定義</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.formulas.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    取得可能な式セットがありません。
-                  </TableCell>
+          <div className="overflow-hidden rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="text-xs font-medium">ラベル</TableHead>
+                  <TableHead className="text-xs font-medium">計算区分</TableHead>
+                  <TableHead className="text-xs font-medium">依存</TableHead>
+                  <TableHead className="text-xs font-medium">定義</TableHead>
                 </TableRow>
-              ) : (
-                data.formulas.map((formula) => (
-                  <TableRow key={formula.key}>
-                    <TableCell>{formula.label}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{toCalcUnitLabel(formula.phase)}</Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {formula.dependsOn.length > 0 ? formula.dependsOn.map(toFormulaLabel).join("、") : "-"}
-                    </TableCell>
-                    <TableCell className="text-xs whitespace-normal text-muted-foreground">
-                      {formula.expression || "—"}
+              </TableHeader>
+              <TableBody>
+                {data.formulas.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-muted-foreground">
+                      取得可能な式セットがありません。
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  data.formulas.map((formula) => (
+                    <TableRow key={formula.key} className="border-border/40">
+                      <TableCell className="text-xs font-medium">{formula.label}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-[10px]">{toCalcUnitLabel(formula.phase)}</Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {formula.dependsOn.length > 0 ? formula.dependsOn.map(toFormulaLabel).join("、") : "-"}
+                      </TableCell>
+                      <TableCell className="text-xs whitespace-normal text-muted-foreground">
+                        {formula.expression || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Card>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>変数定義</CardTitle>
-            <CardDescription>入力・定数・派生値・地理情報の一覧（折りたたみ表示）</CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-chart-2/10 text-chart-2">
+                <VariableIcon className="size-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base">変数定義</CardTitle>
+                <CardDescription className="text-xs">入力・定数・派生値・地理情報の一覧（折りたたみ表示）</CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <details className="group rounded-md border border-border/60">
-              <summary className="cursor-pointer list-none px-3 py-2 text-sm text-foreground [&::-webkit-details-marker]:hidden">
-                変数定義を表示する
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90" />
+                <span>変数定義を表示する</span>
               </summary>
               <div className="border-t border-border/60 p-3">
                 <Table>
@@ -905,15 +1029,23 @@ export function LogicVisualizationView() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>依存関係</CardTitle>
-            <CardDescription>式同士の依存定義（折りたたみ表示）</CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-chart-4/10 text-chart-4">
+                <GitBranchIcon className="size-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base">依存関係</CardTitle>
+                <CardDescription className="text-xs">式同士の依存定義（折りたたみ表示）</CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <details className="group rounded-md border border-border/60">
-              <summary className="cursor-pointer list-none px-3 py-2 text-sm text-foreground [&::-webkit-details-marker]:hidden">
-                依存関係を表示する
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90" />
+                <span>依存関係を表示する</span>
               </summary>
               <div className="border-t border-border/60 p-3">
                 <Table>
