@@ -106,6 +106,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenarioError, setScenarioError] = useState("")
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
+  const [isRecalculating, setIsRecalculating] = useState(false)
   const prevIncludeDepreciation = useRef(true)
   const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
 
@@ -147,31 +148,30 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       return
     }
 
-    let isCancelled = false
+    const controller = new AbortController()
 
     async function loadMasterValues() {
       try {
-        const response = await fetch("/api/master/values", { cache: "no-store" })
+        const response = await fetch("/api/master/values", { cache: "no-store", signal: controller.signal })
         const payload = await response.json().catch(() => null)
         if (!response.ok) {
           throw new Error(getErrorMessage(payload, "単価マスタの取得に失敗しました。"))
         }
 
-        if (!isCancelled) {
+        if (!controller.signal.aborted) {
           setMasterValues(Array.isArray(payload?.values) ? payload.values as MasterValue[] : [])
         }
       } catch (error) {
-        if (!isCancelled) {
-          setMasterValues(null)
-          setScenarioError(error instanceof Error ? error.message : "単価マスタの取得に失敗しました。")
-        }
+        if (controller.signal.aborted) return
+        setMasterValues(null)
+        setScenarioError(error instanceof Error ? error.message : "単価マスタの取得に失敗しました。")
       }
     }
 
     void loadMasterValues()
 
     return () => {
-      isCancelled = true
+      controller.abort()
     }
   }, [simulationRequest])
 
@@ -219,9 +219,10 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       return
     }
 
-    let cancelled = false
+    const controller = new AbortController()
 
     async function recalculateScenario() {
+      setIsRecalculating(true)
       try {
         const requestBody = {
           ...(simulationRequest ?? {}),
@@ -240,6 +241,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestBody),
+          signal: controller.signal,
         })
 
         const payload = await response.json().catch(() => null)
@@ -247,7 +249,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
         }
 
-        if (cancelled) return
+        if (controller.signal.aborted) return
 
         const computed = applyResolvedBreakdown(
           payload.data as SimulationResult,
@@ -259,14 +261,18 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         setScenarioData({ ...computed, locationType })
         prevIncludeDepreciation.current = includeDepreciation
       } catch (error) {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         setScenarioError(error instanceof Error ? error.message : "シナリオ再計算に失敗しました。")
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsRecalculating(false)
+        }
       }
     }
 
     void recalculateScenario()
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [
     franchiseRate,
@@ -498,6 +504,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           試算日: {new Date(currentData.createdAt).toLocaleDateString("ja-JP")}
         </p>
       </div>
+      {isRecalculating && (
+        <p className="text-xs text-muted-foreground">再計算中...</p>
+      )}
       {scenarioError && (
         <p className="text-xs text-destructive">{scenarioError}</p>
       )}

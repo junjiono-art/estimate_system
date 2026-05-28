@@ -17,6 +17,10 @@ type CachedSimulation = {
 const simulationCache = new Map<string, CachedSimulation>()
 const lambdaFormulaSetsBasePath = process.env.LAMBDA_FORMULA_SETS_BASE_PATH?.trim() || "/master/formula-sets"
 
+const FORMULA_SET_CACHE_TTL_MS = 60 * 1000
+let cachedActiveFormulaSet: FormulaSetRecordLike | undefined = undefined
+let cachedActiveFormulaSetAt = 0
+
 function sanitizeRate(value: unknown): 0 | 10 | 15 {
   const rate = Number(value)
   if (rate === 10 || rate === 15) return rate
@@ -45,13 +49,24 @@ function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: 
 async function getActiveFormulaSet(): Promise<FormulaSetRecordLike | undefined> {
   if (!hasLambdaGatewayConfigured()) return undefined
 
+  const now = Date.now()
+  if (cachedActiveFormulaSet !== undefined && now - cachedActiveFormulaSetAt < FORMULA_SET_CACHE_TTL_MS) {
+    return cachedActiveFormulaSet
+  }
+
   const result = await invokeLambdaGateway<{ formulaSet?: FormulaSetRecordLike }>({
     method: "GET",
     path: `${lambdaFormulaSetsBasePath}/current`,
   })
 
-  if (!result.ok || !result.data?.formulaSet) return undefined
-  return result.data.formulaSet
+  if (!result.ok || !result.data?.formulaSet) {
+    // 取得失敗時はキャッシュ更新しない（前回値を返却し、次回再試行）
+    return cachedActiveFormulaSet
+  }
+
+  cachedActiveFormulaSet = result.data.formulaSet
+  cachedActiveFormulaSetAt = now
+  return cachedActiveFormulaSet
 }
 
 function setCachedSimulation(key: string, data: ReturnType<typeof calculateSimulation>) {

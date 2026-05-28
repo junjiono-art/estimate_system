@@ -6,12 +6,31 @@ import { ClockIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
-import type { SimulationResult } from "@/lib/types"
+import type { SimulationRequestInput, SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
 import { mapHistoryItemsToResults } from "@/lib/simulation-result-mapper"
 
+// 履歴データには元の入力（floorAreaTsubo, populationByRadius 等）が含まれないため、
+// SimulationResult から復元可能な範囲で simulationRequest を組み立てる
+function buildSimulationRequestFromResult(result: SimulationResult): SimulationRequestInput {
+  const royaltyRate = (result.franchiseRate ?? 0) as 0 | 10 | 15
+  return {
+    storeName: result.storeName,
+    location: result.location,
+    scenario: result.scenario,
+    locationType: result.locationType,
+    franchiseRate: royaltyRate,
+    royaltyRate,
+    runningCostTotal: result.monthlyRunningCost,
+    initialInvestmentTotal: result.totalInitialInvestment,
+    investmentBreakdown: result.investmentBreakdown,
+    includeDepreciation: true,
+  }
+}
+
 export default function ResultPage() {
   const [data, setData] = useState<SimulationResult | null>(null)
+  const [simulationRequest, setSimulationRequest] = useState<SimulationRequestInput | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
 
@@ -32,10 +51,13 @@ export default function ResultPage() {
         const items = Array.isArray(payload?.items) ? payload.items : []
         const mapped = mapHistoryItemsToResults(items)
         if (!active) return
-        setData(mapped[0] ?? null)
+        const latest = mapped[0] ?? null
+        setData(latest)
+        setSimulationRequest(latest ? buildSimulationRequestFromResult(latest) : null)
       } catch (error) {
         if (!active) return
         setData(null)
+        setSimulationRequest(null)
         setLoadError(error instanceof Error ? error.message : "試算結果の取得に失敗しました。")
       } finally {
         if (!active) return
@@ -63,7 +85,7 @@ export default function ResultPage() {
               <p className="text-sm text-muted-foreground">試算結果を読み込み中です...</p>
             </div>
           ) : data ? (
-            <ResultTabs data={data} />
+            <ResultTabs data={data} simulationRequest={simulationRequest} />
           ) : (
             <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 py-16">
               <ClockIcon className="size-8 text-muted-foreground/40" />
