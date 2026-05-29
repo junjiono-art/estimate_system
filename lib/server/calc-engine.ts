@@ -423,6 +423,19 @@ export function calculateSimulation(
   const breakevenMembers = contributionMargin > 0 ? Math.round(fixedCostForBreakeven / contributionMargin) : undefined
   const simpleBreakevenMembers = memberFee > 0 ? Math.ceil(fixedCostForBreakeven / memberFee) : undefined
 
+  // 損益分岐点の4パターン（事業計画 I6-I9）。
+  // 広告費=年1の定常月額(O66=12ヶ月目)、減価償却=資産別月額(O72)。減価償却計上の有無に関わらず常に算出。
+  const adCostForBreakeven = getMonthlyAdCost(12, calcParams)
+  const depreciationForBreakeven = Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation))
+  const breakevenVariants = contributionMargin > 0
+    ? {
+        fixedOnly: Math.round(fixedCostForBreakeven / contributionMargin),
+        withAdCost: Math.round((fixedCostForBreakeven + adCostForBreakeven) / contributionMargin),
+        withDepreciation: Math.round((fixedCostForBreakeven + depreciationForBreakeven) / contributionMargin),
+        withAdCostAndDepreciation: Math.round((fixedCostForBreakeven + adCostForBreakeven + depreciationForBreakeven) / contributionMargin),
+      }
+    : undefined
+
   const interiorCostInput = Number(input.investmentBreakdown?.interiorCost)
   const interiorCost = Number.isFinite(interiorCostInput) && interiorCostInput >= 0
     ? Math.round(interiorCostInput)
@@ -451,6 +464,7 @@ export function calculateSimulation(
     paybackMonths: estimatePaybackMonths(rows, initialInvestment),
     breakevenMembers,
     simpleBreakevenMembers,
+    breakevenVariants,
     formulaSetVersion: options?.formulaSet?.setVersion,
     averagePrice,
     capacity: {

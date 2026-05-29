@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { DownloadIcon, SaveIcon } from "lucide-react"
+import { ChevronRightIcon, DownloadIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -530,6 +530,39 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
       {/* KPIカード */}
       <KpiCards data={currentData} />
+
+      {/* 損益分岐点の詳細パターン（折り畳み。既定はメイン=固定費のみのみ表示） */}
+      {currentData.breakevenVariants && (
+        <details className="group rounded-lg border border-border bg-card">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm transition-colors hover:bg-muted/40 [&::-webkit-details-marker]:hidden">
+            <div className="flex items-center gap-2">
+              <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90" />
+              <span className="font-medium text-foreground">損益分岐点の詳細パターン</span>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              メイン（固定費のみ）:{" "}
+              <span className="font-semibold text-foreground">{currentData.breakevenVariants.fixedOnly.toLocaleString()} 人</span>
+            </span>
+          </summary>
+          <div className="grid grid-cols-2 gap-3 border-t border-border px-4 py-4 md:grid-cols-4">
+            {[
+              { label: "固定費のみ", sub: "メイン表示", value: currentData.breakevenVariants.fixedOnly, accent: "text-chart-3" },
+              { label: "＋広告費", sub: "広告あり・償却なし", value: currentData.breakevenVariants.withAdCost, accent: "text-chart-1" },
+              { label: "＋減価償却", sub: "広告なし・償却あり", value: currentData.breakevenVariants.withDepreciation, accent: "text-chart-4" },
+              { label: "＋広告費＋減価償却", sub: "広告あり・償却あり", value: currentData.breakevenVariants.withAdCostAndDepreciation, accent: "text-chart-2" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-md border border-border/60 bg-muted/20 p-3">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{item.label}</p>
+                <p className="text-[9px] text-muted-foreground/70">{item.sub}</p>
+                <p className={`mt-1 text-lg font-bold tracking-tight ${item.accent}`}>{item.value.toLocaleString()} 人</p>
+              </div>
+            ))}
+          </div>
+          <p className="border-t border-border/50 px-4 py-2 text-[10px] text-muted-foreground">
+            固定費（家賃＋ランニング）に広告費・減価償却を加えた場合の損益分岐会員数。限界利益単価（平均単価−変動費）で除算。
+          </p>
+        </details>
+      )}
 
       {/* タブ切替 */}
       <Tabs defaultValue="chart">

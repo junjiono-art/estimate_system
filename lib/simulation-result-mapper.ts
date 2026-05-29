@@ -41,6 +41,13 @@ export type HistoryApiResult = {
     monthlyFranchiseCost?: number
     monthlyProfit?: number
     paybackMonths?: number
+    breakevenMembers?: number
+    breakevenVariants?: {
+      fixedOnly?: number
+      withAdCost?: number
+      withDepreciation?: number
+      withAdCostAndDepreciation?: number
+    }
     averagePrice?: number
     capacity?: { maxMembers?: number; concurrentUsers?: number; parkingSpaces?: number }
     annualProjection?: Array<{
@@ -145,6 +152,15 @@ export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult
     monthlyFranchiseCost: toNumber(item.result.monthlyFranchiseCost),
     monthlyProfit: toNumber(item.result.monthlyProfit),
     paybackMonths: toNumber(item.result.paybackMonths),
+    breakevenMembers: item.result.breakevenMembers != null ? toNumber(item.result.breakevenMembers) : undefined,
+    breakevenVariants: item.result.breakevenVariants
+      ? {
+          fixedOnly: toNumber(item.result.breakevenVariants.fixedOnly),
+          withAdCost: toNumber(item.result.breakevenVariants.withAdCost),
+          withDepreciation: toNumber(item.result.breakevenVariants.withDepreciation),
+          withAdCostAndDepreciation: toNumber(item.result.breakevenVariants.withAdCostAndDepreciation),
+        }
+      : undefined,
     rating: typeof item.rating === "number" ? item.rating : undefined,
     averagePrice: item.result.averagePrice != null ? toNumber(item.result.averagePrice) : undefined,
     capacity: item.result.capacity

@@ -173,6 +173,17 @@ export interface SimulationResult {
   // 損益分岐点
   breakevenMembers?: number
   simpleBreakevenMembers?: number
+  /** 損益分岐会員数の4パターン（事業計画 I6-I9）。固定費に広告費/減価償却を加えるかで変動 */
+  breakevenVariants?: {
+    /** 固定費のみ（メイン。= breakevenMembers） I6/D4 */
+    fixedOnly: number
+    /** ＋広告費 I7 */
+    withAdCost: number
+    /** ＋減価償却 I8 */
+    withDepreciation: number
+    /** ＋広告費＋減価償却 I9 */
+    withAdCostAndDepreciation: number
+  }
   // 評価（1〜5、未評価は undefined）
   rating?: number
   // LTV（会費・継続率から算出。元スプレッドシート「LTV計算」シート相当）
