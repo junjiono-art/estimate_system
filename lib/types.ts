@@ -120,6 +120,26 @@ export interface AreaDemographics {
   }>
 }
 
+/** LTV計算結果（元スプレッドシート「LTV計算」シート相当） */
+export interface LtvResult {
+  /** 月次の期待会費（C3:C26 / 24ヶ月分） */
+  monthlyExpectedFees: number[]
+  /** 1年間LTV = SUM(C3:C14) */
+  ltv1Year: number
+  /** 半年継続率 = PRODUCT(D3:D8) */
+  halfYearRetentionRate: number
+  /** 半年離脱率 = 1 - 半年継続率 */
+  halfYearChurnRate: number
+  /** 1年継続率 = PRODUCT(D4:D14) */
+  oneYearRetentionRate: number
+  /** 1年離脱率 = 1 - 1年継続率 */
+  oneYearChurnRate: number
+  /** 獲得単価の上限目安（半年で回収）= SUM(C3:C8) */
+  acquisitionCostCapHalfYear: number
+  /** 理想の獲得単価（年間LTVの30%）= 1年間LTV × 30% */
+  idealAcquisitionCost: number
+}
+
 /** 試算結果 */
 export interface SimulationResult {
   id: string
@@ -155,6 +175,31 @@ export interface SimulationResult {
   simpleBreakevenMembers?: number
   // 評価（1〜5、未評価は undefined）
   rating?: number
+  // LTV（会費・継続率から算出。元スプレッドシート「LTV計算」シート相当）
+  ltv?: LtvResult
+  /** 平均単価（会費＋オプション。事業計画!C4） */
+  averagePrice?: number
+  /** キャパシティ（最大会員数・同時利用人数・駐車場必要台数） */
+  capacity?: {
+    maxMembers: number
+    concurrentUsers: number
+    parkingSpaces: number
+  }
+  /** 年次推移（最大10年。事業計画 R13-R22 相当） */
+  annualProjection?: {
+    year: number
+    yearEndMembers: number
+    revenue: number
+    cost: number
+    pretaxProfit: number
+    afterTaxProfit: number
+    /** 売上増加率(YoY)。1年目は undefined */
+    revenueGrowthRate?: number
+    /** 投資回収率 = 税引前利益累計 / 投資額 */
+    paybackRatio: number
+  }[]
+  /** 入金サイクル(月)。資金繰り上の売上計上ラグ */
+  cashCollectionLagMonths?: number
   // エリア人口統計（試算時に取得できた場合のみ）
   demographics?: AreaDemographics
   // 月次推移（最大120ヶ月 = 10年分）
@@ -165,6 +210,8 @@ export interface SimulationResult {
     cost: number
     profit: number
     cumulativeProfit: number
+    /** 入金サイクル反映後の累計キャッシュ */
+    cumulativeCash?: number
   }[]
 }
 
@@ -184,6 +231,102 @@ export interface CalcAdCostConfig {
   year3PlusMonthly: number
 }
 
+/** 平均単価の構成（入力欄!C81 = SUMPRODUCT(オプション単価×構成比)+会費） */
+export interface CalcPricingOption {
+  label: string
+  /** 単価（円） 入力欄!C85:C90 */
+  price: number
+  /** 加入構成比 0〜1 入力欄!E85:E90 */
+  ratio: number
+}
+
+export interface CalcPricingConfig {
+  /** 会費（税抜） 入力欄!C72 */
+  memberFeeExTax: number
+  /** オプション料金表 入力欄!C85:E90 */
+  options: CalcPricingOption[]
+}
+
+/** 継続率（LTV計算・事業計画 共通） */
+export interface CalcRetentionConfig {
+  /** 初月継続率 入力欄!C68 */
+  firstMonth: number
+  /** 2か月目以降継続率 入力欄!C69 */
+  subsequent: number
+}
+
+/** 会員獲得モデルのパラメータ（事業計画 R35-R40） */
+export interface CalcAcquisitionConfig {
+  /** 自然検索率 入力欄!C71 */
+  organicSearchRate: number
+  /** 口コミ紹介率 入力欄!C70 */
+  referralRate: number
+  /** 初月見込み客の媒体配分 入力欄!D41/D42/D43 */
+  channelSplit: { signage: number; web: number; sns: number }
+  /** SEM獲得単価(1〜2年目) 入力欄!C64 */
+  semCpaY1Y2: number
+  /** SEM獲得単価(3年目以降) 入力欄!C65 */
+  semCpaY3Plus: number
+  /** SNS広告単価 入力欄!C66 */
+  snsAdUnitCost: number
+  /** Web広告月予算（獲得計算用） 入力欄!C76 */
+  webBudgetMonthly: number
+  /** SNS広告月予算（獲得計算用） 入力欄!C77 */
+  snsBudgetMonthly: number
+  /** SNS初月の固定上乗せ 事業計画!D38(+40) */
+  snsInitialBonus: number
+}
+
+/** シナリオ別 店頭看板獲得スケジュール（事業計画 R35） */
+export interface CalcSignageScenarioConfig {
+  /** 初月基準値 = 初月見込み客×channelSplit.signage×baseFactor（アグレ1.0/標準0.7/保守0.3） */
+  baseFactor: number
+  /** 初月基準値を整数へ切り捨て（保守のみ true: ROUNDDOWN） */
+  roundDownBase: boolean
+  /** 2か月目係数（基準×factor） */
+  month2Factor: number
+  /** 3か月目係数 */
+  month3Factor: number
+  /** 4か月目係数 */
+  month4Factor: number
+  /** 5か月目以降の月次逓減率 */
+  monthlyDecay: number
+  /** 年2〜5のWeb/SNS広告効果係数（事業計画 D89/D141 等の ×N） */
+  adEffectivenessYear2to5: number
+  /** 年6〜10のWeb/SNS広告効果係数（事業計画 D299 等の ×N） */
+  adEffectivenessYear6Plus: number
+}
+
+export interface CalcSignageConfig {
+  conservative: CalcSignageScenarioConfig
+  standard: CalcSignageScenarioConfig
+  aggressive: CalcSignageScenarioConfig
+}
+
+/** キャパシティ計算のパラメータ（キャパシティ計算シート） */
+export interface CalcCapacityConfig {
+  /** 1人あたり利用回数(回/週) D9 */
+  visitsPerWeek: number
+  /** 平均滞在時間(時間) D10 */
+  avgStayHours: number
+  /** 1人当たり必要面積(坪) D12 */
+  areaPerMemberTsubo: number
+  /** 営業時間(時間/日) D14 */
+  businessHours: number
+  /** 平均稼働率 D17(=H34) */
+  avgUtilization: number
+  /** 田舎型の最大会員数係数 D18 */
+  ruralFactor: number
+  /** 駐車場利用率 D22 */
+  parkingUtilization: number
+}
+
+/** 減価償却（投資項目別の耐用年数。入力欄 D5:D16） */
+export interface CalcDepreciationConfig {
+  /** 投資コストのフィールドID → 耐用年数(年)。未掲載の項目は非償却 */
+  usefulLifeYears: Record<string, number>
+}
+
 export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
@@ -192,4 +335,15 @@ export interface CalcParameterConfig {
   appFeeMonthly: number
   competitorImpact: CalcCompetitorImpactConfig
   adCost: CalcAdCostConfig
+  // ── Excel計算モデル移植で追加 ──
+  pricing: CalcPricingConfig
+  retention: CalcRetentionConfig
+  acquisition: CalcAcquisitionConfig
+  signage: CalcSignageConfig
+  capacity: CalcCapacityConfig
+  depreciation: CalcDepreciationConfig
+  /** 法人税率 入力欄!C92 */
+  corporateTaxRate: number
+  /** 入金サイクル(月) 入力欄!C79 */
+  cashCollectionLagMonths: number
 }

@@ -41,12 +41,27 @@ export type HistoryApiResult = {
     monthlyFranchiseCost?: number
     monthlyProfit?: number
     paybackMonths?: number
+    averagePrice?: number
+    capacity?: { maxMembers?: number; concurrentUsers?: number; parkingSpaces?: number }
+    annualProjection?: Array<{
+      year?: number
+      yearEndMembers?: number
+      revenue?: number
+      cost?: number
+      pretaxProfit?: number
+      afterTaxProfit?: number
+      revenueGrowthRate?: number
+      paybackRatio?: number
+    }>
+    cashCollectionLagMonths?: number
     monthlyProjection?: Array<{
       month?: number
+      members?: number
       revenue?: number
       cost?: number
       profit?: number
       cumulativeProfit?: number
+      cumulativeCash?: number
     }>
     demographics?: {
       municipality?: {
@@ -131,14 +146,38 @@ export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult
     monthlyProfit: toNumber(item.result.monthlyProfit),
     paybackMonths: toNumber(item.result.paybackMonths),
     rating: typeof item.rating === "number" ? item.rating : undefined,
+    averagePrice: item.result.averagePrice != null ? toNumber(item.result.averagePrice) : undefined,
+    capacity: item.result.capacity
+      ? {
+          maxMembers: toNumber(item.result.capacity.maxMembers),
+          concurrentUsers: toNumber(item.result.capacity.concurrentUsers),
+          parkingSpaces: toNumber(item.result.capacity.parkingSpaces),
+        }
+      : undefined,
+    annualProjection: Array.isArray(item.result.annualProjection)
+      ? item.result.annualProjection.map((row, index) => ({
+          year: toNumber(row.year) || index + 1,
+          yearEndMembers: toNumber(row.yearEndMembers),
+          revenue: toNumber(row.revenue),
+          cost: toNumber(row.cost),
+          pretaxProfit: toNumber(row.pretaxProfit),
+          afterTaxProfit: toNumber(row.afterTaxProfit),
+          revenueGrowthRate: row.revenueGrowthRate != null ? toNumber(row.revenueGrowthRate) : undefined,
+          paybackRatio: toNumber(row.paybackRatio),
+        }))
+      : undefined,
+    cashCollectionLagMonths:
+      item.result.cashCollectionLagMonths != null ? toNumber(item.result.cashCollectionLagMonths) : undefined,
     demographics: mapDemographics(item.result.demographics),
     monthlyProjection: Array.isArray(item.result.monthlyProjection)
       ? item.result.monthlyProjection.map((row, index) => ({
           month: toNumber(row.month) || index + 1,
+          members: row.members != null ? toNumber(row.members) : undefined,
           revenue: toNumber(row.revenue),
           cost: toNumber(row.cost),
           profit: toNumber(row.profit),
           cumulativeProfit: toNumber(row.cumulativeProfit),
+          cumulativeCash: row.cumulativeCash != null ? toNumber(row.cumulativeCash) : undefined,
         }))
       : [],
   }

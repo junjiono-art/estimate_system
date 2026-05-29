@@ -13,3 +13,5 @@ data/regression/
 lambda/
 amplify.yml
 .env.production
+XLSX/
+claude/

@@ -1,6 +1,6 @@
 import { ErrorCode } from "@/lib/server/api-error"
 import { invokeLambdaGateway } from "@/lib/server/lambda-gateway"
-import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
+import { DEFAULT_CALC_PARAMS, normalizeCalcParams } from "@/lib/default-calc-params"
 import type { CalcParameterConfig } from "@/lib/types"
 
 const lambdaCalcParamsBasePath = process.env.LAMBDA_CALC_PARAMS_BASE_PATH?.trim() || "/api/master/calc-params"
@@ -45,7 +45,7 @@ export async function getCalcParamsFromDb(options?: {
     throw new Error(`${code}: ${message}`)
   }
 
-  cachedParams = result.data.params
+  cachedParams = normalizeCalcParams(result.data.params)
   cachedAt = now
   return cachedParams
 }

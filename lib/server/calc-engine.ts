@@ -1,8 +1,12 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 import type { CalcParameterConfig } from "@/lib/types"
 import type { FormulaSetRecordLike } from "@/lib/formula-types"
-import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
-import { buildFormulaContext, buildInitialPhaseContext, evaluateFormulaByKey } from "@/lib/server/formula-runtime"
+import { computeAveragePrice } from "@/lib/average-price"
+import { computeCapacity } from "@/lib/capacity"
+import { simulateMemberGrowth } from "@/lib/member-growth"
+import { computeMonthlyDepreciation } from "@/lib/depreciation"
+import { calculateLtv } from "@/lib/ltv"
+import { buildFormulaContext, buildInitialPhaseContext } from "@/lib/server/formula-runtime"
 import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
@@ -11,21 +15,6 @@ import { FormulaEvaluationEngine } from "@/lib/server/formula-evaluation-engine"
 
 export type SimulateInput = SimulationRequestInput
 
-type MonthlySeed = {
-  month: number
-  members: number
-  revenue: number
-  cost: number
-  profit: number
-}
-
-type AnnualSeed = {
-  year: number
-  yearEndMembers: number
-  annualRevenue: number
-  annualCost: number
-}
-
 export type RegressionMonthlyRow = {
   month: number
   members: number
@@ -33,6 +22,8 @@ export type RegressionMonthlyRow = {
   cost: number
   profit: number
 }
+
+const PROJECTION_MONTHS = 120
 
 const INITIAL_INVESTMENT = 23_110_000
 const INTERIOR_COST = 15_000_000
@@ -45,107 +36,22 @@ const BASE_SUBURBAN_ESTIMATED_JOINERS = 137 + 316
 const BASE_RURAL_ESTIMATED_JOINERS = 137 + 316 + 65
 const POPULATION_FACTOR = 1 - 0.26
 
-const MONTHLY_SEEDS: Record<ScenarioType, MonthlySeed[]> = {
-  conservative: [
-    { month: 1, members: 210, revenue: 702_785, cost: 1_752_597, profit: -1_049_813 },
-    { month: 2, members: 274, revenue: 916_530, cost: 1_520_079, profit: -603_549 },
-    { month: 3, members: 323, revenue: 1_081_773, cost: 1_485_862, profit: -404_089 },
-    { month: 4, members: 363, revenue: 1_214_904, cost: 1_490_522, profit: -275_618 },
-    { month: 5, members: 400, revenue: 1_337_666, cost: 1_434_818, profit: -97_153 },
-    { month: 6, members: 434, revenue: 1_450_727, cost: 1_438_775, profit: 11_951 },
-    { month: 7, members: 465, revenue: 1_554_087, cost: 1_442_393, profit: 111_694 },
-    { month: 8, members: 493, revenue: 1_647_747, cost: 1_445_671, profit: 202_076 },
-    { month: 9, members: 518, revenue: 1_732_376, cost: 1_448_633, profit: 283_742 },
-    { month: 10, members: 541, revenue: 1_807_973, cost: 1_451_279, profit: 356_693 },
-    { month: 11, members: 561, revenue: 1_875_207, cost: 1_453_632, profit: 421_575 },
-    { month: 12, members: 578, revenue: 1_934_748, cost: 1_455_716, profit: 479_032 },
-  ],
-  standard: [
-    { month: 1, members: 304, revenue: 1_015_542, cost: 1_763_544, profit: -748_002 },
-    { month: 2, members: 393, revenue: 1_314_251, cost: 1_533_999, profit: -219_748 },
-    { month: 3, members: 456, revenue: 1_525_320, cost: 1_501_386, profit: 23_934 },
-    { month: 4, members: 498, revenue: 1_664_807, cost: 1_506_268, profit: 158_538 },
-    { month: 5, members: 534, revenue: 1_784_892, cost: 1_450_471, profit: 334_421 },
-    { month: 6, members: 565, revenue: 1_889_925, cost: 1_454_147, profit: 435_778 },
-    { month: 7, members: 592, revenue: 1_980_909, cost: 1_457_332, profit: 523_577 },
-    { month: 8, members: 615, revenue: 2_058_513, cost: 1_460_048, profit: 598_465 },
-    { month: 9, members: 635, revenue: 2_124_410, cost: 1_462_354, profit: 662_055 },
-    { month: 10, members: 652, revenue: 2_179_602, cost: 1_464_286, profit: 715_316 },
-    { month: 11, members: 665, revenue: 2_225_429, cost: 1_465_890, profit: 759_539 },
-    { month: 12, members: 677, revenue: 2_263_227, cost: 1_467_213, profit: 796_014 },
-  ],
-  aggressive: [
-    { month: 1, members: 374, revenue: 1_250_027, cost: 1_771_751, profit: -521_724 },
-    { month: 2, members: 539, revenue: 1_803_624, cost: 1_551_127, profit: 252_497 },
-    { month: 3, members: 609, revenue: 2_037_774, cost: 1_519_322, profit: 518_452 },
-    { month: 4, members: 644, revenue: 2_155_518, cost: 1_523_443, profit: 632_075 },
-    { month: 5, members: 672, revenue: 2_248_509, cost: 1_466_698, profit: 781_811 },
-    { month: 6, members: 695, revenue: 2_324_106, cost: 1_469_344, profit: 854_762 },
-    { month: 7, members: 713, revenue: 2_384_651, cost: 1_471_463, profit: 913_188 },
-    { month: 8, members: 725, revenue: 2_425_125, cost: 1_472_879, profit: 952_246 },
-    { month: 9, members: 725, revenue: 2_425_125, cost: 1_472_879, profit: 952_246 },
-    { month: 10, members: 725, revenue: 2_425_125, cost: 1_472_879, profit: 952_246 },
-    { month: 11, members: 725, revenue: 2_425_125, cost: 1_472_879, profit: 952_246 },
-    { month: 12, members: 725, revenue: 2_425_125, cost: 1_472_879, profit: 952_246 },
-  ],
+// 回帰テスト/未入力時の基準ケース（元Excel「入力欄」の基準値。data/regression/input-base.csv 準拠）
+const BASE_REGRESSION_INPUT: SimulateInput = {
+  storeName: "regression-base",
+  locationType: "suburban",
+  floorAreaTsubo: BASE_FLOOR_AREA_TSUBO,
+  rentPerTsubo: DEFAULT_MONTHLY_RENT,
+  runningCostTotal: DEFAULT_MONTHLY_RUNNING,
+  initialInvestmentTotal: INITIAL_INVESTMENT,
+  competitorCount: 2,
+  royaltyRate: 0,
+  franchiseRate: 0,
+  populationByRadius: { km1Ring: 11_416, km3Ring: 39_505, km5Ring: 64_764 },
 }
 
-const ANNUAL_SEEDS: Record<ScenarioType, AnnualSeed[]> = {
-  conservative: [
-    { year: 1, yearEndMembers: 578, annualRevenue: 17_256_521, annualCost: 17_819_978 },
-    { year: 2, yearEndMembers: 583, annualRevenue: 23_362_484, annualCost: 16_753_687 },
-    { year: 3, yearEndMembers: 585, annualRevenue: 23_445_440, annualCost: 17_476_590 },
-    { year: 4, yearEndMembers: 585, annualRevenue: 23_467_182, annualCost: 16_757_351 },
-    { year: 5, yearEndMembers: 585, annualRevenue: 23_472_869, annualCost: 16_757_550 },
-    { year: 6, yearEndMembers: 558, annualRevenue: 22_779_450, annualCost: 16_733_281 },
-    { year: 7, yearEndMembers: 550, annualRevenue: 22_198_424, annualCost: 16_712_945 },
-    { year: 8, yearEndMembers: 548, annualRevenue: 22_034_853, annualCost: 16_707_220 },
-    { year: 9, yearEndMembers: 548, annualRevenue: 21_987_354, annualCost: 17_425_557 },
-    { year: 10, yearEndMembers: 547, annualRevenue: 21_973_974, annualCost: 16_705_089 },
-  ],
-  standard: [
-    { year: 1, yearEndMembers: 677, annualRevenue: 22_026_825, annualCost: 17_986_939 },
-    { year: 2, yearEndMembers: 691, annualRevenue: 27_542_396, annualCost: 17_619_984 },
-    { year: 3, yearEndMembers: 693, annualRevenue: 27_791_264, annualCost: 16_908_694 },
-    { year: 4, yearEndMembers: 694, annualRevenue: 27_839_432, annualCost: 16_910_380 },
-    { year: 5, yearEndMembers: 694, annualRevenue: 27_848_798, annualCost: 16_910_708 },
-    { year: 6, yearEndMembers: 670, annualRevenue: 27_201_875, annualCost: 16_888_066 },
-    { year: 7, yearEndMembers: 665, annualRevenue: 26_742_941, annualCost: 16_872_003 },
-    { year: 8, yearEndMembers: 664, annualRevenue: 26_647_943, annualCost: 16_868_678 },
-    { year: 9, yearEndMembers: 663, annualRevenue: 26_627_873, annualCost: 16_867_976 },
-    { year: 10, yearEndMembers: 663, annualRevenue: 26_624_862, annualCost: 17_587_870 },
-  ],
-  aggressive: [
-    { year: 1, yearEndMembers: 725, annualRevenue: 26_329_833, annualCost: 18_137_544 },
-    { year: 2, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 17_674_553 },
-    { year: 3, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 4, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 5, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 6, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 7, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 8, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 9, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-    { year: 10, yearEndMembers: 725, annualRevenue: 29_101_500, annualCost: 16_954_553 },
-  ],
-}
-
-function distributeToMonths(total: number): number[] {
-  const base = Math.trunc(total / 12)
-  const remainder = total - base * 12
-  return Array.from({ length: 12 }, (_, index) => {
-    if (remainder > 0) return index < remainder ? base + 1 : base
-    if (remainder < 0) return index < Math.abs(remainder) ? base - 1 : base
-    return base
-  })
-}
-
-function buildMemberSeries(start: number, end: number): number[] {
-  const members = Array.from({ length: 12 }, (_, index) => {
-    const progress = (index + 1) / 12
-    return Math.round(start + (end - start) * progress)
-  })
-  members[11] = end
-  return members
+function roundDown1(value: number): number {
+  return Math.floor(value * 10) / 10
 }
 
 function getCompetitorImpactRate(competitorCount: number, calcParams: CalcParameterConfig): number {
@@ -175,6 +81,7 @@ function getPaymentFee(revenue: number, calcParams: CalcParameterConfig): number
   return Math.round(revenue * calcParams.paymentFeeRate)
 }
 
+// 広告費（コスト側）の月次スケジュール。事業計画 R42（Web広告費+SNS広告費）。
 function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig): number {
   const year = Math.ceil(month / 12)
   const monthInYear = ((month - 1) % 12) + 1
@@ -219,18 +126,8 @@ function resolveFranchiseRate(input?: SimulateInput): 0 | 10 | 15 {
   return 0
 }
 
-function applyDepreciation(rows: RegressionMonthlyRow[], initialInvestment: number, includeDepreciation: boolean): RegressionMonthlyRow[] {
-  if (!includeDepreciation) return rows
-  const depreciationPerMonth = Math.round(initialInvestment / 6 / 12)
-  return rows.map((row) => ({
-    ...row,
-    cost: row.cost + depreciationPerMonth,
-    profit: row.revenue - (row.cost + depreciationPerMonth),
-  }))
-}
-
 /**
- * 見込み人数テーブル VLOOKUP (見込み人数テーブル.csv A5:C77)
+ * 見込み人数テーブル VLOOKUP (見込み人数テーブル A5:C77)
  * 20〜59歳人口 → 見込み人数係数（負の割合）
  * 0→-16%, 5000→-17%, ..., 360000(72ステップ)→-88%
  */
@@ -240,14 +137,15 @@ function lookupMemberCoefficient(population: number): number {
 }
 
 /**
- * 初月見込み入会人数を計算する
- * =IF(B38="都市型",E60*(1+E38),IF(B38="郊外型",(E60+F60)*(1+E38),IF(B38="田舎型",(E60+F60+G60)*(1+E38))))*(1-E78)
+ * 初月見込み入会人数 G38 を計算する（未丸め）。
+ * =IF(都市型,E60*(1+E38),IF(郊外型,E60+F60*(1+E38),IF(田舎型,E60+F60+G60*(1+E38))))*(1-E78)
  *
  * E60 = km1Ring × 1.20%、F60 = km3Ring × 0.80%、G60 = km5Ring × 0.10%
  * E38 = VLOOKUP(累計人口, 見込み人数テーブル) ← 立地タイプで累計範囲が変わる
  * E78 = 競合影響率
  *
- * populationByRadius が未設定の場合は従来ロジック（固定シード値ベース）にフォールバック
+ * populationByRadius が未設定の場合は従来ロジック（立地タイプ×坪数ベース）にフォールバック。
+ * 会員数成長モデルが精度を要するため、丸めは行わない。
  */
 function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterConfig): number {
   const pop = input.populationByRadius
@@ -255,21 +153,18 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
   const competitorCount = Math.max(0, input.competitorCount ?? 0)
 
   if (!pop) {
-    // フォールバック: 従来の立地タイプ×坪数ベース
     const locationMultiplier = getDemandMultiplier(locationType, competitorCount, calcParams)
     const floorArea = Number(input.floorAreaTsubo)
     const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
-    return Math.round(Math.max(0.2, locationMultiplier * areaMultiplier) * BASE_SUBURBAN_FIRST_MONTH_JOINERS)
+    return Math.max(0.2, locationMultiplier * areaMultiplier) * BASE_SUBURBAN_FIRST_MONTH_JOINERS
   }
 
   const { km1Ring, km3Ring, km5Ring } = pop
 
-  // E60/F60/G60: 各圏の見込み入会人数（距離別見込%）
-  const e60 = km1Ring * 0.012  // 1km圏: 1.20%
-  const f60 = km3Ring * 0.008  // 3km圏リング: 0.80%
-  const g60 = km5Ring * 0.001  // 5km圏リング: 0.10%
+  const e60 = km1Ring * 0.012 // 1km圏: 1.20%
+  const f60 = km3Ring * 0.008 // 3km圏リング: 0.80%
+  const g60 = km5Ring * 0.001 // 5km圏リング: 0.10%
 
-  // C38: VLOOKUPの検索値（立地タイプ別の累計人口）
   const lookupPop =
     locationType === "urban"
       ? km1Ring
@@ -277,12 +172,8 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
         ? km1Ring + km3Ring
         : km1Ring + km3Ring + km5Ring
 
-  // E38: 見込み人数係数（負値）
   const e38 = lookupMemberCoefficient(lookupPop)
 
-  // J38: 見込み入会人数
-  // 式: 都市型=E60*(1+E38), 郊外型=E60+F60*(1+E38), 田舎型=E60+F60+G60*(1+E38)
-  // 係数(e38)は立地タイプの「最外圏」にのみ適用される点に注意
   let baseJoiners: number
   if (locationType === "urban") {
     baseJoiners = e60 * (1 + e38)
@@ -292,13 +183,12 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
     baseJoiners = e60 + f60 + g60 * (1 + e38)
   }
 
-  // E78: 競合影響補正
   const competitorImpact = getCompetitorImpactRate(competitorCount, calcParams)
-  return Math.max(1, Math.round(baseJoiners * (1 - competitorImpact)))
+  return Math.max(0, baseJoiners * (1 - competitorImpact))
 }
 
 function buildMonthlyDerivedContext(
-  row: RegressionMonthlyRow,
+  month: number,
   monthlyRevenue: number,
   members: number,
   monthlyRent: number,
@@ -306,7 +196,7 @@ function buildMonthlyDerivedContext(
   adCostMonthly: number,
 ): Record<string, number> {
   return {
-    month: row.month,
+    month,
     members,
     monthlyRevenue,
     monthlyRent,
@@ -315,239 +205,112 @@ function buildMonthlyDerivedContext(
   }
 }
 
-function evaluateFormulaWithFallback(args: {
-  formulaSet?: FormulaSetRecordLike
-  formulaKey: string
-  context: Record<string, number>
-  fallbackValue: number
-  min?: number
-  max?: number
-}): number {
-  try {
-    const evaluated = evaluateFormulaByKey(args.formulaSet, args.formulaKey, args.context)
-    if (evaluated == null) return args.fallbackValue
-
-    let value = Math.round(evaluated)
-    if (typeof args.min === "number") value = Math.max(args.min, value)
-    if (typeof args.max === "number") value = Math.min(args.max, value)
-    return value
-  } catch {
-    // Formula errors must never break simulation: fallback keeps legacy behavior.
-    return args.fallbackValue
-  }
-}
-
-// ────────────────────────────────────────────────────
-// 【変更前】ハードコード順序での計算
-// 【変更後】FormulaEvaluationEngine による依存グラフベースの計算
-// ────────────────────────────────────────────────────
-/*
-← コメントアウト保持（ロールバック可能）
-
-function applyCalcParams(
-  rows: RegressionMonthlyRow[],
-  input: SimulateInput | undefined,
+// 初月見込み客（G38）。formulaSet に pre 層の override があれば優先する。
+function resolveInitialJoinersWithFormula(
+  input: SimulateInput,
   calcParams: CalcParameterConfig,
-  formulaSet?: FormulaSetRecordLike,
-): RegressionMonthlyRow[] {
-  if (!input) return rows
-
-  const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
-  const initialJoiners = resolveInitialJoiners(input, calcParams)
-  const demandMultiplier = Math.max(0.2, initialJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS)
-  const monthlyRent = resolveMonthlyRent(input)
-  const monthlyRunning = resolveMonthlyRunning(input)
-  const fixedNonAdCost = monthlyRent + monthlyRunning
-
-  return rows.map((row) => {
-    const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
-    const members = Math.max(0, Math.round(row.members * demandMultiplier))
-    const adCost = getMonthlyAdCost(row.month, calcParams)
-    const defaultPaymentFee = getPaymentFee(revenue, calcParams)
-    const defaultRoyaltyRaw = Math.round(revenue * royaltyRate)
-    const defaultRoyalty = Math.min(defaultRoyaltyRaw, calcParams.royaltyCapMonthly)
-    const defaultAppFee = defaultRoyalty > 0 ? calcParams.appFeeMonthly : 0
-
-    const baseContext = buildFormulaContext({
-      input,
-      calcParams,
-      derived: buildMonthlyDerivedContext(row, revenue, members, monthlyRent, monthlyRunning, adCost),
-    })
-
-    // Each formula is optional. When missing or invalid, we fallback to existing deterministic logic.
-    const paymentFee = evaluateFormulaWithFallback({
-      formulaSet,
-      formulaKey: "paymentFee",
-      context: baseContext,
-      fallbackValue: defaultPaymentFee,
-      min: 0,
-    })
-
-    const royalty = evaluateFormulaWithFallback({
-      formulaSet,
-      formulaKey: "monthlyRoyalty",
-      context: {
-        ...baseContext,
-        paymentFee,
-      },
-      fallbackValue: defaultRoyalty,
-      min: 0,
-      max: calcParams.royaltyCapMonthly,
-    })
-
-    const appFee = evaluateFormulaWithFallback({
-      formulaSet,
-      formulaKey: "appFee",
-      context: {
-        ...baseContext,
-        paymentFee,
-        monthlyRoyalty: royalty,
-      },
-      fallbackValue: defaultAppFee,
-      min: 0,
-    })
-
-    const defaultCost = fixedNonAdCost + adCost + paymentFee + royalty + appFee
-    const cost = evaluateFormulaWithFallback({
-      formulaSet,
-      formulaKey: "monthlyCost",
-      context: {
-        ...baseContext,
-        paymentFee,
-        monthlyRoyalty: royalty,
-      },
-      fallbackValue: defaultCost,
-      min: 0,
-    })
-
-    return {
-      month: row.month,
-      members,
-      revenue,
-      cost,
-      profit: revenue - cost,
-    }
-  })
-}
-*/
-
-// ────────────────────────────────────────────────────
-// 【新規実装】FormulaEvaluationEngine を使用した依存グラフベース計算
-// ────────────────────────────────────────────────────
-function applyCalcParams(
-  rows: RegressionMonthlyRow[],
-  input: SimulateInput | undefined,
-  calcParams: CalcParameterConfig,
-  formulaSet?: FormulaSetRecordLike,
-): RegressionMonthlyRow[] {
-  if (!input) return rows
-
-  // Step 1: 初期値計算層（pre）
+  engine?: FormulaEvaluationEngine,
+): number {
+  const fallback = resolveInitialJoiners(input, calcParams)
+  if (!engine) return fallback
   try {
-    const engine = new FormulaEvaluationEngine(formulaSet)
-
-    // Pre phase: initialJoiners, demandMultiplier の計算
     const preContext = buildInitialPhaseContext(input, calcParams)
-    const preResults = engine.evaluatePhase("pre", preContext, {
-      initialJoiners: resolveInitialJoiners(input, calcParams),
-      demandMultiplier: Math.max(0.2, resolveInitialJoiners(input, calcParams) / BASE_SUBURBAN_FIRST_MONTH_JOINERS),
-    })
-
-    const initialJoiners = preResults.initialJoiners
-    const demandMultiplier = preResults.demandMultiplier
-
-    // Step 2: 既存ロジック（月別計算準備）
-    const royaltyRate = Math.max(0, resolveFranchiseRate(input)) / 100
-    const monthlyRent = resolveMonthlyRent(input)
-    const monthlyRunning = resolveMonthlyRunning(input)
-    const fixedNonAdCost = monthlyRent + monthlyRunning
-
-    // Step 3: 月別計算
-    return rows.map((row) => {
-      const revenue = Math.max(0, Math.round(row.revenue * demandMultiplier))
-      const members = Math.max(0, Math.round(row.members * demandMultiplier))
-      const adCost = getMonthlyAdCost(row.month, calcParams)
-
-      // Monthly context を構築
-      const monthlyContext = buildFormulaContext({
-        input,
-        calcParams,
-        derived: buildMonthlyDerivedContext(row, revenue, members, monthlyRent, monthlyRunning, adCost),
-        initialPhase: { initialJoiners, demandMultiplier },
-      })
-
-      // Monthly phase: paymentFee, monthlyRoyalty, appFee, monthlyCost の計算
-      const monthlyResults = engine.evaluatePhase("monthly", monthlyContext, {
-        paymentFee: getPaymentFee(revenue, calcParams),
-        monthlyRoyalty: Math.min(
-          Math.round(revenue * royaltyRate),
-          calcParams.royaltyCapMonthly,
-        ),
-        appFee: Math.min(
-          Math.round(revenue * royaltyRate),
-          calcParams.royaltyCapMonthly,
-        ) > 0 ? calcParams.appFeeMonthly : 0,
-        monthlyCost: fixedNonAdCost + adCost + getPaymentFee(revenue, calcParams),
-      })
-
-      const profit = revenue - monthlyResults.monthlyCost
-
-      return {
-        month: row.month,
-        members,
-        revenue,
-        cost: monthlyResults.monthlyCost,
-        profit,
-      }
-    })
-  } catch (error) {
-    // FormulaEvaluationEngine のエラー時はフォールバック
-    console.warn("FormulaEvaluationEngine error:", error)
-    // コメントアウト前の既存ロジックで再度処理
-    return rows
+    const pre = engine.evaluatePhase("pre", preContext, { initialJoiners: fallback, demandMultiplier: 1 })
+    return Number.isFinite(pre.initialJoiners) ? pre.initialJoiners : fallback
+  } catch {
+    return fallback
   }
 }
 
+// ────────────────────────────────────────────────────
+// 月次の会員数・売上・費用（減価償却を除く）を算出する。
+// 元Excel「事業計画」シートの移植（会員数成長＋平均単価×会員数＋費用積み上げ）。
+// 減価償却は calculateSimulation 側で includeDepreciation に応じて加算する。
+// ────────────────────────────────────────────────────
 export function buildRegressionRows(
   scenario: ScenarioType,
   input: SimulateInput | undefined,
   calcParams: CalcParameterConfig,
   formulaSet?: FormulaSetRecordLike,
 ): RegressionMonthlyRow[] {
-  const year1 = MONTHLY_SEEDS[scenario].map((row) => ({ ...row }))
-  const annualSeeds = ANNUAL_SEEDS[scenario]
-  const rows: RegressionMonthlyRow[] = [...year1]
+  const resolvedInput = input ?? BASE_REGRESSION_INPUT
 
-  let monthCursor = 12
-  let previousYearEndMembers = year1[11]?.members ?? annualSeeds[0]?.yearEndMembers ?? 0
+  const averagePrice = computeAveragePrice(calcParams.pricing)
+  const locationType = resolvedInput.locationType ?? "suburban"
+  const floorArea = Number(resolvedInput.floorAreaTsubo) || BASE_FLOOR_AREA_TSUBO
+  const capacity = computeCapacity(floorArea, locationType, calcParams.capacity)
 
-  for (const year of annualSeeds) {
-    if (year.year === 1) {
-      previousYearEndMembers = year.yearEndMembers
-      continue
+  let engine: FormulaEvaluationEngine | undefined
+  if (formulaSet) {
+    try {
+      engine = new FormulaEvaluationEngine(formulaSet)
+    } catch {
+      engine = undefined
     }
-
-    const members = buildMemberSeries(previousYearEndMembers, year.yearEndMembers)
-    const monthlyRevenue = distributeToMonths(year.annualRevenue)
-    const monthlyCost = distributeToMonths(year.annualCost)
-
-    for (let i = 0; i < 12; i += 1) {
-      monthCursor += 1
-      const revenue = monthlyRevenue[i]
-      const cost = monthlyCost[i]
-      rows.push({
-        month: monthCursor,
-        members: members[i],
-        revenue,
-        cost,
-        profit: revenue - cost,
-      })
-    }
-
-    previousYearEndMembers = year.yearEndMembers
   }
 
-  return applyCalcParams(rows, input, calcParams, formulaSet)
+  const initialJoiners = resolveInitialJoinersWithFormula(resolvedInput, calcParams, engine)
+
+  const growth = simulateMemberGrowth({
+    initialJoiners,
+    maxMembers: capacity.maxMembers,
+    months: PROJECTION_MONTHS,
+    retention: calcParams.retention,
+    acquisition: calcParams.acquisition,
+    signage: calcParams.signage[scenario],
+  })
+
+  const royaltyRate = Math.max(0, resolveFranchiseRate(resolvedInput)) / 100
+  const monthlyRent = resolveMonthlyRent(resolvedInput)
+  const monthlyRunning = resolveMonthlyRunning(resolvedInput)
+  const fixedCost = monthlyRent + monthlyRunning
+
+  return growth.map((g) => {
+    const members = Math.round(g.members)
+    // 売上は会員数を ROUNDDOWN(,1) した値 × 平均単価（事業計画 D27 = C4 × ROUNDDOWN(D31,1)）
+    const revenue = Math.round(averagePrice * roundDown1(g.members))
+    const adCost = getMonthlyAdCost(g.month, calcParams)
+
+    const defaultPaymentFee = getPaymentFee(revenue, calcParams)
+    const defaultRoyalty = Math.min(Math.round(revenue * royaltyRate), calcParams.royaltyCapMonthly)
+    const defaultAppFee = defaultRoyalty > 0 ? calcParams.appFeeMonthly : 0
+    const defaultCost = fixedCost + adCost + defaultPaymentFee + defaultRoyalty + defaultAppFee
+
+    let cost = defaultCost
+
+    if (engine) {
+      try {
+        const context = buildFormulaContext({
+          input: resolvedInput,
+          calcParams,
+          derived: buildMonthlyDerivedContext(g.month, revenue, members, monthlyRent, monthlyRunning, adCost),
+          initialPhase: { initialJoiners, demandMultiplier: 1 },
+        })
+        const results = engine.evaluatePhase("monthly", context, {
+          paymentFee: defaultPaymentFee,
+          monthlyRoyalty: defaultRoyalty,
+          appFee: defaultAppFee,
+          monthlyCost: defaultCost,
+        })
+        const paymentFee = Number.isFinite(results.paymentFee) ? results.paymentFee : defaultPaymentFee
+        const royalty = Number.isFinite(results.monthlyRoyalty) ? results.monthlyRoyalty : defaultRoyalty
+        const appFee = Number.isFinite(results.appFee) ? results.appFee : defaultAppFee
+        cost = Number.isFinite(results.monthlyCost)
+          ? results.monthlyCost
+          : fixedCost + adCost + paymentFee + royalty + appFee
+      } catch {
+        cost = defaultCost
+      }
+    }
+
+    return {
+      month: g.month,
+      members,
+      revenue,
+      cost,
+      profit: revenue - cost,
+    }
+  })
 }
 
 function estimatePaybackMonths(rows: RegressionMonthlyRow[], initialInvestment: number): number {
@@ -559,10 +322,15 @@ function estimatePaybackMonths(rows: RegressionMonthlyRow[], initialInvestment: 
   return 999
 }
 
-function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment: number) {
+function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment: number, cashLagMonths: number) {
+  const lag = Math.max(0, Math.round(cashLagMonths))
   let cumulativeProfit = -initialInvestment
-  return rows.map((row) => {
+  let cumulativeCash = -initialInvestment
+  return rows.map((row, index) => {
     cumulativeProfit += row.profit
+    // 入金サイクル: 売上は lag ヶ月後に入金（費用は当月）。
+    const laggedRevenue = index - lag >= 0 ? rows[index - lag].revenue : 0
+    cumulativeCash += laggedRevenue - row.cost
     return {
       month: row.month,
       members: row.members,
@@ -570,8 +338,40 @@ function buildMonthlyProjection(rows: RegressionMonthlyRow[], initialInvestment:
       cost: row.cost,
       profit: row.profit,
       cumulativeProfit,
+      cumulativeCash,
     }
   })
+}
+
+function buildAnnualProjection(rows: RegressionMonthlyRow[], initialInvestment: number, taxRate: number) {
+  const annual: NonNullable<SimulationResult["annualProjection"]> = []
+  let cumulativePretax = 0
+  let prevRevenue: number | undefined
+
+  for (let year = 1; year <= 10; year += 1) {
+    const slice = rows.slice((year - 1) * 12, year * 12)
+    if (slice.length === 0) break
+
+    const revenue = slice.reduce((sum, row) => sum + row.revenue, 0)
+    const cost = slice.reduce((sum, row) => sum + row.cost, 0)
+    const pretaxProfit = revenue - cost
+    cumulativePretax += pretaxProfit
+    const afterTaxProfit = pretaxProfit > 0 ? Math.round(pretaxProfit * (1 - taxRate)) : pretaxProfit
+
+    annual.push({
+      year,
+      yearEndMembers: slice[slice.length - 1].members,
+      revenue,
+      cost,
+      pretaxProfit,
+      afterTaxProfit,
+      revenueGrowthRate: prevRevenue && prevRevenue > 0 ? revenue / prevRevenue : undefined,
+      paybackRatio: initialInvestment > 0 ? cumulativePretax / initialInvestment : 0,
+    })
+    prevRevenue = revenue
+  }
+
+  return annual
 }
 
 export function calculateSimulation(
@@ -588,28 +388,40 @@ export function calculateSimulation(
   const franchiseRate = resolveFranchiseRate(input)
   const royaltyRate = Math.max(0, franchiseRate) / 100
   const includeDepreciation = input.includeDepreciation !== false
+
+  const averagePrice = computeAveragePrice(calcParams.pricing)
+  const locationType = input.locationType ?? "suburban"
+  const floorArea = Number(input.floorAreaTsubo) || BASE_FLOOR_AREA_TSUBO
+  const capacityResult = computeCapacity(floorArea, locationType, calcParams.capacity)
+
   const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams, options?.formulaSet)
-  const rows = applyDepreciation(baseRows, initialInvestment, includeDepreciation)
-  const monthlyProjection = buildMonthlyProjection(rows, initialInvestment)
+  const monthlyDepreciation = includeDepreciation
+    ? Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation))
+    : 0
+  const rows: RegressionMonthlyRow[] = baseRows.map((row) => ({
+    ...row,
+    cost: row.cost + monthlyDepreciation,
+    profit: row.revenue - (row.cost + monthlyDepreciation),
+  }))
+
+  const monthlyProjection = buildMonthlyProjection(rows, initialInvestment, calcParams.cashCollectionLagMonths)
+  const annualProjection = buildAnnualProjection(rows, initialInvestment, calcParams.corporateTaxRate)
   const year1Last = monthlyProjection[11]
 
   const monthlyRevenue = year1Last?.revenue ?? 0
   const monthlyProfit = year1Last?.profit ?? 0
   const projectedMembers = Math.max(0, year1Last?.members ?? 0)
-  const monthlyPaymentFee = getPaymentFee(monthlyRevenue, calcParams)
   const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), calcParams.royaltyCapMonthly)
   const monthlyAppFee = monthlyRoyalty > 0 ? calcParams.appFeeMonthly : 0
-  const monthlyDepreciation = includeDepreciation ? Math.round(initialInvestment / 6 / 12) : 0
-  const simpleBreakevenMembers = Math.ceil((monthlyRent + monthlyRunningCost) / MONTHLY_MEMBER_FEE_EX_TAX)
-  const averageRevenuePerMember = projectedMembers > 0 ? monthlyRevenue / projectedMembers : MONTHLY_MEMBER_FEE_EX_TAX
-  const paymentFeePerMember = projectedMembers > 0 ? monthlyPaymentFee / projectedMembers : 0
-  const royaltyPerMember = projectedMembers > 0 ? monthlyRoyalty / projectedMembers : 0
-  const netRevenuePerMember = averageRevenuePerMember - paymentFeePerMember - royaltyPerMember
-  const fixedCostForBreakeven = monthlyRent + monthlyRunningCost + getMonthlyAdCost(12, calcParams) + monthlyDepreciation + monthlyAppFee
-  if (netRevenuePerMember <= 0 || !Number.isFinite(netRevenuePerMember)) {
-    throw new Error("BREAKEVEN_UNCALCULABLE: 会員1人あたり純売上が0以下のため損益分岐会員数を計算できません。")
-  }
-  const breakevenMembers = Math.ceil(fixedCostForBreakeven / netRevenuePerMember)
+
+  // 損益分岐会員数（限界利益ベース。事業計画 D4 = O60/L4 = 固定費 / 限界利益単価）
+  const memberFee = calcParams.pricing.memberFeeExTax
+  const variableCostPerMember =
+    averagePrice * calcParams.paymentFeeRate + (royaltyRate > 0 ? averagePrice * royaltyRate : 0)
+  const contributionMargin = averagePrice - variableCostPerMember
+  const fixedCostForBreakeven = monthlyRent + monthlyRunningCost
+  const breakevenMembers = contributionMargin > 0 ? Math.round(fixedCostForBreakeven / contributionMargin) : undefined
+  const simpleBreakevenMembers = memberFee > 0 ? Math.ceil(fixedCostForBreakeven / memberFee) : undefined
 
   const interiorCostInput = Number(input.investmentBreakdown?.interiorCost)
   const interiorCost = Number.isFinite(interiorCostInput) && interiorCostInput >= 0
@@ -630,7 +442,7 @@ export function calculateSimulation(
     interiorCost,
     franchiseInitialCost: 0,
     otherInitialCost: Math.max(0, initialInvestment - (machinesCost + interiorCost)),
-      investmentBreakdown: input.investmentBreakdown,
+    investmentBreakdown: input.investmentBreakdown,
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,
@@ -640,6 +452,19 @@ export function calculateSimulation(
     breakevenMembers,
     simpleBreakevenMembers,
     formulaSetVersion: options?.formulaSet?.setVersion,
+    averagePrice,
+    capacity: {
+      maxMembers: Math.round(capacityResult.maxMembers),
+      concurrentUsers: Math.round(capacityResult.concurrentUsers),
+      parkingSpaces: capacityResult.parkingSpaces,
+    },
+    annualProjection,
+    cashCollectionLagMonths: calcParams.cashCollectionLagMonths,
     monthlyProjection,
+    ltv: calculateLtv({
+      monthlyFee: calcParams.pricing.memberFeeExTax,
+      firstMonthRetention: calcParams.retention.firstMonth,
+      subsequentRetention: calcParams.retention.subsequent,
+    }),
   }
 }
