@@ -22,17 +22,31 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { CalcParameterConfig } from "@/lib/types"
+import type { CalcParameterConfig, CalcPricingOption } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
+import { computeAveragePrice } from "@/lib/average-price"
 import { toast } from "sonner"
 import { DependencyGraph } from "@/components/master/dependency-graph"
 
-type SectionKey = "fee" | "competitor" | "adCost"
+type SectionKey = "fee" | "competitor" | "adCost" | "pricing" | "growth" | "capacity" | "scenario" | "other"
 
 const SECTION_HIGHLIGHT_KEYS: Record<SectionKey, string[]> = {
   fee: ["paymentFeeRate", "royaltyCapMonthly", "appFeeMonthly", "paymentFee", "monthlyRoyalty", "appFee"],
   competitor: ["initialJoiners", "demandMultiplier"],
   adCost: ["adCostMonthly"],
+  // 以下は式セット(formula)ではなく計算定数のため、依存グラフのハイライト対象は無し
+  pricing: [],
+  growth: [],
+  capacity: [],
+  scenario: [],
+  other: [],
+}
+
+type ScenarioKey = "conservative" | "standard" | "aggressive"
+const SCENARIO_LABELS: Record<ScenarioKey, string> = {
+  conservative: "保守",
+  standard: "標準",
+  aggressive: "アグレッシブ",
 }
 
 type LogicVisualizationResponse = {
@@ -281,6 +295,53 @@ export function LogicVisualizationView() {
   const [adCostYear1Month5To12, setAdCostYear1Month5To12] = useState("")
   const [adCostYear2Monthly, setAdCostYear2Monthly] = useState("")
   const [adCostYear3PlusMonthly, setAdCostYear3PlusMonthly] = useState("")
+  // 拡張パラメータ（Excelモデル移植）
+  const [isSavingStep4, setIsSavingStep4] = useState(false)
+  const [isSavingStep5, setIsSavingStep5] = useState(false)
+  const [isSavingStep6, setIsSavingStep6] = useState(false)
+  const [isSavingStep7, setIsSavingStep7] = useState(false)
+  const [isSavingStep8, setIsSavingStep8] = useState(false)
+  // 平均単価（会費＋オプション）
+  const [memberFeeExTax, setMemberFeeExTax] = useState("")
+  const [pricingOptions, setPricingOptions] = useState<Array<{ label: string; price: string; ratio: string }>>([])
+  // 継続率・会員獲得
+  const [retentionFirstMonth, setRetentionFirstMonth] = useState("")
+  const [retentionSubsequent, setRetentionSubsequent] = useState("")
+  const [organicSearchRate, setOrganicSearchRate] = useState("")
+  const [referralRate, setReferralRate] = useState("")
+  const [splitSignage, setSplitSignage] = useState("")
+  const [splitWeb, setSplitWeb] = useState("")
+  const [splitSns, setSplitSns] = useState("")
+  const [semCpaY1Y2, setSemCpaY1Y2] = useState("")
+  const [semCpaY3Plus, setSemCpaY3Plus] = useState("")
+  const [snsAdUnitCost, setSnsAdUnitCost] = useState("")
+  const [webBudgetMonthly, setWebBudgetMonthly] = useState("")
+  const [snsBudgetMonthly, setSnsBudgetMonthly] = useState("")
+  const [snsInitialBonus, setSnsInitialBonus] = useState("")
+  // キャパシティ
+  const [capVisitsPerWeek, setCapVisitsPerWeek] = useState("")
+  const [capAvgStayHours, setCapAvgStayHours] = useState("")
+  const [capAreaPerMember, setCapAreaPerMember] = useState("")
+  const [capBusinessHours, setCapBusinessHours] = useState("")
+  const [capAvgUtilization, setCapAvgUtilization] = useState("")
+  const [capRuralFactor, setCapRuralFactor] = useState("")
+  const [capParkingUtilization, setCapParkingUtilization] = useState("")
+  // シナリオ係数（店頭看板・広告効果）
+  const [signageByScenario, setSignageByScenario] = useState<Record<ScenarioKey, {
+    baseFactor: string; month2Factor: string; month3Factor: string; month4Factor: string
+    monthlyDecay: string; adEffectivenessYear2to5: string; adEffectivenessYear6Plus: string
+  }>>({
+    conservative: { baseFactor: "", month2Factor: "", month3Factor: "", month4Factor: "", monthlyDecay: "", adEffectivenessYear2to5: "", adEffectivenessYear6Plus: "" },
+    standard: { baseFactor: "", month2Factor: "", month3Factor: "", month4Factor: "", monthlyDecay: "", adEffectivenessYear2to5: "", adEffectivenessYear6Plus: "" },
+    aggressive: { baseFactor: "", month2Factor: "", month3Factor: "", month4Factor: "", monthlyDecay: "", adEffectivenessYear2to5: "", adEffectivenessYear6Plus: "" },
+  })
+  // 減価償却（耐用年数）・税・入金サイクル
+  const [deprInterior, setDeprInterior] = useState("")
+  const [deprMachine, setDeprMachine] = useState("")
+  const [deprFlapper, setDeprFlapper] = useState("")
+  const [deprBodyComp, setDeprBodyComp] = useState("")
+  const [corporateTaxRate, setCorporateTaxRate] = useState("")
+  const [cashCollectionLagMonths, setCashCollectionLagMonths] = useState("")
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null)
 
   function syncFeeParams(params: CalcParameterConfig) {
@@ -305,10 +366,76 @@ export function LogicVisualizationView() {
     setAdCostYear3PlusMonthly(String(params.adCost.year3PlusMonthly))
   }
 
+  function syncPricingParams(params: CalcParameterConfig) {
+    setMemberFeeExTax(String(params.pricing.memberFeeExTax))
+    setPricingOptions(params.pricing.options.map((opt) => ({
+      label: opt.label,
+      price: String(opt.price),
+      ratio: String(opt.ratio),
+    })))
+  }
+
+  function syncGrowthParams(params: CalcParameterConfig) {
+    setRetentionFirstMonth(String(params.retention.firstMonth))
+    setRetentionSubsequent(String(params.retention.subsequent))
+    setOrganicSearchRate(String(params.acquisition.organicSearchRate))
+    setReferralRate(String(params.acquisition.referralRate))
+    setSplitSignage(String(params.acquisition.channelSplit.signage))
+    setSplitWeb(String(params.acquisition.channelSplit.web))
+    setSplitSns(String(params.acquisition.channelSplit.sns))
+    setSemCpaY1Y2(String(params.acquisition.semCpaY1Y2))
+    setSemCpaY3Plus(String(params.acquisition.semCpaY3Plus))
+    setSnsAdUnitCost(String(params.acquisition.snsAdUnitCost))
+    setWebBudgetMonthly(String(params.acquisition.webBudgetMonthly))
+    setSnsBudgetMonthly(String(params.acquisition.snsBudgetMonthly))
+    setSnsInitialBonus(String(params.acquisition.snsInitialBonus))
+  }
+
+  function syncCapacityParams(params: CalcParameterConfig) {
+    setCapVisitsPerWeek(String(params.capacity.visitsPerWeek))
+    setCapAvgStayHours(String(params.capacity.avgStayHours))
+    setCapAreaPerMember(String(params.capacity.areaPerMemberTsubo))
+    setCapBusinessHours(String(params.capacity.businessHours))
+    setCapAvgUtilization(String(params.capacity.avgUtilization))
+    setCapRuralFactor(String(params.capacity.ruralFactor))
+    setCapParkingUtilization(String(params.capacity.parkingUtilization))
+  }
+
+  function syncScenarioParams(params: CalcParameterConfig) {
+    const toRow = (s: ScenarioKey) => ({
+      baseFactor: String(params.signage[s].baseFactor),
+      month2Factor: String(params.signage[s].month2Factor),
+      month3Factor: String(params.signage[s].month3Factor),
+      month4Factor: String(params.signage[s].month4Factor),
+      monthlyDecay: String(params.signage[s].monthlyDecay),
+      adEffectivenessYear2to5: String(params.signage[s].adEffectivenessYear2to5),
+      adEffectivenessYear6Plus: String(params.signage[s].adEffectivenessYear6Plus),
+    })
+    setSignageByScenario({
+      conservative: toRow("conservative"),
+      standard: toRow("standard"),
+      aggressive: toRow("aggressive"),
+    })
+  }
+
+  function syncOtherParams(params: CalcParameterConfig) {
+    setDeprInterior(String(params.depreciation.usefulLifeYears.interiorCost ?? ""))
+    setDeprMachine(String(params.depreciation.usefulLifeYears.fitnessMachineCost ?? ""))
+    setDeprFlapper(String(params.depreciation.usefulLifeYears.flapperGateCost ?? ""))
+    setDeprBodyComp(String(params.depreciation.usefulLifeYears.bodyCompositionCost ?? ""))
+    setCorporateTaxRate(String(params.corporateTaxRate))
+    setCashCollectionLagMonths(String(params.cashCollectionLagMonths))
+  }
+
   function syncAllParams(params: CalcParameterConfig) {
     syncFeeParams(params)
     syncCompetitorParams(params)
     syncAdCostParams(params)
+    syncPricingParams(params)
+    syncGrowthParams(params)
+    syncCapacityParams(params)
+    syncScenarioParams(params)
+    syncOtherParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -506,6 +633,259 @@ export function LogicVisualizationView() {
     }
   }
 
+  // 拡張パラメータ用の汎用保存（最新値に partial をマージして PUT）
+  async function persistParams(
+    partial: Partial<CalcParameterConfig>,
+    setSaving: (value: boolean) => void,
+    successMessage: string,
+    syncFn: (params: CalcParameterConfig) => void,
+  ) {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    setSaving(true)
+    try {
+      const latestParams = await fetchLatestCalcParams()
+      if (!latestParams) return
+
+      const nextPayload: CalcParameterConfig = { ...latestParams, ...partial }
+      const response = await fetch("/api/master/calc-params", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextPayload),
+      })
+      const payload = (await response.json().catch(() => null)) as { params?: CalcParameterConfig; error?: { message?: string } } | null
+
+      if (!response.ok || !payload?.params) {
+        toast.error(payload?.error?.message || "計算パラメータの保存に失敗しました。")
+        return
+      }
+
+      setCalcParams(payload.params)
+      syncFn(payload.params)
+      toast.success(successMessage)
+    } catch {
+      toast.error("計算パラメータの保存に失敗しました。")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveStep4Params() {
+    const fee = parseRequiredNumber(memberFeeExTax)
+    if (fee === null || fee < 0) {
+      toast.error("会費は 0 以上で入力してください。")
+      return
+    }
+    const options: CalcPricingOption[] = []
+    for (const opt of pricingOptions) {
+      const price = parseRequiredNumber(opt.price)
+      const ratio = parseRequiredNumber(opt.ratio)
+      if (price === null || price < 0) {
+        toast.error(`オプション「${opt.label}」の単価は 0 以上で入力してください。`)
+        return
+      }
+      if (ratio === null || ratio < 0 || ratio > 1) {
+        toast.error(`オプション「${opt.label}」の構成比は 0〜1 で入力してください。`)
+        return
+      }
+      options.push({ label: opt.label, price: Math.round(price), ratio })
+    }
+    await persistParams(
+      { pricing: { memberFeeExTax: Math.round(fee), options } },
+      setIsSavingStep4,
+      "平均単価パラメータを保存しました。",
+      syncPricingParams,
+    )
+  }
+
+  async function saveStep5Params() {
+    const rates: Array<[string, number | null]> = [
+      ["初月継続率", parseRequiredNumber(retentionFirstMonth)],
+      ["2か月目以降継続率", parseRequiredNumber(retentionSubsequent)],
+      ["自然検索率", parseRequiredNumber(organicSearchRate)],
+      ["口コミ紹介率", parseRequiredNumber(referralRate)],
+      ["看板配分", parseRequiredNumber(splitSignage)],
+      ["Web配分", parseRequiredNumber(splitWeb)],
+      ["SNS配分", parseRequiredNumber(splitSns)],
+    ]
+    for (const [label, value] of rates) {
+      if (value === null || value < 0 || value > 1) {
+        toast.error(`${label}は 0〜1 で入力してください。`)
+        return
+      }
+    }
+    const moneys: Array<[string, number | null]> = [
+      ["SEM CPA(1〜2年目)", parseRequiredNumber(semCpaY1Y2)],
+      ["SEM CPA(3年目以降)", parseRequiredNumber(semCpaY3Plus)],
+      ["SNS広告単価", parseRequiredNumber(snsAdUnitCost)],
+      ["Web広告月予算", parseRequiredNumber(webBudgetMonthly)],
+      ["SNS広告月予算", parseRequiredNumber(snsBudgetMonthly)],
+      ["SNS初月上乗せ", parseRequiredNumber(snsInitialBonus)],
+    ]
+    for (const [label, value] of moneys) {
+      if (value === null || value < 0) {
+        toast.error(`${label}は 0 以上で入力してください。`)
+        return
+      }
+    }
+    await persistParams(
+      {
+        retention: {
+          firstMonth: parseRequiredNumber(retentionFirstMonth) as number,
+          subsequent: parseRequiredNumber(retentionSubsequent) as number,
+        },
+        acquisition: {
+          organicSearchRate: parseRequiredNumber(organicSearchRate) as number,
+          referralRate: parseRequiredNumber(referralRate) as number,
+          channelSplit: {
+            signage: parseRequiredNumber(splitSignage) as number,
+            web: parseRequiredNumber(splitWeb) as number,
+            sns: parseRequiredNumber(splitSns) as number,
+          },
+          semCpaY1Y2: Math.round(parseRequiredNumber(semCpaY1Y2) as number),
+          semCpaY3Plus: Math.round(parseRequiredNumber(semCpaY3Plus) as number),
+          snsAdUnitCost: Math.round(parseRequiredNumber(snsAdUnitCost) as number),
+          webBudgetMonthly: Math.round(parseRequiredNumber(webBudgetMonthly) as number),
+          snsBudgetMonthly: Math.round(parseRequiredNumber(snsBudgetMonthly) as number),
+          snsInitialBonus: parseRequiredNumber(snsInitialBonus) as number,
+        },
+      },
+      setIsSavingStep5,
+      "会員獲得モデルのパラメータを保存しました。",
+      syncGrowthParams,
+    )
+  }
+
+  async function saveStep6Params() {
+    const positives: Array<[string, number | null]> = [
+      ["1人あたり利用回数", parseRequiredNumber(capVisitsPerWeek)],
+      ["平均滞在時間", parseRequiredNumber(capAvgStayHours)],
+      ["1人当たり必要面積", parseRequiredNumber(capAreaPerMember)],
+      ["営業時間", parseRequiredNumber(capBusinessHours)],
+    ]
+    for (const [label, value] of positives) {
+      if (value === null || value <= 0) {
+        toast.error(`${label}は 0 より大きい値を入力してください。`)
+        return
+      }
+    }
+    const rates: Array<[string, number | null]> = [
+      ["平均稼働率", parseRequiredNumber(capAvgUtilization)],
+      ["田舎型係数", parseRequiredNumber(capRuralFactor)],
+      ["駐車場利用率", parseRequiredNumber(capParkingUtilization)],
+    ]
+    for (const [label, value] of rates) {
+      if (value === null || value < 0 || value > 1) {
+        toast.error(`${label}は 0〜1 で入力してください。`)
+        return
+      }
+    }
+    await persistParams(
+      {
+        capacity: {
+          visitsPerWeek: parseRequiredNumber(capVisitsPerWeek) as number,
+          avgStayHours: parseRequiredNumber(capAvgStayHours) as number,
+          areaPerMemberTsubo: parseRequiredNumber(capAreaPerMember) as number,
+          businessHours: parseRequiredNumber(capBusinessHours) as number,
+          avgUtilization: parseRequiredNumber(capAvgUtilization) as number,
+          ruralFactor: parseRequiredNumber(capRuralFactor) as number,
+          parkingUtilization: parseRequiredNumber(capParkingUtilization) as number,
+        },
+      },
+      setIsSavingStep6,
+      "キャパシティパラメータを保存しました。",
+      syncCapacityParams,
+    )
+  }
+
+  async function saveStep7Params() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const scenarios: ScenarioKey[] = ["conservative", "standard", "aggressive"]
+    const built = {} as CalcParameterConfig["signage"]
+    for (const s of scenarios) {
+      const row = signageByScenario[s]
+      const fields: Array<[string, number | null, boolean]> = [
+        ["基準係数", parseRequiredNumber(row.baseFactor), false],
+        ["2か月目係数", parseRequiredNumber(row.month2Factor), false],
+        ["3か月目係数", parseRequiredNumber(row.month3Factor), false],
+        ["4か月目係数", parseRequiredNumber(row.month4Factor), false],
+        ["月次逓減率", parseRequiredNumber(row.monthlyDecay), true],
+        ["広告効果(年2-5)", parseRequiredNumber(row.adEffectivenessYear2to5), true],
+        ["広告効果(年6-10)", parseRequiredNumber(row.adEffectivenessYear6Plus), true],
+      ]
+      for (const [label, value, isRateField] of fields) {
+        if (value === null || value < 0 || (isRateField && value > 1)) {
+          toast.error(`${SCENARIO_LABELS[s]}の${label}が不正です（0以上${isRateField ? "・1以下" : ""}）。`)
+          return
+        }
+      }
+      built[s] = {
+        baseFactor: parseRequiredNumber(row.baseFactor) as number,
+        // roundDownBase は編集対象外のため現行値を維持
+        roundDownBase: calcParams.signage[s].roundDownBase,
+        month2Factor: parseRequiredNumber(row.month2Factor) as number,
+        month3Factor: parseRequiredNumber(row.month3Factor) as number,
+        month4Factor: parseRequiredNumber(row.month4Factor) as number,
+        monthlyDecay: parseRequiredNumber(row.monthlyDecay) as number,
+        adEffectivenessYear2to5: parseRequiredNumber(row.adEffectivenessYear2to5) as number,
+        adEffectivenessYear6Plus: parseRequiredNumber(row.adEffectivenessYear6Plus) as number,
+      }
+    }
+    await persistParams({ signage: built }, setIsSavingStep7, "シナリオ係数を保存しました。", syncScenarioParams)
+  }
+
+  async function saveStep8Params() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const lives: Array<[string, number | null]> = [
+      ["内装の耐用年数", parseRequiredNumber(deprInterior)],
+      ["フィットネスマシンの耐用年数", parseRequiredNumber(deprMachine)],
+      ["フラッパーゲートの耐用年数", parseRequiredNumber(deprFlapper)],
+      ["体組成計の耐用年数", parseRequiredNumber(deprBodyComp)],
+    ]
+    for (const [label, value] of lives) {
+      if (value === null || value <= 0) {
+        toast.error(`${label}は 0 より大きい値を入力してください。`)
+        return
+      }
+    }
+    const tax = parseRequiredNumber(corporateTaxRate)
+    if (tax === null || tax < 0 || tax > 1) {
+      toast.error("法人税率は 0〜1 で入力してください。")
+      return
+    }
+    const lag = parseRequiredNumber(cashCollectionLagMonths)
+    if (lag === null || lag < 0) {
+      toast.error("入金サイクルは 0 以上で入力してください。")
+      return
+    }
+    await persistParams(
+      {
+        depreciation: {
+          usefulLifeYears: {
+            ...calcParams.depreciation.usefulLifeYears,
+            interiorCost: parseRequiredNumber(deprInterior) as number,
+            fitnessMachineCost: parseRequiredNumber(deprMachine) as number,
+            flapperGateCost: parseRequiredNumber(deprFlapper) as number,
+            bodyCompositionCost: parseRequiredNumber(deprBodyComp) as number,
+          },
+        },
+        corporateTaxRate: tax,
+        cashCollectionLagMonths: Math.round(lag),
+      },
+      setIsSavingStep8,
+      "減価償却・税・入金サイクルを保存しました。",
+      syncOtherParams,
+    )
+  }
+
   useEffect(() => {
     let disposed = false
 
@@ -623,6 +1003,22 @@ export function LogicVisualizationView() {
       fallback: "有効な式セット定義を参照",
     },
   ])
+
+  // 損益分岐点ロジックのライブプレビュー（平均単価・限界利益単価を現在の入力値から算出）
+  const avgPriceLive = computeAveragePrice({
+    memberFeeExTax: Number(memberFeeExTax) || 0,
+    options: pricingOptions.map((opt) => ({
+      label: opt.label,
+      price: Number(opt.price) || 0,
+      ratio: Number(opt.ratio) || 0,
+    })),
+  })
+  const paymentFeeRateLive = (Number(paymentFeeRatePercent) || 0) / 100
+  const variableCostPerMemberLive = avgPriceLive * paymentFeeRateLive
+  const contributionMarginLive = avgPriceLive - variableCostPerMemberLive
+  const yen = (value: number) => `${Math.round(value).toLocaleString("ja-JP")} 円`
+  const updateOption = (index: number, field: "price" | "ratio", value: string) =>
+    setPricingOptions((prev) => prev.map((opt, i) => (i === index ? { ...opt, [field]: value } : opt)))
 
   return (
     <div className="space-y-5 p-6">
@@ -930,6 +1326,326 @@ export function LogicVisualizationView() {
           <Button onClick={saveStep3Params} disabled={isSavingStep3} size="sm" className="gap-1.5">
             <SaveIcon className="size-3.5" />
             {isSavingStep3 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* 平均単価（会費＋オプション） */}
+      <section
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+        onMouseEnter={() => setActiveSection("pricing")}
+        onMouseLeave={() => setActiveSection((current) => (current === "pricing" ? null : current))}
+      >
+        <SectionHeader
+          icon={CreditCardIcon}
+          title="平均単価（会費＋オプション）"
+          description="会費とオプション料金表（単価×加入構成比）から平均単価を算出します。売上・損益分岐点の基礎です。"
+          accent="chart-1"
+        />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <InfoTile label="式" accent="chart-1">平均単価 = 会費 + Σ(オプション単価 × 構成比)</InfoTile>
+          <InfoTile label="影響範囲">月次売上、限界利益、損益分岐点に影響</InfoTile>
+          <InfoTile label="インプット">会費 / オプション料金表</InfoTile>
+          <InfoTile label="アウトプット">平均単価 = <span className="font-semibold text-foreground">{yen(avgPriceLive)}</span></InfoTile>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="memberFeeExTaxStep4" className="text-xs font-medium">会費（税抜）</Label>
+            <SuffixedInput id="memberFeeExTaxStep4" value={memberFeeExTax} onChange={setMemberFeeExTax} disabled={isSavingStep4} suffix="円/月" inputMode="numeric" />
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="text-xs font-medium">オプション</TableHead>
+                <TableHead className="text-xs font-medium">単価（円/月）</TableHead>
+                <TableHead className="text-xs font-medium">加入構成比（0〜1）</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pricingOptions.map((opt, index) => (
+                <TableRow key={opt.label} className="border-border/40">
+                  <TableCell className="text-xs font-medium">{opt.label}</TableCell>
+                  <TableCell>
+                    <Input inputMode="numeric" value={opt.price} onChange={(e) => updateOption(index, "price", e.target.value)} disabled={isSavingStep4} className="h-8" />
+                  </TableCell>
+                  <TableCell>
+                    <Input inputMode="decimal" value={opt.ratio} onChange={(e) => updateOption(index, "ratio", e.target.value)} disabled={isSavingStep4} className="h-8" />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep4Params} disabled={isSavingStep4} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep4 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* 損益分岐点ロジック（閲覧専用） */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm">
+        <SectionHeader
+          icon={SparklesIcon}
+          title="損益分岐点ロジック"
+          description="損益分岐会員数の算出ロジックです。平均単価と決済手数料率から限界利益単価を求め、固定費を割って算出します。"
+          accent="chart-3"
+        />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <InfoTile label="① 限界利益単価" accent="chart-3">
+            平均単価 − 平均単価 × 決済手数料率<br />
+            = {yen(avgPriceLive)} − {yen(variableCostPerMemberLive)}<br />
+            = <span className="font-semibold text-foreground">{yen(contributionMarginLive)}</span>
+            <span className="block text-[10px] text-muted-foreground">※FC契約時はロイヤリティ単価も変動費に加算</span>
+          </InfoTile>
+          <InfoTile label="② 損益分岐会員数" accent="chart-3">
+            固定費 ÷ 限界利益単価<br />
+            = (家賃 + ランニングコスト) ÷ {yen(contributionMarginLive)}
+            <span className="block text-[10px] text-muted-foreground">※固定費は試算ごとの入力値（家賃・ランニングコスト合計）</span>
+          </InfoTile>
+          <InfoTile label="参考: 基準ケース" accent="chart-3">
+            固定費 1,208,000 円 ÷ {contributionMarginLive > 0 ? Math.round(1_208_000 / contributionMarginLive).toLocaleString("ja-JP") : "—"} 名
+            <span className="block text-[10px] text-muted-foreground">固定費=家賃900,000＋ランニング308,000の例</span>
+          </InfoTile>
+        </div>
+        <Alert>
+          <AlertTriangleIcon />
+          <AlertDescription>
+            損益分岐会員数は試算結果から自動算出されます（このセクションは計算ロジックの確認用）。値を変えるには平均単価・決済手数料率を編集してください。
+          </AlertDescription>
+        </Alert>
+      </section>
+
+      {/* 会員獲得モデル（継続率・獲得チャネル） */}
+      <section
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+        onMouseEnter={() => setActiveSection("growth")}
+        onMouseLeave={() => setActiveSection((current) => (current === "growth" ? null : current))}
+      >
+        <SectionHeader
+          icon={UsersIcon}
+          title="会員獲得モデル"
+          description="継続率（コホート）と媒体別獲得（自然検索・口コミ・Web・SNS）のパラメータを管理します。"
+          accent="chart-2"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">初月継続率（0〜1）</Label>
+            <SuffixedInput id="retentionFirstMonth" value={retentionFirstMonth} onChange={setRetentionFirstMonth} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">2か月目以降継続率（0〜1）</Label>
+            <SuffixedInput id="retentionSubsequent" value={retentionSubsequent} onChange={setRetentionSubsequent} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">自然検索率（0〜1）</Label>
+            <SuffixedInput id="organicSearchRate" value={organicSearchRate} onChange={setOrganicSearchRate} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">口コミ紹介率（0〜1）</Label>
+            <SuffixedInput id="referralRate" value={referralRate} onChange={setReferralRate} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">初月配分 看板（0〜1）</Label>
+            <SuffixedInput id="splitSignage" value={splitSignage} onChange={setSplitSignage} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">初月配分 Web（0〜1）</Label>
+            <SuffixedInput id="splitWeb" value={splitWeb} onChange={setSplitWeb} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">初月配分 SNS（0〜1）</Label>
+            <SuffixedInput id="splitSns" value={splitSns} onChange={setSplitSns} disabled={isSavingStep5} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（1〜2年目）</Label>
+            <SuffixedInput id="semCpaY1Y2" value={semCpaY1Y2} onChange={setSemCpaY1Y2} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（3年目以降）</Label>
+            <SuffixedInput id="semCpaY3Plus" value={semCpaY3Plus} onChange={setSemCpaY3Plus} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SNS広告単価</Label>
+            <SuffixedInput id="snsAdUnitCost" value={snsAdUnitCost} onChange={setSnsAdUnitCost} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Web広告月予算</Label>
+            <SuffixedInput id="webBudgetMonthly" value={webBudgetMonthly} onChange={setWebBudgetMonthly} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SNS広告月予算</Label>
+            <SuffixedInput id="snsBudgetMonthly" value={snsBudgetMonthly} onChange={setSnsBudgetMonthly} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SNS初月上乗せ人数</Label>
+            <SuffixedInput id="snsInitialBonus" value={snsInitialBonus} onChange={setSnsInitialBonus} disabled={isSavingStep5} suffix="人" inputMode="numeric" />
+          </div>
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep5Params} disabled={isSavingStep5} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep5 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* キャパシティ */}
+      <section
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+        onMouseEnter={() => setActiveSection("capacity")}
+        onMouseLeave={() => setActiveSection((current) => (current === "capacity" ? null : current))}
+      >
+        <SectionHeader
+          icon={LayersIcon}
+          title="キャパシティ"
+          description="床面積・利用回数・稼働率から最大会員数（キャパ上限）と駐車場必要台数を算出します。"
+          accent="chart-4"
+        />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <InfoTile label="式" accent="chart-4">最大会員数 = 平均稼働率 × (同時収容 × 営業時間 × 7) ÷ (利用回数 × 滞在時間)</InfoTile>
+          <InfoTile label="影響範囲">会員数の上限、売上の頭打ち、損益分岐に影響</InfoTile>
+          <InfoTile label="アウトプット">最大会員数 / 同時利用人数 / 駐車場必要台数</InfoTile>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">1人あたり利用回数</Label>
+            <SuffixedInput id="capVisitsPerWeek" value={capVisitsPerWeek} onChange={setCapVisitsPerWeek} disabled={isSavingStep6} suffix="回/週" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">平均滞在時間</Label>
+            <SuffixedInput id="capAvgStayHours" value={capAvgStayHours} onChange={setCapAvgStayHours} disabled={isSavingStep6} suffix="時間" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">1人当たり必要面積</Label>
+            <SuffixedInput id="capAreaPerMember" value={capAreaPerMember} onChange={setCapAreaPerMember} disabled={isSavingStep6} suffix="坪" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">営業時間</Label>
+            <SuffixedInput id="capBusinessHours" value={capBusinessHours} onChange={setCapBusinessHours} disabled={isSavingStep6} suffix="時間/日" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">平均稼働率（0〜1）</Label>
+            <SuffixedInput id="capAvgUtilization" value={capAvgUtilization} onChange={setCapAvgUtilization} disabled={isSavingStep6} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">田舎型係数（0〜1）</Label>
+            <SuffixedInput id="capRuralFactor" value={capRuralFactor} onChange={setCapRuralFactor} disabled={isSavingStep6} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">駐車場利用率（0〜1）</Label>
+            <SuffixedInput id="capParkingUtilization" value={capParkingUtilization} onChange={setCapParkingUtilization} disabled={isSavingStep6} suffix="率" />
+          </div>
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep6Params} disabled={isSavingStep6} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep6 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* シナリオ係数（店頭看板・広告効果） */}
+      <section
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+        onMouseEnter={() => setActiveSection("scenario")}
+        onMouseLeave={() => setActiveSection((current) => (current === "scenario" ? null : current))}
+      >
+        <SectionHeader
+          icon={GitBranchIcon}
+          title="シナリオ係数（看板・広告効果）"
+          description="保守／標準／アグレッシブ別の店頭看板獲得係数と、年2以降のWeb/SNS広告効果係数を設定します。"
+          accent="chart-2"
+        />
+        <div className="overflow-x-auto rounded-lg border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="text-xs font-medium">シナリオ</TableHead>
+                <TableHead className="text-xs font-medium">基準係数</TableHead>
+                <TableHead className="text-xs font-medium">2か月目</TableHead>
+                <TableHead className="text-xs font-medium">3か月目</TableHead>
+                <TableHead className="text-xs font-medium">4か月目</TableHead>
+                <TableHead className="text-xs font-medium">月次逓減</TableHead>
+                <TableHead className="text-xs font-medium">広告効果 年2-5</TableHead>
+                <TableHead className="text-xs font-medium">広告効果 年6-10</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(["conservative", "standard", "aggressive"] as ScenarioKey[]).map((s) => {
+                const row = signageByScenario[s]
+                const upd = (field: keyof typeof row, value: string) =>
+                  setSignageByScenario((prev) => ({ ...prev, [s]: { ...prev[s], [field]: value } }))
+                return (
+                  <TableRow key={s} className="border-border/40">
+                    <TableCell className="text-xs font-medium">{SCENARIO_LABELS[s]}</TableCell>
+                    {(["baseFactor", "month2Factor", "month3Factor", "month4Factor", "monthlyDecay", "adEffectivenessYear2to5", "adEffectivenessYear6Plus"] as Array<keyof typeof row>).map((field) => (
+                      <TableCell key={field}>
+                        <Input inputMode="decimal" value={row[field]} onChange={(e) => upd(field, e.target.value)} disabled={isSavingStep7} className="h-8 w-20" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep7Params} disabled={isSavingStep7} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep7 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* 減価償却・税・入金サイクル */}
+      <section
+        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
+        onMouseEnter={() => setActiveSection("other")}
+        onMouseLeave={() => setActiveSection((current) => (current === "other" ? null : current))}
+      >
+        <SectionHeader
+          icon={VariableIcon}
+          title="減価償却・税・入金サイクル"
+          description="投資項目別の耐用年数、法人税率、入金サイクル（資金繰りラグ）を設定します。"
+          accent="chart-3"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">内装 耐用年数</Label>
+            <SuffixedInput id="deprInterior" value={deprInterior} onChange={setDeprInterior} disabled={isSavingStep8} suffix="年" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">フィットネスマシン 耐用年数</Label>
+            <SuffixedInput id="deprMachine" value={deprMachine} onChange={setDeprMachine} disabled={isSavingStep8} suffix="年" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">フラッパーゲート 耐用年数</Label>
+            <SuffixedInput id="deprFlapper" value={deprFlapper} onChange={setDeprFlapper} disabled={isSavingStep8} suffix="年" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">体組成計 耐用年数</Label>
+            <SuffixedInput id="deprBodyComp" value={deprBodyComp} onChange={setDeprBodyComp} disabled={isSavingStep8} suffix="年" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">法人税率（0〜1）</Label>
+            <SuffixedInput id="corporateTaxRate" value={corporateTaxRate} onChange={setCorporateTaxRate} disabled={isSavingStep8} suffix="率" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">入金サイクル</Label>
+            <SuffixedInput id="cashCollectionLagMonths" value={cashCollectionLagMonths} onChange={setCashCollectionLagMonths} disabled={isSavingStep8} suffix="ヶ月" inputMode="numeric" />
+          </div>
+        </div>
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 耐用年数に掲載の無い投資項目（WS・FC加盟費・システム・開業準備・パッケージ・ALSOK/USEN 等）は非償却です。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveStep8Params} disabled={isSavingStep8} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStep8 ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>

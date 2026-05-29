@@ -51,7 +51,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
   }))
 
   // 年次データ（12ヶ月ごとに合算）
-  const yearlyChartData: { name: string; 売上: number; コスト: number; 利益: number; 累積利益: number }[] = []
+  const yearlyChartData: { name: string; 売上: number; コスト: number; 利益: number; 累積利益: number; 累積キャッシュ: number }[] = []
   const totalMonths = data.monthlyProjection.length
   const years = Math.ceil(totalMonths / 12)
   for (let y = 0; y < years; y++) {
@@ -68,6 +68,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
       コスト: yearCost,
       利益: yearProfit,
       累積利益: lastInSlice?.cumulativeProfit ?? 0,
+      累積キャッシュ: lastInSlice?.cumulativeCash ?? 0,
     })
   }
 
@@ -81,6 +82,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
         cost: y.コスト,
         profit: y.利益,
         cumulativeProfit: y.累積利益,
+        cumulativeCash: y.累積キャッシュ,
       }))
 
   const totalPages = Math.ceil(tableData.length / ROWS_PER_PAGE)
@@ -182,6 +184,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
                 <TableHead className="text-right text-xs">コスト</TableHead>
                 <TableHead className="text-right text-xs">利益</TableHead>
                 <TableHead className="text-right text-xs">累積利益</TableHead>
+                <TableHead className="text-right text-xs">資金繰り(累積)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -195,6 +198,9 @@ export function ChartTableView({ data }: ChartTableViewProps) {
                   </TableCell>
                   <TableCell className={`text-right font-mono text-xs font-medium ${row.cumulativeProfit >= 0 ? "text-accent" : "text-destructive"}`}>
                     {(row.cumulativeProfit / 10000).toLocaleString()}万
+                  </TableCell>
+                  <TableCell className={`text-right font-mono text-xs ${row.cumulativeCash == null ? "text-muted-foreground" : row.cumulativeCash >= 0 ? "text-chart-2" : "text-destructive"}`}>
+                    {row.cumulativeCash == null ? "—" : `${(row.cumulativeCash / 10000).toLocaleString()}万`}
                   </TableCell>
                 </TableRow>
               ))}

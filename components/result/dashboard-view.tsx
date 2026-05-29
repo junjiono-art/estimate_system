@@ -42,8 +42,45 @@ export function DashboardView({ data }: DashboardViewProps) {
     { name: "FC月額",           value: data.monthlyFranchiseCost },
   ].filter((d) => d.value > 0)
 
+  // 表示期間（月次推移の長さ）に合わせた年数で年次推移をスライス
+  const displayedYears = Math.max(1, Math.ceil(data.monthlyProjection.length / 12))
+  const annualRows = (data.annualProjection ?? []).slice(0, displayedYears)
+  const hasCapacityInfo = data.averagePrice != null || data.capacity != null
+
   return (
     <div className="flex flex-col gap-5">
+      {/* 平均単価・キャパシティのサマリー */}
+      {hasCapacityInfo && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {data.averagePrice != null && (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">平均単価</p>
+              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{Math.round(data.averagePrice).toLocaleString("ja-JP")} 円</p>
+              <p className="text-[10px] text-muted-foreground/70">会費＋オプション（1人あたり/月）</p>
+            </div>
+          )}
+          {data.capacity != null && (
+            <>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">最大会員数</p>
+                <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{data.capacity.maxMembers.toLocaleString("ja-JP")} 人</p>
+                <p className="text-[10px] text-muted-foreground/70">キャパシティ上限</p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">同時利用人数</p>
+                <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{data.capacity.concurrentUsers.toLocaleString("ja-JP")} 人</p>
+                <p className="text-[10px] text-muted-foreground/70">ピーク時の収容人数</p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">駐車場必要台数</p>
+                <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{data.capacity.parkingSpaces.toLocaleString("ja-JP")} 台</p>
+                <p className="text-[10px] text-muted-foreground/70">同時利用×駐車場利用率</p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* 上段: 2カラム */}
       <div className="grid gap-4 lg:grid-cols-2">
         {/* 初期投資円グラフ */}
@@ -167,6 +204,50 @@ export function DashboardView({ data }: DashboardViewProps) {
           </div>
         </div>
       </div>
+
+      {/* 年次推移（売上増加率・税引後利益・投資回収率） */}
+      {annualRows.length > 0 && (
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="border-b border-border px-5 py-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">年次推移サマリー</p>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="px-4 py-2 text-left text-[10px] font-medium uppercase tracking-wider">年度</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">年度末会員</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">年間売上</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">売上増加率</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">年間経費</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">税引前利益</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">税引後利益</th>
+                  <th className="px-4 py-2 text-right text-[10px] font-medium uppercase tracking-wider">投資回収率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {annualRows.map((row) => (
+                  <tr key={row.year} className="border-b border-border/50">
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{row.year}年目</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">{Math.round(row.yearEndMembers).toLocaleString("ja-JP")} 人</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs">{fmt(row.revenue)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">
+                      {row.revenueGrowthRate != null ? `${Math.round(row.revenueGrowthRate * 100)}%` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-xs text-muted-foreground">{fmt(row.cost)}</td>
+                    <td className={`px-4 py-2 text-right font-mono text-xs font-medium ${row.pretaxProfit >= 0 ? "text-chart-2" : "text-destructive"}`}>{fmt(row.pretaxProfit)}</td>
+                    <td className={`px-4 py-2 text-right font-mono text-xs font-medium ${row.afterTaxProfit >= 0 ? "text-chart-2" : "text-destructive"}`}>{fmt(row.afterTaxProfit)}</td>
+                    <td className="px-4 py-2 text-right font-mono text-xs text-accent">{`${Math.round(row.paybackRatio * 100)}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="border-t border-border/50 px-5 py-2 text-[10px] text-muted-foreground">
+            ※ 税引後利益＝税引前利益×(1−法人税率)。投資回収率＝税引前利益累計÷初期投資。経費は減価償却の設定に従います。
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { ErrorCode, errorResponse } from "@/lib/server/api-error"
 import { hasLambdaGatewayConfigured, invokeLambdaGateway } from "@/lib/server/lambda-gateway"
 import { invalidateCalcParamsCache } from "@/lib/server/calc-params-client"
 import { invalidateActiveFormulaSetCache, invalidateSimulationCache } from "@/lib/server/simulation-cache"
+import { normalizeCalcParams } from "@/lib/default-calc-params"
 import type { CalcParameterConfig } from "@/lib/types"
 
 export const runtime = "nodejs"
@@ -31,7 +32,8 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json(result.data)
+    // 保存レコードに新パラメータが無くても既定値で補完し、UIが拡張パラメータを編集できるようにする
+    return NextResponse.json({ params: normalizeCalcParams(result.data.params) })
   } catch (error) {
     const message = error instanceof Error ? error.message : "計算パラメータの取得に失敗しました。"
     return errorResponse(ErrorCode.INTERNAL_ERROR, message, 500)
