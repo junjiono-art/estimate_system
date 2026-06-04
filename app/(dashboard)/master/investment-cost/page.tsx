@@ -80,6 +80,7 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
   amountWithRoyalty: 0,
   amountWithRoyalty10: 0,
   amountWithRoyalty15: 0,
+  depreciationYears: 0,
   note: "",
 }
 
@@ -173,6 +174,7 @@ export default function InvestmentCostPage() {
       amountWithRoyalty: row.amountWithRoyalty ?? row.defaultAmount,
       amountWithRoyalty10: row.amountWithRoyalty10 ?? row.defaultAmount,
       amountWithRoyalty15: row.amountWithRoyalty15 ?? row.defaultAmount,
+      depreciationYears: row.depreciationYears ?? 0,
       note: row.note,
     })
     setDialogOpen(true)
@@ -222,6 +224,7 @@ export default function InvestmentCostPage() {
       amountWithRoyalty: form.royaltyRuleEnabled && form.royaltyRuleMode !== "rate" ? Number(form.amountWithRoyalty) || 0 : undefined,
       amountWithRoyalty10: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty10) || 0 : undefined,
       amountWithRoyalty15: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty15) || 0 : undefined,
+      depreciationYears: Math.max(0, Number(form.depreciationYears) || 0),
     }
     const validationError = validateForm(payload)
     if (validationError) {
@@ -508,6 +511,19 @@ export default function InvestmentCostPage() {
                 value={form.defaultAmount || ""}
                 onChange={(e) => setForm((f) => ({ ...f, defaultAmount: Number(e.target.value) }))}
               />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs">償却年（耐用年数）</Label>
+              <Input
+                className="h-8 text-xs"
+                type="number"
+                placeholder="例: 6（空欄・0は非償却）"
+                value={form.depreciationYears || ""}
+                onChange={(e) => setForm((f) => ({ ...f, depreciationYears: Number(e.target.value) }))}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                月次減価償却 = 金額 ÷ 償却年 ÷ 12。0・空欄は非償却として扱います。
+              </p>
             </div>
             <div className="rounded-md border border-border/60 bg-muted/20 p-3">
               <div className="flex items-center gap-2">

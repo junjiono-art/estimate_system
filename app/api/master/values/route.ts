@@ -17,6 +17,9 @@ type MasterValuePayload = {
   amountWithRoyalty?: number
   amountWithRoyalty10?: number
   amountWithRoyalty15?: number
+  quantity?: number
+  quantityBasis?: string
+  depreciationYears?: number
   note?: string
 }
 
@@ -62,6 +65,9 @@ export async function POST(request: Request) {
   const amountWithRoyalty = body?.amountWithRoyalty == null ? undefined : Number(body.amountWithRoyalty)
   const amountWithRoyalty10 = body?.amountWithRoyalty10 == null ? undefined : Number(body.amountWithRoyalty10)
   const amountWithRoyalty15 = body?.amountWithRoyalty15 == null ? undefined : Number(body.amountWithRoyalty15)
+  const quantity = body?.quantity == null ? undefined : Number(body.quantity)
+  const quantityBasis = body?.quantityBasis === "perTsubo" ? "perTsubo" : body?.quantityBasis === "fixed" ? "fixed" : undefined
+  const depreciationYears = body?.depreciationYears == null ? undefined : Number(body.depreciationYears)
   const note = body?.note ?? ""
 
   if (!category || !code || !label || !unit || !Number.isFinite(defaultAmount) || !Number.isFinite(currentAmount)) {
@@ -93,6 +99,9 @@ export async function POST(request: Request) {
         amountWithRoyalty,
         amountWithRoyalty10,
         amountWithRoyalty15,
+        quantity,
+        quantityBasis,
+        depreciationYears,
         note,
       },
     })

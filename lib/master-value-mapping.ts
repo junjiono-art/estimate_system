@@ -49,10 +49,24 @@ export type MasterFormItem = {
   code: string
   /** マスタで設定した費目名（試算画面の項目名として表示） */
   label: string
-  /** マスタで設定した単位（例: "円/月", "円"） */
+  /** マスタで設定した単位（例: "円/月", "円", "回"） */
   unit: string
-  /** ロイヤリティ率を反映した初期金額 */
+  /** ロイヤリティ率・数量(坪連動含む)を反映した初期金額（ランニングは月額、投資は取得額） */
   amount: number
+  /** 投資コストの耐用年数（償却年）。未設定/0 は非償却 */
+  depreciationYears?: number
+}
+
+/**
+ * ランニングコストの実効数量を算出する。
+ * perTsubo の場合は 坪数 × 数量、それ以外は 数量そのもの（既定1）。
+ */
+export function resolveRunningQuantity(value: MasterValue, floorAreaTsubo: number): number {
+  const quantity = Number.isFinite(Number(value.quantity)) && Number(value.quantity) > 0 ? Number(value.quantity) : 1
+  if (value.quantityBasis === "perTsubo") {
+    return Math.max(0, floorAreaTsubo) * quantity
+  }
+  return quantity
 }
 
 export type MasterFormModel = {
@@ -75,22 +89,31 @@ function sortByKnownOrder(items: MasterFormItem[], order: string[]): MasterFormI
 /**
  * マスタ値から試算フォームの表示モデル（label/unit/金額/並び順）を生成する。
  * 試算画面の項目名・項目構成をマスタ完全駆動にするためのエントリポイント。
+ *
+ * ランニングコストの初期金額は「単価 × 実効数量」（坪連動対応）で算出する。
+ * @param floorAreaTsubo 坪連動(perTsubo)の数量算出に使う床面積（坪）。未指定は0。
  */
-export function resolveMasterFormModel(values: MasterValue[], royaltyRate: RoyaltyRate): MasterFormModel {
+export function resolveMasterFormModel(
+  values: MasterValue[],
+  royaltyRate: RoyaltyRate,
+  floorAreaTsubo = 0,
+): MasterFormModel {
   const running: MasterFormItem[] = []
   const investment: MasterFormItem[] = []
 
   values.forEach((value) => {
     if (!value.code) return
-    const amount = resolveMasterValueAmount(value, royaltyRate)
+    const unitAmount = resolveMasterValueAmount(value, royaltyRate)
     if (value.category === "ランニングコスト") {
       const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID] ?? value.code
+      const amount = Math.round(unitAmount * resolveRunningQuantity(value, floorAreaTsubo))
       running.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount })
       return
     }
     if (value.category === "投資コスト") {
       const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID] ?? value.code
-      investment.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount })
+      const depreciationYears = Number(value.depreciationYears) > 0 ? Number(value.depreciationYears) : undefined
+      investment.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount: unitAmount, depreciationYears })
     }
   })
 

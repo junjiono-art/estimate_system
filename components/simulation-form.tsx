@@ -67,6 +67,8 @@ export type FormSubmitData = {
     byField: Record<string, number>
     total: number
     byRoyaltyRate: Record<"0" | "10" | "15", number>
+    /** 投資項目別の償却年（フィールドID → 償却年）。マスタ登録値。減価償却の算出に使用 */
+    depreciationYearsByField: Record<string, number>
   }
   demographics?: {
     municipality: {
@@ -146,10 +148,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
 
-  // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する
+  // マスタ値＋ロイヤリティ率＋床面積（坪連動の数量算出用）から、試算画面に表示する費目モデルを生成する
   const masterModel = useMemo(
-    () => resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15),
-    [masterValues, royaltyRate],
+    () => resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15, parseInt(floorArea, 10) || 0),
+    [masterValues, royaltyRate, floorArea],
   )
   const hasFitnessMachineItem = masterModel.investment.some((m) => m.fieldId === "fitnessMachineCost")
 
@@ -198,7 +200,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
-    const model = resolveMasterFormModel(values, numericRoyaltyRate)
+    const model = resolveMasterFormModel(values, numericRoyaltyRate, parseInt(floorArea, 10) || 0)
 
     setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
 
@@ -255,6 +257,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
   }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, hasFitnessMachineItem, masterValues, royaltyRate])
+
+  // 坪連動（perTsubo）のランニングコストは床面積に応じて自動再計算する（単価 × 坪数）
+  useEffect(() => {
+    if (masterValues.length === 0) return
+    const model = resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15, parseInt(floorArea, 10) || 0)
+    setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
+  }, [floorArea, masterValues, royaltyRate])
 
   // ── アイテム定義（マスタ駆動）──
   // 項目名・単位・並び順・初期金額はすべてマスタ（masterModel）から生成する。
@@ -398,6 +407,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)]),
       )
 
+      // 投資項目別の償却年（マスタ登録値）。減価償却の算出に使用する
+      const depreciationYearsByField = Object.fromEntries(
+        masterModel.investment
+          .filter((m) => m.depreciationYears && m.depreciationYears > 0)
+          .map((m) => [m.fieldId, m.depreciationYears as number]),
+      )
+
       const selectedRoyaltyRate = parseInt(royaltyRate) as 0 | 10 | 15
       const investmentByRoyaltyRate: Record<"0" | "10" | "15", number> = masterValues.length > 0
         ? (() => {
@@ -452,6 +468,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           byField: investmentByField,
           total: totalInitialCost,
           byRoyaltyRate: investmentByRoyaltyRate,
+          depreciationYearsByField,
         },
         demographics,
         demographicsError,

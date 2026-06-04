@@ -5,12 +5,15 @@
 /** 単価マスタ */
 export type MasterValueRoyaltyMode = "binary" | "rate"
 
+/** ランニングコストの数量基準。fixed=数量そのまま / perTsubo=坪数×数量（坪連動） */
+export type MasterValueQuantityBasis = "fixed" | "perTsubo"
+
 export interface MasterValue {
   id: string
   category: "ランニングコスト" | "投資コスト"
   code: string
   label: string
-  unit: string        // 単位ラベル（例: "円/月", "円/台", "円/坪"）
+  unit: string        // 単位ラベル（例: "円/月", "円/台", "円/坪", "回"）
   defaultAmount: number
   currentAmount: number
   royaltyRuleEnabled?: boolean
@@ -19,6 +22,14 @@ export interface MasterValue {
   amountWithRoyalty?: number
   amountWithRoyalty10?: number
   amountWithRoyalty15?: number
+  // ── ランニングコスト用（元Excel 入力欄 R20-R35: 金額 = 単価 × 数量）──
+  /** 数量（回数・台数・坪数など）。月額金額 = 単価(currentAmount) × 実効数量。未設定は1 */
+  quantity?: number
+  /** 数量の基準。perTsubo の場合は実効数量 = 坪数 × quantity（例: 水道代 150円/坪 × 坪数） */
+  quantityBasis?: MasterValueQuantityBasis
+  // ── 投資コスト用（元Excel 入力欄 R5-R17: 減価償却月額 = 金額 / 償却年 / 12）──
+  /** 耐用年数（償却年）。未設定/0 は非償却。月次減価償却 = 金額 / 償却年 / 12 */
+  depreciationYears?: number
   note: string
 }
 
@@ -99,6 +110,8 @@ export interface SimulationRequestInput {
   }
   /** 投資コスト内訳（フィールドID → 金額） */
   investmentBreakdown?: Record<string, number>
+  /** 投資項目別の耐用年数（フィールドID → 償却年）。マスタ登録値。減価償却の算出に使用 */
+  depreciationYearsByField?: Record<string, number>
 }
 
 export interface AreaDemographics {
@@ -190,6 +203,15 @@ export interface SimulationResult {
   ltv?: LtvResult
   /** 平均単価（会費＋オプション。事業計画!C4） */
   averagePrice?: number
+  /** 1人あたり変動費（決済手数料＋ロイヤリティ＋アプリ利用料＋サプリ原価。事業計画!L5） */
+  variableCostPerMember?: number
+  /** 1人あたり限界利益（平均単価 − 変動費。事業計画!L4） */
+  contributionMarginPerMember?: number
+  /**
+   * 最低単価/人（月）。キャパシティ（最大会員数）まで埋めた場合に固定費を回収できる
+   * 1人あたり月額売上の下限 = 変動費/人 + 固定費 ÷ 最大会員数。
+   */
+  minimumUnitPrice?: number
   /** キャパシティ（最大会員数・同時利用人数・駐車場必要台数） */
   capacity?: {
     maxMembers: number

@@ -49,6 +49,9 @@ export type HistoryApiResult = {
       withAdCostAndDepreciation?: number
     }
     averagePrice?: number
+    variableCostPerMember?: number
+    contributionMarginPerMember?: number
+    minimumUnitPrice?: number
     capacity?: { maxMembers?: number; concurrentUsers?: number; parkingSpaces?: number }
     annualProjection?: Array<{
       year?: number
@@ -163,6 +166,9 @@ export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult
       : undefined,
     rating: typeof item.rating === "number" ? item.rating : undefined,
     averagePrice: item.result.averagePrice != null ? toNumber(item.result.averagePrice) : undefined,
+    variableCostPerMember: item.result.variableCostPerMember != null ? toNumber(item.result.variableCostPerMember) : undefined,
+    contributionMarginPerMember: item.result.contributionMarginPerMember != null ? toNumber(item.result.contributionMarginPerMember) : undefined,
+    minimumUnitPrice: item.result.minimumUnitPrice != null ? toNumber(item.result.minimumUnitPrice) : undefined,
     capacity: item.result.capacity
       ? {
           maxMembers: toNumber(item.result.capacity.maxMembers),

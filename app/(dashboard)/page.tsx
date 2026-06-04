@@ -161,6 +161,7 @@ export default function NewSimulationPage() {
       includeDepreciation: true,
       populationByRadius: data.populationByRadius,
     investmentBreakdown: data.investmentCosts.byField,
+    depreciationYearsByField: data.investmentCosts.depreciationYearsByField,
     }
   }
 

@@ -1,7 +1,7 @@
 import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/lib/types"
 import type { CalcParameterConfig } from "@/lib/types"
 import type { FormulaSetRecordLike } from "@/lib/formula-types"
-import { computeAveragePrice } from "@/lib/average-price"
+import { computeAveragePrice, computeVariableCostPerMember } from "@/lib/average-price"
 import { computeCapacity } from "@/lib/capacity"
 import { simulateMemberGrowth } from "@/lib/member-growth"
 import { computeMonthlyDepreciation } from "@/lib/depreciation"
@@ -396,7 +396,7 @@ export function calculateSimulation(
 
   const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams, options?.formulaSet)
   const monthlyDepreciation = includeDepreciation
-    ? Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation))
+    ? Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation, input.depreciationYearsByField))
     : 0
   const rows: RegressionMonthlyRow[] = baseRows.map((row) => ({
     ...row,
@@ -416,17 +416,29 @@ export function calculateSimulation(
 
   // 損益分岐会員数（限界利益ベース。事業計画 D4 = O60/L4 = 固定費 / 限界利益単価）
   const memberFee = calcParams.pricing.memberFeeExTax
-  const variableCostPerMember =
-    averagePrice * calcParams.paymentFeeRate + (royaltyRate > 0 ? averagePrice * royaltyRate : 0)
+  // 変動費/人（事業計画!L5）= 決済手数料 + ロイヤリティ + アプリ利用料 + サプリ原価
+  const variableCostPerMember = computeVariableCostPerMember(
+    averagePrice,
+    royaltyRate,
+    calcParams.paymentFeeRate,
+    calcParams.pricing,
+  )
   const contributionMargin = averagePrice - variableCostPerMember
   const fixedCostForBreakeven = monthlyRent + monthlyRunningCost
   const breakevenMembers = contributionMargin > 0 ? Math.round(fixedCostForBreakeven / contributionMargin) : undefined
   const simpleBreakevenMembers = memberFee > 0 ? Math.ceil(fixedCostForBreakeven / memberFee) : undefined
 
+  // 最低単価/人（月）= 変動費/人 + 固定費 ÷ 最大会員数。
+  // キャパシティまで会員を埋めた場合に固定費を回収できる1人あたり月額売上の下限。
+  const maxMembers = Math.round(capacityResult.maxMembers)
+  const minimumUnitPrice = maxMembers > 0
+    ? Math.round(variableCostPerMember + fixedCostForBreakeven / maxMembers)
+    : undefined
+
   // 損益分岐点の4パターン（事業計画 I6-I9）。
   // 広告費=年1の定常月額(O66=12ヶ月目)、減価償却=資産別月額(O72)。減価償却計上の有無に関わらず常に算出。
   const adCostForBreakeven = getMonthlyAdCost(12, calcParams)
-  const depreciationForBreakeven = Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation))
+  const depreciationForBreakeven = Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation, input.depreciationYearsByField))
   const breakevenVariants = contributionMargin > 0
     ? {
         fixedOnly: Math.round(fixedCostForBreakeven / contributionMargin),
@@ -467,6 +479,9 @@ export function calculateSimulation(
     breakevenVariants,
     formulaSetVersion: options?.formulaSet?.setVersion,
     averagePrice,
+    variableCostPerMember: Math.round(variableCostPerMember),
+    contributionMarginPerMember: Math.round(contributionMargin),
+    minimumUnitPrice,
     capacity: {
       maxMembers: Math.round(capacityResult.maxMembers),
       concurrentUsers: Math.round(capacityResult.concurrentUsers),
