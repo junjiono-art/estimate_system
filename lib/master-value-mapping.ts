@@ -59,14 +59,20 @@ export type MasterFormItem = {
 
 /**
  * ランニングコストの実効数量を算出する。
- * perTsubo の場合は 坪数 × 数量、それ以外は 数量そのもの（既定1）。
+ * - monthly（既定）: 1（単価をそのまま月額計上）
+ * - perTsubo: 坪数 × 数量（坪連動）
+ * - fixed: 数量そのもの（回数・台数等）
+ * 後方互換: quantityBasis 未設定は monthly 扱い（従来は単価＝月額のため数量1相当）。
  */
 export function resolveRunningQuantity(value: MasterValue, floorAreaTsubo: number): number {
   const quantity = Number.isFinite(Number(value.quantity)) && Number(value.quantity) > 0 ? Number(value.quantity) : 1
   if (value.quantityBasis === "perTsubo") {
     return Math.max(0, floorAreaTsubo) * quantity
   }
-  return quantity
+  if (value.quantityBasis === "fixed") {
+    return quantity
+  }
+  return 1
 }
 
 export type MasterFormModel = {

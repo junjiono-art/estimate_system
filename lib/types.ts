@@ -5,8 +5,11 @@
 /** 単価マスタ */
 export type MasterValueRoyaltyMode = "binary" | "rate"
 
-/** ランニングコストの数量基準。fixed=数量そのまま / perTsubo=坪数×数量（坪連動） */
-export type MasterValueQuantityBasis = "fixed" | "perTsubo"
+/**
+ * ランニングコストの数量基準。
+ * monthly=単価をそのまま月額計上（数量なし） / fixed=単価×数量（回数・台数等） / perTsubo=単価×坪数×数量（坪連動）
+ */
+export type MasterValueQuantityBasis = "monthly" | "fixed" | "perTsubo"
 
 export interface MasterValue {
   id: string

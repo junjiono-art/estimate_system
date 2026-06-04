@@ -81,7 +81,7 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
   amountWithRoyalty10: 0,
   amountWithRoyalty15: 0,
   quantity: 1,
-  quantityBasis: "fixed",
+  quantityBasis: "monthly",
   note: "",
 }
 
@@ -176,7 +176,7 @@ export default function RunningCostPage() {
       amountWithRoyalty10: row.amountWithRoyalty10 ?? row.defaultAmount,
       amountWithRoyalty15: row.amountWithRoyalty15 ?? row.defaultAmount,
       quantity: row.quantity ?? 1,
-      quantityBasis: row.quantityBasis === "perTsubo" ? "perTsubo" : "fixed",
+      quantityBasis: row.quantityBasis === "perTsubo" ? "perTsubo" : row.quantityBasis === "fixed" ? "fixed" : "monthly",
       note: row.note,
     })
     setDialogOpen(true)
@@ -227,7 +227,7 @@ export default function RunningCostPage() {
       amountWithRoyalty10: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty10) || 0 : undefined,
       amountWithRoyalty15: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty15) || 0 : undefined,
       quantity: Math.max(0, Number(form.quantity) || 0) || 1,
-      quantityBasis: form.quantityBasis === "perTsubo" ? "perTsubo" : "fixed",
+      quantityBasis: form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly",
     }
     const validationError = validateForm(payload)
     if (validationError) {
@@ -517,33 +517,42 @@ export default function RunningCostPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">数量（回数・台数など）</Label>
-                <Input
-                  className="h-8 text-xs"
-                  type="number"
-                  placeholder="例: 1"
-                  value={form.quantity ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">数量基準</Label>
                 <Select
-                  value={form.quantityBasis === "perTsubo" ? "perTsubo" : "fixed"}
-                  onValueChange={(value) => setForm((f) => ({ ...f, quantityBasis: value === "perTsubo" ? "perTsubo" : "fixed" }))}
+                  value={form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly"}
+                  onValueChange={(value) =>
+                    setForm((f) => ({ ...f, quantityBasis: value === "perTsubo" ? "perTsubo" : value === "fixed" ? "fixed" : "monthly" }))
+                  }
                 >
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="基準を選択" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">固定（単価 × 数量）</SelectItem>
+                    <SelectItem value="monthly">月額（単価をそのまま計上）</SelectItem>
+                    <SelectItem value="fixed">数量（単価 × 数量）</SelectItem>
                     <SelectItem value="perTsubo">坪連動（単価 × 坪数 × 数量）</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {form.quantityBasis !== "monthly" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">数量（回数・台数など）</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    type="number"
+                    placeholder="例: 1"
+                    value={form.quantity ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
             </div>
             <p className="-mt-1 text-[10px] text-muted-foreground">
-              月額金額 = 単価 × 数量。坪連動を選ぶと「単価 × 床面積(坪) × 数量」で試算画面に初期表示されます。
+              {form.quantityBasis === "monthly"
+                ? "月額金額 = 単価（数量は使用しません）。"
+                : form.quantityBasis === "perTsubo"
+                  ? "月額金額 = 単価 × 床面積(坪) × 数量（試算画面の床面積に連動）。"
+                  : "月額金額 = 単価 × 数量。"}
             </p>
             <div className="rounded-md border border-border/60 bg-muted/20 p-3">
               <div className="flex items-center gap-2">
