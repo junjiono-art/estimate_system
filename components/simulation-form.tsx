@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   CalculatorIcon,
   BuildingIcon,
@@ -38,9 +38,8 @@ import { getFitnessMachineUnitPriceByAddress } from "@/lib/fitness-machine-cost"
 import type { LocationType, MasterValue } from "@/lib/types"
 import { toast } from "sonner"
 import {
-  INVESTMENT_COST_CODE_TO_FIELD_ID,
   resolveMasterFieldValues,
-  RUNNING_COST_CODE_TO_FIELD_ID,
+  resolveMasterFormModel,
 } from "@/lib/master-value-mapping"
 
 interface SimulationFormProps {
@@ -114,8 +113,6 @@ type DemographicRow = {
 }
 
 export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
-  const allRunningFieldIds = Object.values(RUNNING_COST_CODE_TO_FIELD_ID)
-  const allInvestmentFieldIds = Object.values(INVESTMENT_COST_CODE_TO_FIELD_ID)
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
@@ -127,8 +124,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
   const [masterValues, setMasterValues] = useState<MasterValue[]>([])
-  const [visibleRunningCostIds, setVisibleRunningCostIds] = useState<string[]>(allRunningFieldIds)
-  const [visibleInvestmentCostIds, setVisibleInvestmentCostIds] = useState<string[]>(allInvestmentFieldIds)
 
   // 計算パラメータ
   const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">("0")
@@ -141,59 +136,30 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
 
-  // 投資コスト
-  const [fitnessMachineCost,  setFitnessMachineCost]  = useState("")
-  const [interiorCost,        setInteriorCost]        = useState("")
-  const [flapperGateCost,     setFlapperGateCost]     = useState("")
-  const [bodyCompositionCost, setBodyCompositionCost] = useState("")
-  const [waterServerCost,     setWaterServerCost]     = useState("")
-  const [franchiseFeeCost,    setFranchiseFeeCost]    = useState("")
-  const [systemCost,          setSystemCost]          = useState("")
-  const [openingPrepCost,     setOpeningPrepCost]     = useState("")
-  const [openingPackageCost,  setOpeningPackageCost]  = useState("")
-  const [securityCost,        setSecurityCost]        = useState("")
-  const [otherInitialCost,    setOtherInitialCost]    = useState("")
-  const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
-
   // ゴルフ設備
   const [golfRightBayCount, setGolfRightBayCount] = useState("0")
   const [golfDualBayCount,  setGolfDualBayCount]  = useState("0")
 
-  // ランニングコスト
-  const [rcElectricity,   setRcElectricity]   = useState("")
-  const [rcWater,         setRcWater]         = useState("")
-  const [rcStaff,         setRcStaff]         = useState("")
-  const [rcCleaning,      setRcCleaning]      = useState("")
-  const [rcCommunication, setRcCommunication] = useState("")
-  const [rcSupplies,      setRcSupplies]      = useState("")
-  const [rcInsurance,     setRcInsurance]     = useState("")
-  const [rcAdvertising,   setRcAdvertising]   = useState("")
-  const [rcOther,         setRcOther]         = useState("")
+  // ランニングコスト・投資コストの入力値（フィールドID → 入力文字列）。
+  // 項目構成・項目名・並び順はマスタから動的に決まるため、汎用マップで保持する。
+  const [runningValues,    setRunningValues]    = useState<Record<string, string>>({})
+  const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
+  const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
 
-  const runningCostSetters: Record<string, (value: string) => void> = {
-    rcElectricity: setRcElectricity,
-    rcWater: setRcWater,
-    rcStaff: setRcStaff,
-    rcCleaning: setRcCleaning,
-    rcCommunication: setRcCommunication,
-    rcSupplies: setRcSupplies,
-    rcInsurance: setRcInsurance,
-    rcAdvertising: setRcAdvertising,
-    rcOther: setRcOther,
+  // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する
+  const masterModel = useMemo(
+    () => resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15),
+    [masterValues, royaltyRate],
+  )
+  const hasFitnessMachineItem = masterModel.investment.some((m) => m.fieldId === "fitnessMachineCost")
+
+  function handleRunningCostChange(fieldId: string, value: string) {
+    setRunningValues((prev) => ({ ...prev, [fieldId]: value }))
   }
 
-  const investmentCostSetters: Record<string, (value: string) => void> = {
-    fitnessMachineCost: setFitnessMachineCost,
-    interiorCost: setInteriorCost,
-    flapperGateCost: setFlapperGateCost,
-    bodyCompositionCost: setBodyCompositionCost,
-    waterServerCost: setWaterServerCost,
-    franchiseFeeCost: setFranchiseFeeCost,
-    systemCost: setSystemCost,
-    openingPrepCost: setOpeningPrepCost,
-    openingPackageCost: setOpeningPackageCost,
-    securityCost: setSecurityCost,
-    otherInitialCost: setOtherInitialCost,
+  function handleInvestmentCostChange(fieldId: string, value: string) {
+    if (fieldId === "fitnessMachineCost") setIsFitnessMachineCostManual(true)
+    setInvestmentValues((prev) => ({ ...prev, [fieldId]: value }))
   }
 
   function getAddressBasedFitnessMachineCost(
@@ -232,21 +198,19 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
-    const resolved = resolveMasterFieldValues(values, numericRoyaltyRate)
+    const model = resolveMasterFormModel(values, numericRoyaltyRate)
 
-    Object.entries(resolved.runningByField).forEach(([fieldId, amount]) => {
-      runningCostSetters[fieldId]?.(String(amount ?? 0))
-    })
-    Object.entries(resolved.investmentByField).forEach(([fieldId, amount]) => {
-      investmentCostSetters[fieldId]?.(String(amount ?? 0))
-    })
+    setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
 
-    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(values, selectedRoyaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
-    setFitnessMachineCost(String(fitnessMachineCostByAddress))
+    const investmentDefaults = Object.fromEntries(model.investment.map((m) => [m.fieldId, String(m.amount ?? 0)]))
+    // フィットネスマシン費は住所ベースで算出した値で上書きする（マスタ単価×坪数）
+    if (model.investment.some((m) => m.fieldId === "fitnessMachineCost")) {
+      investmentDefaults.fitnessMachineCost = String(
+        getAddressBasedFitnessMachineCost(values, selectedRoyaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount),
+      )
+    }
+    setInvestmentValues(investmentDefaults)
     setIsFitnessMachineCostManual(false)
-
-    setVisibleRunningCostIds(resolved.visibleRunningFieldIds)
-    setVisibleInvestmentCostIds(resolved.visibleInvestmentFieldIds)
   }
 
   async function loadMasterDefaults() {
@@ -286,37 +250,28 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   useEffect(() => {
     if (masterValues.length === 0) return
     if (isFitnessMachineCostManual) return
+    if (!hasFitnessMachineItem) return
 
     const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
-    setFitnessMachineCost(String(fitnessMachineCostByAddress))
-  }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, masterValues, royaltyRate])
+    setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
+  }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, hasFitnessMachineItem, masterValues, royaltyRate])
 
-  // ── アイテム定義（全state宣言の後に記述）──
-  const RC_ITEMS = [
-    { id: "rcElectricity",   label: "水道光熱費（円/月）", placeholder: "例: 150,000", value: rcElectricity,   setter: setRcElectricity   },
-    { id: "rcWater",         label: "水道代（円/月）",     placeholder: "例: 30,000",  value: rcWater,         setter: setRcWater         },
-    { id: "rcStaff",         label: "人件費（円/月）",     placeholder: "例: 500,000", value: rcStaff,         setter: setRcStaff         },
-    { id: "rcCleaning",      label: "清掃費（円/月）",     placeholder: "例: 50,000",  value: rcCleaning,      setter: setRcCleaning      },
-    { id: "rcCommunication", label: "通信費（円/月）",     placeholder: "例: 20,000",  value: rcCommunication, setter: setRcCommunication },
-    { id: "rcSupplies",      label: "消耗品費（円/月）",   placeholder: "例: 30,000",  value: rcSupplies,      setter: setRcSupplies      },
-    { id: "rcInsurance",     label: "保険料（円/月）",     placeholder: "例: 15,000",  value: rcInsurance,     setter: setRcInsurance     },
-    { id: "rcAdvertising",   label: "広告宣伝費（円/月）", placeholder: "例: 100,000", value: rcAdvertising,   setter: setRcAdvertising   },
-    { id: "rcOther",         label: "その他（円/月）",     placeholder: "例: 50,000",  value: rcOther,         setter: setRcOther         },
-  ].filter((item) => visibleRunningCostIds.includes(item.id))
+  // ── アイテム定義（マスタ駆動）──
+  // 項目名・単位・並び順・初期金額はすべてマスタ（masterModel）から生成する。
+  // マスタで費目名を変更／費目を追加すると、そのまま試算画面に反映される。
+  const RC_ITEMS = masterModel.running.map((m) => ({
+    id: m.fieldId,
+    label: m.unit ? `${m.label}（${m.unit}）` : m.label,
+    placeholder: "例: 0",
+    value: runningValues[m.fieldId] ?? "",
+  }))
 
-  const COST_ITEMS = [
-    { id: "fitnessMachineCost",  label: "フィットネスマシン費（円）",  placeholder: "例: 12,000,000", value: fitnessMachineCost,  setter: setFitnessMachineCost  },
-    { id: "interiorCost",        label: "内装工事費（円）",             placeholder: "例: 8,000,000",  value: interiorCost,        setter: setInteriorCost        },
-    { id: "flapperGateCost",     label: "フラッパーゲート（円）",       placeholder: "例: 1,500,000",  value: flapperGateCost,     setter: setFlapperGateCost     },
-    { id: "bodyCompositionCost", label: "体組成計（円）",               placeholder: "例: 500,000",    value: bodyCompositionCost, setter: setBodyCompositionCost },
-    { id: "waterServerCost",     label: "ウォーターサーバー（円）",     placeholder: "例: 100,000",    value: waterServerCost,     setter: setWaterServerCost     },
-    { id: "franchiseFeeCost",    label: "フランチャイズ加盟費用（円）", placeholder: "例: 4,500,000",  value: franchiseFeeCost,    setter: setFranchiseFeeCost    },
-    { id: "systemCost",          label: "システム導入費（円）",         placeholder: "例: 800,000",    value: systemCost,          setter: setSystemCost          },
-    { id: "openingPrepCost",     label: "開業準備費（円）",             placeholder: "例: 300,000",    value: openingPrepCost,     setter: setOpeningPrepCost     },
-    { id: "openingPackageCost",  label: "開業前パッケージ費（円）",     placeholder: "例: 600,000",    value: openingPackageCost,  setter: setOpeningPackageCost  },
-    { id: "securityCost",        label: "ALSOK/USEN導入費（円）",       placeholder: "例: 200,000",    value: securityCost,        setter: setSecurityCost        },
-    { id: "otherInitialCost",    label: "その他（円）",                 placeholder: "例: 500,000",    value: otherInitialCost,    setter: setOtherInitialCost    },
-  ].filter((item) => visibleInvestmentCostIds.includes(item.id))
+  const COST_ITEMS = masterModel.investment.map((m) => ({
+    id: m.fieldId,
+    label: m.unit ? `${m.label}（${m.unit}）` : m.label,
+    placeholder: "例: 0",
+    value: investmentValues[m.fieldId] ?? "",
+  }))
 
   const rcTotalPages   = Math.ceil(RC_ITEMS.length   / PAGE_SIZE)
   const costTotalPages = Math.ceil(COST_ITEMS.length / PAGE_SIZE)
@@ -788,7 +743,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       type="number"
                       placeholder={item.placeholder}
                       value={item.value}
-                      onChange={(e) => item.setter(e.target.value)}
+                      onChange={(e) => handleRunningCostChange(item.id, e.target.value)}
                     />
                   </div>
                 ))}
@@ -854,12 +809,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       type="number"
                       placeholder={item.placeholder}
                       value={item.value}
-                      onChange={(e) => {
-                        if (item.id === "fitnessMachineCost") {
-                          setIsFitnessMachineCostManual(true)
-                        }
-                        item.setter(e.target.value)
-                      }}
+                      onChange={(e) => handleInvestmentCostChange(item.id, e.target.value)}
                     />
                   </div>
                 ))}

@@ -8,7 +8,6 @@ import {
   GitBranchIcon,
   LayersIcon,
   MegaphoneIcon,
-  NetworkIcon,
   SaveIcon,
   SparklesIcon,
   UsersIcon,
@@ -26,21 +25,6 @@ import type { CalcParameterConfig, CalcPricingOption } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { computeAveragePrice } from "@/lib/average-price"
 import { toast } from "sonner"
-import { DependencyGraph } from "@/components/master/dependency-graph"
-
-type SectionKey = "fee" | "competitor" | "adCost" | "pricing" | "growth" | "capacity" | "scenario" | "other"
-
-const SECTION_HIGHLIGHT_KEYS: Record<SectionKey, string[]> = {
-  fee: ["paymentFeeRate", "royaltyCapMonthly", "appFeeMonthly", "paymentFee", "monthlyRoyalty", "appFee"],
-  competitor: ["initialJoiners", "demandMultiplier"],
-  adCost: ["adCostMonthly"],
-  // 以下は式セット(formula)ではなく計算定数のため、依存グラフのハイライト対象は無し
-  pricing: [],
-  growth: [],
-  capacity: [],
-  scenario: [],
-  other: [],
-}
 
 type ScenarioKey = "conservative" | "standard" | "aggressive"
 const SCENARIO_LABELS: Record<ScenarioKey, string> = {
@@ -342,7 +326,6 @@ export function LogicVisualizationView() {
   const [deprBodyComp, setDeprBodyComp] = useState("")
   const [corporateTaxRate, setCorporateTaxRate] = useState("")
   const [cashCollectionLagMonths, setCashCollectionLagMonths] = useState("")
-  const [activeSection, setActiveSection] = useState<SectionKey | null>(null)
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
@@ -1071,26 +1054,7 @@ export function LogicVisualizationView() {
         />
       </div>
 
-      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm">
-        <SectionHeader
-          icon={NetworkIcon}
-          title="依存関係グラフ"
-          description="式同士の依存関係を計算フェーズ別に表示します。下のセクションにマウスを乗せると、そのパラメータが影響する式がハイライトされます。"
-          accent="primary"
-        />
-        <DependencyGraph
-          formulas={data.formulas}
-          highlightedParamKeys={activeSection ? SECTION_HIGHLIGHT_KEYS[activeSection] : []}
-        />
-      </section>
-
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("fee")}
-        onMouseLeave={() => setActiveSection((current) => (current === "fee" ? null : current))}
-        onFocus={() => setActiveSection("fee")}
-        onBlur={() => setActiveSection((current) => (current === "fee" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={CreditCardIcon}
           title="手数料・上限"
@@ -1152,13 +1116,7 @@ export function LogicVisualizationView() {
         </div>
       </section>
 
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("competitor")}
-        onMouseLeave={() => setActiveSection((current) => (current === "competitor" ? null : current))}
-        onFocus={() => setActiveSection("competitor")}
-        onBlur={() => setActiveSection((current) => (current === "competitor" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={UsersIcon}
           title="競合影響率"
@@ -1228,13 +1186,7 @@ export function LogicVisualizationView() {
         </div>
       </section>
 
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("adCost")}
-        onMouseLeave={() => setActiveSection((current) => (current === "adCost" ? null : current))}
-        onFocus={() => setActiveSection("adCost")}
-        onBlur={() => setActiveSection((current) => (current === "adCost" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={MegaphoneIcon}
           title="広告費テーブル"
@@ -1331,11 +1283,7 @@ export function LogicVisualizationView() {
       </section>
 
       {/* 平均単価（会費＋オプション） */}
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("pricing")}
-        onMouseLeave={() => setActiveSection((current) => (current === "pricing" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={CreditCardIcon}
           title="平均単価（会費＋オプション）"
@@ -1420,11 +1368,7 @@ export function LogicVisualizationView() {
       </section>
 
       {/* 会員獲得モデル（継続率・獲得チャネル） */}
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("growth")}
-        onMouseLeave={() => setActiveSection((current) => (current === "growth" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={UsersIcon}
           title="会員獲得モデル"
@@ -1494,11 +1438,7 @@ export function LogicVisualizationView() {
       </section>
 
       {/* キャパシティ */}
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("capacity")}
-        onMouseLeave={() => setActiveSection((current) => (current === "capacity" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={LayersIcon}
           title="キャパシティ"
@@ -1549,11 +1489,7 @@ export function LogicVisualizationView() {
       </section>
 
       {/* シナリオ係数（店頭看板・広告効果） */}
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("scenario")}
-        onMouseLeave={() => setActiveSection((current) => (current === "scenario" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={GitBranchIcon}
           title="シナリオ係数（看板・広告効果）"
@@ -1602,11 +1538,7 @@ export function LogicVisualizationView() {
       </section>
 
       {/* 減価償却・税・入金サイクル */}
-      <section
-        className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md"
-        onMouseEnter={() => setActiveSection("other")}
-        onMouseLeave={() => setActiveSection((current) => (current === "other" ? null : current))}
-      >
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
         <SectionHeader
           icon={VariableIcon}
           title="減価償却・税・入金サイクル"
