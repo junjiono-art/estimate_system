@@ -148,10 +148,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
 
-  // マスタ値＋ロイヤリティ率＋床面積（坪連動の数量算出用）から、試算画面に表示する費目モデルを生成する
+  // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する。
+  // 坪連動(perTsubo)のランニングコストは坪数を掛ける前の単価ベース金額を保持する（坪数は下の合計算出で掛ける）。
   const masterModel = useMemo(
-    () => resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15, parseInt(floorArea, 10) || 0),
-    [masterValues, royaltyRate, floorArea],
+    () => resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15),
+    [masterValues, royaltyRate],
   )
   const hasFitnessMachineItem = masterModel.investment.some((m) => m.fieldId === "fitnessMachineCost")
 
@@ -200,7 +201,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
-    const model = resolveMasterFormModel(values, numericRoyaltyRate, parseInt(floorArea, 10) || 0)
+    const model = resolveMasterFormModel(values, numericRoyaltyRate)
 
     setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
 
@@ -258,13 +259,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
   }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, hasFitnessMachineItem, masterValues, royaltyRate])
 
-  // 坪連動（perTsubo）のランニングコストは床面積に応じて自動再計算する（単価 × 坪数）
-  useEffect(() => {
-    if (masterValues.length === 0) return
-    const model = resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15, parseInt(floorArea, 10) || 0)
-    setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
-  }, [floorArea, masterValues, royaltyRate])
-
   // ── アイテム定義（マスタ駆動）──
   // 項目名・単位・並び順・初期金額はすべてマスタ（masterModel）から生成する。
   // マスタで費目名を変更／費目を追加すると、そのまま試算画面に反映される。
@@ -287,7 +281,23 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const rcPageItems    = RC_ITEMS.slice(rcPage     * PAGE_SIZE, (rcPage   + 1) * PAGE_SIZE)
   const costPageItems  = COST_ITEMS.slice(costPage * PAGE_SIZE, (costPage + 1) * PAGE_SIZE)
 
-  const totalRunningCost = RC_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0)
+  // 坪数依存（perTsubo）の費目は「入力値 × 坪数」で実コスト化する。それ以外は入力値そのまま。
+  const floorAreaTsubo = Math.max(0, parseInt(floorArea, 10) || 0)
+  const rentValue = Math.max(0, parseInt(rentPerTsubo, 10) || 0)
+  const perTsuboFieldIds = new Set(
+    masterModel.running.filter((m) => m.quantityBasis === "perTsubo").map((m) => m.fieldId),
+  )
+  const runningEffectiveByField: Record<string, number> = Object.fromEntries(
+    RC_ITEMS.map((item) => {
+      const raw = Math.max(0, parseInt(item.value) || 0)
+      const effective = perTsuboFieldIds.has(item.id) ? raw * floorAreaTsubo : raw
+      return [item.id, Math.round(effective)]
+    }),
+  )
+  // 試算に渡すランニングコスト総額（坪数換算後・家賃は含めない）
+  const runningEffectiveTotal = Object.values(runningEffectiveByField).reduce((acc, v) => acc + v, 0)
+  // ランニングコストタブ右上に表示する金額（家賃 ＋ 坪数換算後のランニングコスト総額）
+  const runningCostTotalWithRent = rentValue + runningEffectiveTotal
   const totalInitialCost = COST_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0)
 
   const currentIndex = TABS.findIndex((t) => t.id === activeTab)
@@ -461,8 +471,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           locationType,
         },
         runningCosts: {
-          byField: Object.fromEntries(RC_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)])),
-          total: totalRunningCost,
+          // 坪数依存の費目は坪数換算後の実コストを渡す（試算側は坪数を掛けた後を使用）
+          byField: runningEffectiveByField,
+          total: runningEffectiveTotal,
         },
         investmentCosts: {
           byField: investmentByField,
@@ -739,7 +750,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   地域・店舗の実情に合わせて各費目の月額を入力してください。
                 </p>
                 <span className="shrink-0 rounded-md border border-border bg-muted/50 px-2.5 py-1 font-mono text-xs font-medium">
-                  合計 {totalRunningCost.toLocaleString()} 円/月
+                  合計（家賃込） {runningCostTotalWithRent.toLocaleString()} 円/月
                 </span>
               </div>
               {masterLoadError && (

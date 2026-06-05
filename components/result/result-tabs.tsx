@@ -10,8 +10,6 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { KpiCards } from "./kpi-cards"
@@ -100,7 +98,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [locationType, setLocationType] = useState<"urban" | "suburban" | "rural">(simulationRequest?.locationType ?? "suburban")
   const [includeDepreciation, setIncludeDepreciation] = useState(true)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
-  const [createdBy, setCreatedBy] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState("")
   const [scenarioError, setScenarioError] = useState("")
@@ -304,7 +301,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   }
 
   async function handleSave() {
-    if (!createdBy.trim()) return
     setIsSaving(true)
     setSaveError("")
 
@@ -317,10 +313,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       const nextFranchiseRate = (parseInt(franchiseRate) || 0) as 0 | 10 | 15
 
       const payload = {
-        resultId: currentData.id,
         formulaSetVersion: currentData.formulaSetVersion,
         storeName: currentData.storeName,
-        username: createdBy.trim(),
+        username: currentData.createdBy?.trim() || "未設定",
         scenario,
         input: {
           storeName: currentData.storeName,
@@ -360,7 +355,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       }
 
       setSaveDialogOpen(false)
-      setCreatedBy("")
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "試算結果の保存に失敗しました。")
     } finally {
@@ -411,20 +405,10 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <DialogHeader>
             <DialogTitle>試算結果を保存</DialogTitle>
             <DialogDescription>
-              担当者名を入力して保存してください。
+              以下の内容で試算結果を保存します。
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 py-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="createdBy" className="text-sm font-medium">担当者名</Label>
-              <Input
-                id="createdBy"
-                placeholder="例: 田中太郎"
-                value={createdBy}
-                onChange={(e) => setCreatedBy(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void handleSave() }}
-              />
-            </div>
             {saveError && (
               <p className="text-xs text-destructive">{saveError}</p>
             )}
@@ -438,7 +422,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             <Button variant="outline" size="sm" onClick={() => setSaveDialogOpen(false)}>
               キャンセル
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={!createdBy.trim() || isSaving}>
+            <Button size="sm" onClick={handleSave} disabled={isSaving}>
               {isSaving ? "保存中..." : "保存する"}
             </Button>
           </DialogFooter>

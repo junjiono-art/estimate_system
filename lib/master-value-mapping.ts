@@ -10,7 +10,7 @@ export const RUNNING_COST_CODE_TO_FIELD_ID = {
   running_other: "rcOther",
 } as const
 
-import type { MasterValue, MasterValueRoyaltyMode } from "@/lib/types"
+import type { MasterValue, MasterValueQuantityBasis, MasterValueRoyaltyMode } from "@/lib/types"
 
 export const INVESTMENT_COST_CODE_TO_FIELD_ID = {
   investment_fitness_machine: "fitnessMachineCost",
@@ -51,10 +51,16 @@ export type MasterFormItem = {
   label: string
   /** マスタで設定した単位（例: "円/月", "円", "回"） */
   unit: string
-  /** ロイヤリティ率・数量(坪連動含む)を反映した初期金額（ランニングは月額、投資は取得額） */
+  /**
+   * 初期金額。
+   * ランニング: 坪数を掛ける前の単価ベース金額（単価 × 数量）。坪連動(perTsubo)の坪数は試算画面側で掛ける。
+   * 投資: 取得額。
+   */
   amount: number
   /** 投資コストの耐用年数（償却年）。未設定/0 は非償却 */
   depreciationYears?: number
+  /** ランニングコストの数量基準。perTsubo の場合、試算画面で amount に坪数を掛けて実コスト化する */
+  quantityBasis?: MasterValueQuantityBasis
 }
 
 /**
@@ -70,6 +76,20 @@ export function resolveRunningQuantity(value: MasterValue, floorAreaTsubo: numbe
     return Math.max(0, floorAreaTsubo) * quantity
   }
   if (value.quantityBasis === "fixed") {
+    return quantity
+  }
+  return 1
+}
+
+/**
+ * 坪数を掛ける前の実効数量を算出する（試算画面のランニングコスト入力欄に表示する単価ベースの数量）。
+ * - perTsubo: 数量のみ（坪数は掛けない。坪数は試算画面側で別途掛ける）
+ * - fixed: 数量そのもの（回数・台数等）
+ * - monthly（既定）: 1
+ */
+export function resolveRunningBaseQuantity(value: MasterValue): number {
+  const quantity = Number.isFinite(Number(value.quantity)) && Number(value.quantity) > 0 ? Number(value.quantity) : 1
+  if (value.quantityBasis === "perTsubo" || value.quantityBasis === "fixed") {
     return quantity
   }
   return 1
@@ -96,13 +116,12 @@ function sortByKnownOrder(items: MasterFormItem[], order: string[]): MasterFormI
  * マスタ値から試算フォームの表示モデル（label/unit/金額/並び順）を生成する。
  * 試算画面の項目名・項目構成をマスタ完全駆動にするためのエントリポイント。
  *
- * ランニングコストの初期金額は「単価 × 実効数量」（坪連動対応）で算出する。
- * @param floorAreaTsubo 坪連動(perTsubo)の数量算出に使う床面積（坪）。未指定は0。
+ * ランニングコストの初期金額は「単価 × 数量」で算出する（坪連動(perTsubo)の坪数は掛けない）。
+ * 坪連動の費目は坪数を掛ける前の単価ベース金額を amount に保持し、坪数は試算画面側で掛ける。
  */
 export function resolveMasterFormModel(
   values: MasterValue[],
   royaltyRate: RoyaltyRate,
-  floorAreaTsubo = 0,
 ): MasterFormModel {
   const running: MasterFormItem[] = []
   const investment: MasterFormItem[] = []
@@ -112,8 +131,9 @@ export function resolveMasterFormModel(
     const unitAmount = resolveMasterValueAmount(value, royaltyRate)
     if (value.category === "ランニングコスト") {
       const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID] ?? value.code
-      const amount = Math.round(unitAmount * resolveRunningQuantity(value, floorAreaTsubo))
-      running.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount })
+      // 坪連動(perTsubo)は坪数を掛ける前の単価ベース金額を表示する（坪数は試算画面側で掛ける）
+      const amount = Math.round(unitAmount * resolveRunningBaseQuantity(value))
+      running.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount, quantityBasis: value.quantityBasis })
       return
     }
     if (value.category === "投資コスト") {
