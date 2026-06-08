@@ -10,6 +10,7 @@ import {
   ChevronRightIcon,
   CheckIcon,
   SlidersHorizontalIcon,
+  RotateCcwIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -847,20 +848,20 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       value={machineMaintenanceCost}
                       onChange={(e) => handleMachineMaintenanceChange(e.target.value)}
                     />
-                    {isMachineMaintenanceManual && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 shrink-0 text-[10px]"
-                        onClick={() => {
-                          setIsMachineMaintenanceManual(false)
-                          setMachineMaintenanceCost(String(getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig)))
-                        }}
-                      >
-                        自動に戻す
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 shrink-0 gap-1 text-[10px]"
+                      title="住所・坪数・ロイヤリティ・マスタパラメータから自動算出し直します"
+                      onClick={() => {
+                        setIsMachineMaintenanceManual(false)
+                        setMachineMaintenanceCost(String(getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig)))
+                      }}
+                    >
+                      <RotateCcwIcon className="size-3" />
+                      再計算
+                    </Button>
                   </div>
                 </div>
               </div>
