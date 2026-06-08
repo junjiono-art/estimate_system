@@ -35,7 +35,9 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { getErrorMessage } from "@/lib/error-utils"
 import { getFitnessMachineUnitPriceByAddress } from "@/lib/fitness-machine-cost"
-import type { LocationType, MasterValue } from "@/lib/types"
+import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
+import type { CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
+import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import {
   resolveMasterFieldValues,
@@ -61,7 +63,10 @@ export type FormSubmitData = {
   }
   runningCosts: {
     byField: Record<string, number>
+    /** マスタ駆動の費目合計（坪数換算後・家賃/マシンメンテ費は含めない） */
     total: number
+    /** マシンメンテナンス費（固定枠）の月額。total には含めず別枠で渡す */
+    machineMaintenance: number
   }
   investmentCosts: {
     byField: Record<string, number>
@@ -147,6 +152,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [runningValues,    setRunningValues]    = useState<Record<string, string>>({})
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
+  // マシンメンテナンス費（固定枠）。初期値は machineMaintenance パラメータから自動算出し、手動で上書き可能。
+  const [machineMaintenanceCost, setMachineMaintenanceCost] = useState("")
+  const [isMachineMaintenanceManual, setIsMachineMaintenanceManual] = useState(false)
+  const [machineMaintenanceConfig, setMachineMaintenanceConfig] =
+    useState<CalcMachineMaintenanceConfig>(DEFAULT_CALC_PARAMS.machineMaintenance)
 
   // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する。
   // 坪連動(perTsubo)のランニングコストは坪数を掛ける前の単価ベース金額を保持する（坪数は下の合計算出で掛ける）。
@@ -163,6 +173,26 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   function handleInvestmentCostChange(fieldId: string, value: string) {
     if (fieldId === "fitnessMachineCost") setIsFitnessMachineCostManual(true)
     setInvestmentValues((prev) => ({ ...prev, [fieldId]: value }))
+  }
+
+  function handleMachineMaintenanceChange(value: string) {
+    setIsMachineMaintenanceManual(true)
+    setMachineMaintenanceCost(value)
+  }
+
+  // マシンメンテナンス費（固定枠）の自動算出値。住所×坪数×ロイヤリティ＋マスタパラメータから算出。
+  function getAutoMachineMaintenanceCost(
+    currentAddress: string,
+    currentFloorArea: string,
+    selectedRoyaltyRate: "0" | "10" | "15",
+    config: CalcMachineMaintenanceConfig,
+  ): number {
+    return computeMachineMaintenanceMonthly({
+      address: currentAddress,
+      floorAreaTsubo: Math.max(0, parseInt(currentFloorArea, 10) || 0),
+      royaltyRate: (parseInt(selectedRoyaltyRate, 10) || 0) / 100,
+      config,
+    })
   }
 
   function getAddressBasedFitnessMachineCost(
@@ -214,6 +244,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     }
     setInvestmentValues(investmentDefaults)
     setIsFitnessMachineCostManual(false)
+    // マシンメンテナンス費（固定枠）も自動算出値へリセット
+    setMachineMaintenanceCost(String(
+      getAutoMachineMaintenanceCost(address, floorArea, selectedRoyaltyRate, machineMaintenanceConfig),
+    ))
+    setIsMachineMaintenanceManual(false)
   }
 
   async function loadMasterDefaults() {
@@ -245,6 +280,22 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     void loadMasterDefaults()
   }, [])
 
+  // マシンメンテナンス費の自動算出に使うパラメータ（実施間隔・単価表等）を取得
+  useEffect(() => {
+    let disposed = false
+    void (async () => {
+      try {
+        const response = await fetch("/api/master/calc-params", { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        const config = payload?.params?.machineMaintenance as CalcMachineMaintenanceConfig | undefined
+        if (!disposed && config) setMachineMaintenanceConfig(config)
+      } catch {
+        // 取得失敗時は既定パラメータ（DEFAULT_CALC_PARAMS）で算出する
+      }
+    })()
+    return () => { disposed = true }
+  }, [])
+
   useEffect(() => {
     if (masterValues.length === 0) return
     applyMasterDefaults(masterValues, royaltyRate)
@@ -258,6 +309,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
   }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, hasFitnessMachineItem, masterValues, royaltyRate])
+
+  // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
+  useEffect(() => {
+    if (isMachineMaintenanceManual) return
+    setMachineMaintenanceCost(String(
+      getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig),
+    ))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, floorArea, royaltyRate, machineMaintenanceConfig, isMachineMaintenanceManual])
 
   // ── アイテム定義（マスタ駆動）──
   // 項目名・単位・並び順・初期金額はすべてマスタ（masterModel）から生成する。
@@ -276,10 +336,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     value: investmentValues[m.fieldId] ?? "",
   }))
 
+  // フィットネスマシン費は専用の固定枠として描画するため、動的一覧（ページネーション対象）からは除外する。
+  // ※ 合計・investmentByField の算出には引き続き COST_ITEMS（全件）を使うため、値は試算に反映される。
+  const fitnessMachineItem = masterModel.investment.find((m) => m.fieldId === "fitnessMachineCost")
+  const costDisplayItems = COST_ITEMS.filter((item) => item.id !== "fitnessMachineCost")
+
   const rcTotalPages   = Math.ceil(RC_ITEMS.length   / PAGE_SIZE)
-  const costTotalPages = Math.ceil(COST_ITEMS.length / PAGE_SIZE)
+  const costTotalPages = Math.ceil(costDisplayItems.length / PAGE_SIZE)
   const rcPageItems    = RC_ITEMS.slice(rcPage     * PAGE_SIZE, (rcPage   + 1) * PAGE_SIZE)
-  const costPageItems  = COST_ITEMS.slice(costPage * PAGE_SIZE, (costPage + 1) * PAGE_SIZE)
+  const costPageItems  = costDisplayItems.slice(costPage * PAGE_SIZE, (costPage + 1) * PAGE_SIZE)
 
   // 坪数依存（perTsubo）の費目は「入力値 × 坪数」で実コスト化する。それ以外は入力値そのまま。
   const floorAreaTsubo = Math.max(0, parseInt(floorArea, 10) || 0)
@@ -294,10 +359,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       return [item.id, Math.round(effective)]
     }),
   )
-  // 試算に渡すランニングコスト総額（坪数換算後・家賃は含めない）
+  // 試算に渡すランニングコスト総額（坪数換算後・家賃/マシンメンテ費は含めない）
   const runningEffectiveTotal = Object.values(runningEffectiveByField).reduce((acc, v) => acc + v, 0)
-  // ランニングコストタブ右上に表示する金額（家賃 ＋ 坪数換算後のランニングコスト総額）
-  const runningCostTotalWithRent = rentValue + runningEffectiveTotal
+  // マシンメンテナンス費（固定枠）の月額。total には含めず別枠で渡す（calc-engine 側で加算）。
+  const machineMaintenanceValue = Math.max(0, parseInt(machineMaintenanceCost) || 0)
+  // ランニングコストタブ右上に表示する金額（家賃 ＋ ランニング費 ＋ マシンメンテ費）
+  const runningCostTotalWithRent = rentValue + runningEffectiveTotal + machineMaintenanceValue
   const totalInitialCost = COST_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0)
 
   const currentIndex = TABS.findIndex((t) => t.id === activeTab)
@@ -474,6 +541,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           // 坪数依存の費目は坪数換算後の実コストを渡す（試算側は坪数を掛けた後を使用）
           byField: runningEffectiveByField,
           total: runningEffectiveTotal,
+          machineMaintenance: machineMaintenanceValue,
         },
         investmentCosts: {
           byField: investmentByField,
@@ -762,6 +830,41 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 </div>
               )}
 
+              {/* 固定枠：マシンメンテナンス費（ランニングコスト） */}
+              <div className="rounded-lg border border-chart-4/40 bg-chart-4/5 p-3">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <Label htmlFor="machineMaintenanceCost" className="text-xs font-semibold">マシンメンテナンス費（円/月）</Label>
+                    <span className="text-[10px] leading-relaxed text-muted-foreground">
+                      都道府県単価 × 人数 × 日数 ÷ 実施間隔から自動算出。手動で変更できます。
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="machineMaintenanceCost"
+                      type="number"
+                      className="w-40"
+                      value={machineMaintenanceCost}
+                      onChange={(e) => handleMachineMaintenanceChange(e.target.value)}
+                    />
+                    {isMachineMaintenanceManual && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 text-[10px]"
+                        onClick={() => {
+                          setIsMachineMaintenanceManual(false)
+                          setMachineMaintenanceCost(String(getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig)))
+                        }}
+                      >
+                        自動に戻す
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {rcPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
@@ -828,6 +931,48 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 </div>
               )}
 
+              {/* 固定枠：フィットネスマシン費（投資コスト） */}
+              {fitnessMachineItem && (
+                <div className="rounded-lg border border-chart-4/40 bg-chart-4/5 p-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <Label htmlFor="fitnessMachineCost" className="text-xs font-semibold">
+                        {fitnessMachineItem.unit ? `フィットネスマシン費（${fitnessMachineItem.unit}）` : "フィットネスマシン費（円）"}
+                      </Label>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">
+                        都道府県単価 × 有効坪数から自動算出。手動で変更できます。
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="fitnessMachineCost"
+                        type="number"
+                        className="w-40"
+                        value={investmentValues.fitnessMachineCost ?? ""}
+                        onChange={(e) => handleInvestmentCostChange("fitnessMachineCost", e.target.value)}
+                      />
+                      {isFitnessMachineCostManual && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-[10px]"
+                          onClick={() => {
+                            setIsFitnessMachineCostManual(false)
+                            setInvestmentValues((prev) => ({
+                              ...prev,
+                              fitnessMachineCost: String(getAddressBasedFitnessMachineCost(masterValues, royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)),
+                            }))
+                          }}
+                        >
+                          自動に戻す
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {costPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
@@ -857,7 +1002,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   前の10件
                 </Button>
                 <span className="text-[11px] text-muted-foreground">
-                  {costPage + 1} / {costTotalPages} ページ（{costPage * PAGE_SIZE + 1}〜{Math.min((costPage + 1) * PAGE_SIZE, COST_ITEMS.length)} 件目）
+                  {costPage + 1} / {costTotalPages} ページ（{costPage * PAGE_SIZE + 1}〜{Math.min((costPage + 1) * PAGE_SIZE, costDisplayItems.length)} 件目）
                 </span>
                 <Button
                   type="button"

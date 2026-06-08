@@ -11,6 +11,7 @@ import {
   FITNESS_MACHINE_BASE_COST,
   resolveFitnessMachineCostByAddress,
 } from "@/lib/fitness-machine-cost"
+import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import { FormulaEvaluationEngine } from "@/lib/server/formula-evaluation-engine"
 
 export type SimulateInput = SimulationRequestInput
@@ -112,6 +113,27 @@ function resolveMonthlyRunning(input?: SimulateInput): number {
   const running = Number(input?.runningCostTotal)
   if (Number.isFinite(running) && running >= 0) return Math.round(running)
   return DEFAULT_MONTHLY_RUNNING
+}
+
+/**
+ * マシンメンテナンス費（月額）を決定する。
+ * 入力タブの固定枠で手入力された値（machineMaintenanceCost）があればそれを優先採用し、
+ * 無ければ machineMaintenance パラメータから自動算出する（入力欄 B34）。
+ */
+function resolveMachineMaintenance(
+  input: SimulateInput | undefined,
+  calcParams: CalcParameterConfig,
+  floorAreaTsubo: number,
+  royaltyRate: number,
+): number {
+  const manual = Number(input?.machineMaintenanceCost)
+  if (Number.isFinite(manual) && manual >= 0) return Math.round(manual)
+  return computeMachineMaintenanceMonthly({
+    address: input?.location,
+    floorAreaTsubo,
+    royaltyRate,
+    config: calcParams.machineMaintenance,
+  })
 }
 
 function resolveInitialInvestment(input?: SimulateInput): number {
@@ -262,7 +284,10 @@ export function buildRegressionRows(
 
   const royaltyRate = Math.max(0, resolveFranchiseRate(resolvedInput)) / 100
   const monthlyRent = resolveMonthlyRent(resolvedInput)
-  const monthlyRunning = resolveMonthlyRunning(resolvedInput)
+  // ランニングコストにマシンメンテナンス費（入力欄 B34）を内包する。
+  // 手入力（固定枠）があればそれを優先、無ければパラメータから自動算出する。
+  const machineMaintenance = resolveMachineMaintenance(resolvedInput, calcParams, floorArea, royaltyRate)
+  const monthlyRunning = resolveMonthlyRunning(resolvedInput) + machineMaintenance
   const fixedCost = monthlyRent + monthlyRunning
 
   return growth.map((g) => {
@@ -384,7 +409,6 @@ export function calculateSimulation(
   const machineDelta = machinesCost - FITNESS_MACHINE_BASE_COST
   const initialInvestment = Math.max(0, resolveInitialInvestment(input) + machineDelta)
   const monthlyRent = resolveMonthlyRent(input)
-  const monthlyRunningCost = resolveMonthlyRunning(input)
   const franchiseRate = resolveFranchiseRate(input)
   const royaltyRate = Math.max(0, franchiseRate) / 100
   const includeDepreciation = input.includeDepreciation !== false
@@ -393,6 +417,11 @@ export function calculateSimulation(
   const locationType = input.locationType ?? "suburban"
   const floorArea = Number(input.floorAreaTsubo) || BASE_FLOOR_AREA_TSUBO
   const capacityResult = computeCapacity(floorArea, locationType, calcParams.capacity)
+
+  // マシンメンテナンス費（入力欄 B34）をランニングコストに内包する。
+  // 手入力（固定枠）があればそれを優先、無ければパラメータから自動算出する。
+  const monthlyMachineMaintenance = resolveMachineMaintenance(input, calcParams, floorArea, royaltyRate)
+  const monthlyRunningCost = resolveMonthlyRunning(input) + monthlyMachineMaintenance
 
   const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams, options?.formulaSet)
   const monthlyDepreciation = includeDepreciation
@@ -471,6 +500,7 @@ export function calculateSimulation(
     monthlyRevenue,
     monthlyRent,
     monthlyRunningCost,
+    monthlyMachineMaintenance,
     monthlyFranchiseCost: monthlyRoyalty + monthlyAppFee,
     monthlyProfit,
     paybackMonths: estimatePaybackMonths(rows, initialInvestment),

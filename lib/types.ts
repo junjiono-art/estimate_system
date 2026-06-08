@@ -101,6 +101,12 @@ export interface SimulationRequestInput {
   competitorCount?: number
   locationType?: LocationType
   runningCostTotal?: number
+  /**
+   * マシンメンテナンス費の手入力値（月額）。入力タブの固定枠で上書きした値。
+   * 指定時はこの値を採用し、未指定なら machineMaintenance パラメータから自動算出する。
+   * runningCostTotal には含めない（calc-engine 側で別途加算する）。
+   */
+  machineMaintenanceCost?: number
   initialInvestmentTotal?: number
   initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
   franchiseRate?: 0 | 10 | 15
@@ -182,6 +188,8 @@ export interface SimulationResult {
   monthlyRevenue: number
   monthlyRent: number
   monthlyRunningCost: number
+  /** 月額ランニングコストのうちマシンメンテナンス費（内訳表示用。入力欄 B34） */
+  monthlyMachineMaintenance?: number
   monthlyFranchiseCost: number
   monthlyProfit: number
   // 回収
@@ -363,6 +371,34 @@ export interface CalcDepreciationConfig {
   usefulLifeYears: Record<string, number>
 }
 
+/** マシンメンテナンスの坪数帯→作業人数・日数（入力欄 N19/P19） */
+export interface CalcMachineMaintenanceTsuboTier {
+  /** この坪数以上で適用。該当する最大の minTsubo の行を採用 */
+  minTsubo: number
+  /** 作業人数（入力欄 N19） */
+  workers: number
+  /** 作業日数（入力欄 P19） */
+  days: number
+}
+
+/**
+ * マシンメンテナンス費（入力欄 B34）。
+ * 1回費用 = 都道府県別単価(K23) × 作業人数(N19) × 作業日数(P19)。
+ * 月額 = 1回費用 ÷ 実施間隔(ヶ月)。Excel C34=IF(C73=0,0,…) を踏襲しFC時のみ計上可。
+ */
+export interface CalcMachineMaintenanceConfig {
+  /** ロイヤリティ>0（FC）のときのみ計上。Excel の C73=0→0 を踏襲 */
+  applyOnlyWhenFranchise: boolean
+  /** 実施間隔(ヶ月)。月額 = 1回費用 ÷ この値（Excel「2〜3ヶ月に1回」を月割り） */
+  intervalMonths: number
+  /** メンテ専用 都道府県別単価（入力欄 K23=VLOOKUP の Q列。購入単価表とは独立） */
+  unitPriceByPrefecture: Record<string, number>
+  /** 住所から都道府県が取れない場合の単価 */
+  fallbackUnitPrice: number
+  /** 坪数帯→作業人数・日数（入力欄 N19/P19） */
+  tsuboTiers: CalcMachineMaintenanceTsuboTier[]
+}
+
 export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
@@ -378,6 +414,8 @@ export interface CalcParameterConfig {
   signage: CalcSignageConfig
   capacity: CalcCapacityConfig
   depreciation: CalcDepreciationConfig
+  /** マシンメンテナンス費（入力欄 B34） */
+  machineMaintenance: CalcMachineMaintenanceConfig
   /** 法人税率 入力欄!C92 */
   corporateTaxRate: number
   /** 入金サイクル(月) 入力欄!C79 */

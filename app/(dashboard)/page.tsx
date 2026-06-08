@@ -23,7 +23,9 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
   const monthlyRevenue = Math.max(0, floorArea * 50000)
   const monthlyRent = Math.max(0, rentPerTsubo)
   const submittedRunningCost = submittedData?.runningCosts.total ?? 0
-  const monthlyRunningCost = Math.max(0, submittedRunningCost || Math.round(monthlyRent * 0.6))
+  // マシンメンテナンス費（固定枠）はランニング総額と別枠で渡されるため、ここで合算する
+  const submittedMaintenance = submittedData?.runningCosts.machineMaintenance ?? 0
+  const monthlyRunningCost = Math.max(0, (submittedRunningCost + submittedMaintenance) || Math.round(monthlyRent * 0.6))
   const franchiseRate = submittedData?.calcParams.royaltyRate ?? 0
   const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * (franchiseRate / 100)), 5000000)
   const monthlyAppFee = franchiseRate > 0 ? 50 : 0
@@ -155,6 +157,7 @@ export default function NewSimulationPage() {
       competitorCount: data.calcParams.competitorCount,
       locationType: data.calcParams.locationType,
       runningCostTotal: data.runningCosts.total,
+      machineMaintenanceCost: data.runningCosts.machineMaintenance,
       initialInvestmentTotal: data.investmentCosts.total,
       initialInvestmentByRoyaltyRate: data.investmentCosts.byRoyaltyRate,
       franchiseRate: data.calcParams.royaltyRate,

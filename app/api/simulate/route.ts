@@ -30,6 +30,7 @@ function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: 
     floorAreaTsubo: Number(body.floorAreaTsubo) || 0,
     rentPerTsubo: Number(body.rentPerTsubo) || 0,
     runningCostTotal: Number(body.runningCostTotal) || 0,
+    machineMaintenanceCost: Number.isFinite(Number(body.machineMaintenanceCost)) ? Number(body.machineMaintenanceCost) : null,
     initialInvestmentTotal: Number(body.initialInvestmentTotal) || 0,
     competitorCount: Number(body.competitorCount) || 0,
     locationType: body.locationType || "suburban",

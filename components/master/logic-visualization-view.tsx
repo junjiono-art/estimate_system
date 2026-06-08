@@ -12,6 +12,7 @@ import {
   SparklesIcon,
   UsersIcon,
   VariableIcon,
+  WrenchIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -285,6 +286,7 @@ export function LogicVisualizationView() {
   const [isSavingStep6, setIsSavingStep6] = useState(false)
   const [isSavingStep7, setIsSavingStep7] = useState(false)
   const [isSavingStep8, setIsSavingStep8] = useState(false)
+  const [isSavingStepMM, setIsSavingStepMM] = useState(false)
   // 平均単価（会費＋オプション）
   const [memberFeeExTax, setMemberFeeExTax] = useState("")
   const [pricingOptions, setPricingOptions] = useState<Array<{ label: string; price: string; ratio: string }>>([])
@@ -326,6 +328,11 @@ export function LogicVisualizationView() {
   const [deprBodyComp, setDeprBodyComp] = useState("")
   const [corporateTaxRate, setCorporateTaxRate] = useState("")
   const [cashCollectionLagMonths, setCashCollectionLagMonths] = useState("")
+  // マシンメンテナンス費（入力欄 B34）
+  const [mmApplyOnlyWhenFranchise, setMmApplyOnlyWhenFranchise] = useState(true)
+  const [mmIntervalMonths, setMmIntervalMonths] = useState("")
+  const [mmFallbackUnitPrice, setMmFallbackUnitPrice] = useState("")
+  const [mmTsuboTiers, setMmTsuboTiers] = useState<Array<{ minTsubo: string; workers: string; days: string }>>([])
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
@@ -410,6 +417,19 @@ export function LogicVisualizationView() {
     setCashCollectionLagMonths(String(params.cashCollectionLagMonths))
   }
 
+  function syncMachineMaintenanceParams(params: CalcParameterConfig) {
+    // 旧レコードに machineMaintenance が無い場合は既定値で補完
+    const mm = params.machineMaintenance ?? DEFAULT_CALC_PARAMS.machineMaintenance
+    setMmApplyOnlyWhenFranchise(mm.applyOnlyWhenFranchise)
+    setMmIntervalMonths(String(mm.intervalMonths))
+    setMmFallbackUnitPrice(String(mm.fallbackUnitPrice))
+    setMmTsuboTiers(
+      [...mm.tsuboTiers]
+        .sort((a, b) => a.minTsubo - b.minTsubo)
+        .map((t) => ({ minTsubo: String(t.minTsubo), workers: String(t.workers), days: String(t.days) })),
+    )
+  }
+
   function syncAllParams(params: CalcParameterConfig) {
     syncFeeParams(params)
     syncCompetitorParams(params)
@@ -419,6 +439,7 @@ export function LogicVisualizationView() {
     syncCapacityParams(params)
     syncScenarioParams(params)
     syncOtherParams(params)
+    syncMachineMaintenanceParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -866,6 +887,61 @@ export function LogicVisualizationView() {
       setIsSavingStep8,
       "減価償却・税・入金サイクルを保存しました。",
       syncOtherParams,
+    )
+  }
+
+  async function saveMachineMaintenanceParams() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const interval = parseRequiredNumber(mmIntervalMonths)
+    if (interval === null || interval < 1) {
+      toast.error("実施間隔は 1 以上（ヶ月）で入力してください。")
+      return
+    }
+    const fallback = parseRequiredNumber(mmFallbackUnitPrice)
+    if (fallback === null || fallback < 0) {
+      toast.error("都道府県不明時の単価は 0 以上で入力してください。")
+      return
+    }
+    const tiers: CalcParameterConfig["machineMaintenance"]["tsuboTiers"] = []
+    for (const [index, row] of mmTsuboTiers.entries()) {
+      const minTsubo = parseRequiredNumber(row.minTsubo)
+      const workers = parseRequiredNumber(row.workers)
+      const days = parseRequiredNumber(row.days)
+      if (minTsubo === null || minTsubo < 0) {
+        toast.error(`坪数帯${index + 1}の「坪数以上」は 0 以上で入力してください。`)
+        return
+      }
+      if (workers === null || workers < 0) {
+        toast.error(`坪数帯${index + 1}の「人数」は 0 以上で入力してください。`)
+        return
+      }
+      if (days === null || days < 0) {
+        toast.error(`坪数帯${index + 1}の「日数」は 0 以上で入力してください。`)
+        return
+      }
+      tiers.push({ minTsubo, workers, days })
+    }
+    if (tiers.length === 0) {
+      toast.error("坪数帯を 1 行以上設定してください。")
+      return
+    }
+    await persistParams(
+      {
+        machineMaintenance: {
+          // 都道府県別単価テーブルは現行値を維持（UIでは編集対象外）
+          ...calcParams.machineMaintenance,
+          applyOnlyWhenFranchise: mmApplyOnlyWhenFranchise,
+          intervalMonths: Math.round(interval),
+          fallbackUnitPrice: Math.round(fallback),
+          tsuboTiers: tiers.sort((a, b) => a.minTsubo - b.minTsubo),
+        },
+      },
+      setIsSavingStepMM,
+      "マシンメンテナンス費を保存しました。",
+      syncMachineMaintenanceParams,
     )
   }
 
@@ -1578,6 +1654,82 @@ export function LogicVisualizationView() {
           <Button onClick={saveStep8Params} disabled={isSavingStep8} size="sm" className="gap-1.5">
             <SaveIcon className="size-3.5" />
             {isSavingStep8 ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* マシンメンテナンス費（入力欄 B34） */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+        <SectionHeader
+          icon={WrenchIcon}
+          title="マシンメンテナンス費"
+          description="1回費用 = 都道府県別単価 × 作業人数 × 作業日数。月額 = 1回費用 ÷ 実施間隔。ランニングコストに内包されます。"
+          accent="chart-4"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">実施間隔</Label>
+            <SuffixedInput id="mmIntervalMonths" value={mmIntervalMonths} onChange={setMmIntervalMonths} disabled={isSavingStepMM} suffix="ヶ月に1回" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">都道府県不明時の単価</Label>
+            <SuffixedInput id="mmFallbackUnitPrice" value={mmFallbackUnitPrice} onChange={setMmFallbackUnitPrice} disabled={isSavingStepMM} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">FC（ロイヤリティ&gt;0）のみ計上</Label>
+            <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-xs">
+              <input
+                type="checkbox"
+                checked={mmApplyOnlyWhenFranchise}
+                onChange={(event) => setMmApplyOnlyWhenFranchise(event.target.checked)}
+                disabled={isSavingStepMM}
+                className="size-4 accent-chart-4"
+              />
+              <span className="text-muted-foreground">{mmApplyOnlyWhenFranchise ? "直営（ロイヤリティ=0）は0円" : "直営でも計上する"}</span>
+            </label>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">坪数帯 → 作業人数・日数（入力欄 N19/P19）</Label>
+          <div className="overflow-hidden rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">坪数以上</TableHead>
+                  <TableHead className="text-xs">作業人数</TableHead>
+                  <TableHead className="text-xs">作業日数</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mmTsuboTiers.map((row, index) => {
+                  const updateRow = (field: "minTsubo" | "workers" | "days", value: string) =>
+                    setMmTsuboTiers((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+                  return (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <SuffixedInput id={`mmTier-min-${index}`} value={row.minTsubo} onChange={(v) => updateRow("minTsubo", v)} disabled={isSavingStepMM} suffix="坪" inputMode="numeric" />
+                      </TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`mmTier-workers-${index}`} value={row.workers} onChange={(v) => updateRow("workers", v)} disabled={isSavingStepMM} suffix="名" inputMode="numeric" />
+                      </TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`mmTier-days-${index}`} value={row.days} onChange={(v) => updateRow("days", v)} disabled={isSavingStepMM} suffix="日" inputMode="numeric" />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 都道府県別の単価表（入力欄 K23＝VLOOKUP の Q列、47都道府県）はマスタに保持されますが、改定頻度が低いため当画面では編集対象外です（保存時に現行値を維持）。<br />
+          ※ Excel 原本は「2〜3ヶ月に1回」と注記しつつ毎月1回分を計上していました。本システムでは実施間隔で月割りし、実態に即した月額へ補正しています。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveMachineMaintenanceParams} disabled={isSavingStepMM} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStepMM ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>
