@@ -59,15 +59,15 @@ export function DashboardView({ data }: DashboardViewProps) {
               <p className="text-[10px] text-muted-foreground/70">会費＋オプション（1人あたり/月）</p>
             </div>
           )}
-          {data.minimumUnitPrice != null && (
+          {data.contributionMarginPerMember != null && (
             <div className="rounded-lg border border-border bg-card p-4">
-              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">最低単価</p>
-              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{Math.round(data.minimumUnitPrice).toLocaleString("ja-JP")} 円</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">限界利益</p>
+              <p className="mt-1 text-xl font-bold tracking-tight text-foreground">{Math.round(data.contributionMarginPerMember).toLocaleString("ja-JP")} 円</p>
               <p className="text-[10px] text-muted-foreground/70">
-                満員時に固定費を回収できる下限
+                平均単価 − 変動費（1人あたり/月）
                 {data.variableCostPerMember != null
                   ? `（変動費 ${Math.round(data.variableCostPerMember).toLocaleString("ja-JP")}円/人）`
-                  : "（1人あたり/月）"}
+                  : ""}
               </p>
             </div>
           )}

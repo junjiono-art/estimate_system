@@ -467,10 +467,11 @@ export function calculateSimulation(
 
   // 最低単価/人（月）= 変動費/人 + 固定費 ÷ 最大会員数。
   // キャパシティまで会員を埋めた場合に固定費を回収できる1人あたり月額売上の下限。
-  const maxMembers = Math.round(capacityResult.maxMembers)
-  const minimumUnitPrice = maxMembers > 0
-    ? Math.round(variableCostPerMember + fixedCostForBreakeven / maxMembers)
-    : undefined
+  // ※結果画面では限界利益を表示する方針のため、最低単価の算出はコメントアウトで残置（削除はしない）。
+  // const maxMembers = Math.round(capacityResult.maxMembers)
+  // const minimumUnitPrice = maxMembers > 0
+  //   ? Math.round(variableCostPerMember + fixedCostForBreakeven / maxMembers)
+  //   : undefined
 
   // 損益分岐点の4パターン（事業計画 I6-I9）。
   // 広告費=年1の定常月額(O66=12ヶ月目)、減価償却=資産別月額(O72)。減価償却計上の有無に関わらず常に算出。
@@ -519,7 +520,7 @@ export function calculateSimulation(
     averagePrice,
     variableCostPerMember: Math.round(variableCostPerMember),
     contributionMarginPerMember: Math.round(contributionMargin),
-    minimumUnitPrice,
+    // minimumUnitPrice,  // 最低単価は非表示方針のためコメントアウト（算出ロジックも上部で残置）
     capacity: {
       maxMembers: Math.round(capacityResult.maxMembers),
       concurrentUsers: Math.round(capacityResult.concurrentUsers),
