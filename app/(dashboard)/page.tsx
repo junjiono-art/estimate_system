@@ -150,7 +150,6 @@ export default function NewSimulationPage() {
     return {
       storeName: data.storeInfo.storeName,
       location: data.storeInfo.address,
-      prefecture: data.storeInfo.prefecture,
       scenario,
       floorAreaTsubo: data.storeInfo.floorArea,
       rentPerTsubo: data.storeInfo.rentPerTsubo,

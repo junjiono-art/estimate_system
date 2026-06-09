@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
+import { AmountInput } from "@/components/amount-input"
 import { getErrorMessage } from "@/lib/error-utils"
 import {
   getFitnessMachineUnitPriceByAddressAndRoyalty,
@@ -42,7 +43,6 @@ import {
   FITNESS_MACHINE_LABEL,
   FITNESS_MACHINE_UNIT,
   FITNESS_MACHINE_DEPRECIATION_YEARS,
-  PREFECTURE_FULL_NAMES,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import type { CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
@@ -82,7 +82,6 @@ export type FormSubmitData = {
   storeInfo: {
     storeName: string
     address: string
-    prefecture: string
     floorArea: number
     rentPerTsubo: number
   }
@@ -170,8 +169,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // 店舗基本情報
   const [storeName,      setStoreName]      = useState("")
   const [address,        setAddress]        = useState("")
-  // 都道府県（明示選択）。フィットネスマシン費・マシンメンテナンス費の単価算出に使用する。
-  const [prefecture,     setPrefecture]     = useState("")
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
 
@@ -267,14 +264,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // フィットネスマシン費はアプリ側で算出した値で上書きする（都道府県別単価×有効坪数、直営は半額）
     if (model.investment.some((m) => m.fieldId === FITNESS_MACHINE_FIELD_ID)) {
       investmentDefaults.fitnessMachineCost = String(
-        getAddressBasedFitnessMachineCost(selectedRoyaltyRate, prefecture, floorArea, golfRightBayCount, golfDualBayCount),
+        getAddressBasedFitnessMachineCost(selectedRoyaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount),
       )
     }
     setInvestmentValues(investmentDefaults)
     setIsFitnessMachineCostManual(false)
     // マシンメンテナンス費（固定枠）も自動算出値へリセット
     setMachineMaintenanceCost(String(
-      getAutoMachineMaintenanceCost(prefecture, floorArea, selectedRoyaltyRate, machineMaintenanceConfig),
+      getAutoMachineMaintenanceCost(address, floorArea, selectedRoyaltyRate, machineMaintenanceConfig),
     ))
     setIsMachineMaintenanceManual(false)
   }
@@ -334,18 +331,18 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // 手動上書き中のみ据え置く。
     if (isFitnessMachineCostManual) return
 
-    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(royaltyRate, prefecture, floorArea, golfRightBayCount, golfDualBayCount)
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
-  }, [prefecture, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, royaltyRate])
+  }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, royaltyRate])
 
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {
     if (isMachineMaintenanceManual) return
     setMachineMaintenanceCost(String(
-      getAutoMachineMaintenanceCost(prefecture, floorArea, royaltyRate, machineMaintenanceConfig),
+      getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig),
     ))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefecture, floorArea, royaltyRate, machineMaintenanceConfig, isMachineMaintenanceManual])
+  }, [address, floorArea, royaltyRate, machineMaintenanceConfig, isMachineMaintenanceManual])
 
   // ── アイテム定義（マスタ駆動）──
   // 項目名・単位・並び順・初期金額はすべてマスタ（masterModel）から生成する。
@@ -537,7 +534,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           // フィットネスマシン費は単価がロイヤリティで変わる（直営=半額）。手動上書きが無ければレートごとに再算出する。
           if (fieldId === FITNESS_MACHINE_FIELD_ID && !isFitnessMachineCostManual) {
             return sum + getAddressBasedFitnessMachineCost(
-              String(rate) as "0" | "10" | "15", prefecture, floorArea, golfRightBayCount, golfDualBayCount,
+              String(rate) as "0" | "10" | "15", address, floorArea, golfRightBayCount, golfDualBayCount,
             )
           }
           const targetBaseAmount = Number(targetResolvedByField[fieldId] ?? enteredAmount)
@@ -556,7 +553,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         storeInfo: {
           storeName,
           address,
-          prefecture,
           floorArea: parseInt(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
         },
@@ -675,24 +671,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                     {fieldErrors.address && (
                       <p className="text-[11px] text-destructive">{fieldErrors.address}</p>
                     )}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="prefecture" className="text-xs font-medium">
-                      都道府県
-                    </Label>
-                    <select
-                      id="prefecture"
-                      value={prefecture}
-                      onChange={(e) => setPrefecture(e.target.value)}
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-64"
-                    >
-                      <option value="">未選択</option>
-                      {PREFECTURE_FULL_NAMES.map((name) => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
-                    </select>
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
-                      フィットネスマシン費・マシンメンテナンス費の単価算出に使用します。
+                      住所の都道府県をもとにフィットネスマシン費・マシンメンテナンス費の単価を算出します。
                     </span>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -701,12 +681,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                         家賃（円）
                         <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
                       </Label>
-                      <Input
+                      <AmountInput
                         id="rentPerTsubo"
-                        type="number"
-                        placeholder="例: 300000"
+                        placeholder="例: 300,000"
                         value={rentPerTsubo}
-                        onChange={(e) => { setRentPerTsubo(e.target.value); setFieldErrors((prev) => ({ ...prev, rentPerTsubo: "" })) }}
+                        onValueChange={(raw) => { setRentPerTsubo(raw); setFieldErrors((prev) => ({ ...prev, rentPerTsubo: "" })) }}
                         className={fieldErrors.rentPerTsubo ? "border-destructive focus-visible:ring-destructive" : ""}
                       />
                       {fieldErrors.rentPerTsubo && (
@@ -887,12 +866,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Input
+                    <AmountInput
                       id="machineMaintenanceCost"
-                      type="number"
                       className="w-40"
                       value={machineMaintenanceCost}
-                      onChange={(e) => handleMachineMaintenanceChange(e.target.value)}
+                      onValueChange={(raw) => handleMachineMaintenanceChange(raw)}
                     />
                     <Button
                       type="button"
@@ -902,7 +880,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       title="住所・坪数・ロイヤリティ・マスタパラメータから自動算出し直します"
                       onClick={() => {
                         setIsMachineMaintenanceManual(false)
-                        setMachineMaintenanceCost(String(getAutoMachineMaintenanceCost(prefecture, floorArea, royaltyRate, machineMaintenanceConfig)))
+                        setMachineMaintenanceCost(String(getAutoMachineMaintenanceCost(address, floorArea, royaltyRate, machineMaintenanceConfig)))
                       }}
                     >
                       <RotateCcwIcon className="size-3" />
@@ -916,12 +894,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 {rcPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
                     <Label htmlFor={item.id} className="text-xs font-medium">{item.label}</Label>
-                    <Input
+                    <AmountInput
                       id={item.id}
-                      type="number"
                       placeholder={item.placeholder}
                       value={item.value}
-                      onChange={(e) => handleRunningCostChange(item.id, e.target.value)}
+                      onValueChange={(raw) => handleRunningCostChange(item.id, raw)}
                     />
                   </div>
                 ))}
@@ -991,12 +968,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Input
+                      <AmountInput
                         id="fitnessMachineCost"
-                        type="number"
                         className="w-40"
                         value={investmentValues.fitnessMachineCost ?? ""}
-                        onChange={(e) => handleInvestmentCostChange("fitnessMachineCost", e.target.value)}
+                        onValueChange={(raw) => handleInvestmentCostChange("fitnessMachineCost", raw)}
                       />
                       {isFitnessMachineCostManual && (
                         <Button
@@ -1008,7 +984,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                             setIsFitnessMachineCostManual(false)
                             setInvestmentValues((prev) => ({
                               ...prev,
-                              fitnessMachineCost: String(getAddressBasedFitnessMachineCost(royaltyRate, prefecture, floorArea, golfRightBayCount, golfDualBayCount)),
+                              fitnessMachineCost: String(getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)),
                             }))
                           }}
                         >
@@ -1024,12 +1000,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 {costPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
                     <Label htmlFor={item.id} className="text-xs font-medium">{item.label}</Label>
-                    <Input
+                    <AmountInput
                       id={item.id}
-                      type="number"
                       placeholder={item.placeholder}
                       value={item.value}
-                      onChange={(e) => handleInvestmentCostChange(item.id, e.target.value)}
+                      onValueChange={(raw) => handleInvestmentCostChange(item.id, raw)}
                     />
                   </div>
                 ))}

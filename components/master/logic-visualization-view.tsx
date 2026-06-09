@@ -25,6 +25,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { CalcParameterConfig, CalcPricingOption } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { computeAveragePrice } from "@/lib/average-price"
+import { formatThousands, toDigits } from "@/lib/number-format"
 import { toast } from "sonner"
 
 type ScenarioKey = "conservative" | "standard" | "aggressive"
@@ -206,13 +207,15 @@ function SuffixedInput({
   suffix: string
   inputMode?: "decimal" | "numeric"
 }) {
+  // 金額（円）フィールドは3桁区切りで表示する。状態へはカンマ無しの数字文字列を渡す。
+  const isAmount = suffix.includes("円")
   return (
     <div className="relative">
       <Input
         id={id}
         inputMode={inputMode}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+        value={isAmount ? formatThousands(value) : value}
+        onChange={(event) => onChange(isAmount ? toDigits(event.target.value) : event.target.value)}
         disabled={disabled}
         className="pr-10"
       />
@@ -1392,7 +1395,7 @@ export function LogicVisualizationView() {
                 <TableRow key={opt.label} className="border-border/40">
                   <TableCell className="text-xs font-medium">{opt.label}</TableCell>
                   <TableCell>
-                    <Input inputMode="numeric" value={opt.price} onChange={(e) => updateOption(index, "price", e.target.value)} disabled={isSavingStep4} className="h-8" />
+                    <Input inputMode="numeric" value={formatThousands(opt.price)} onChange={(e) => updateOption(index, "price", toDigits(e.target.value))} disabled={isSavingStep4} className="h-8" />
                   </TableCell>
                   <TableCell>
                     <Input inputMode="decimal" value={opt.ratio} onChange={(e) => updateOption(index, "ratio", e.target.value)} disabled={isSavingStep4} className="h-8" />
