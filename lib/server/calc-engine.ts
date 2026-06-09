@@ -129,7 +129,7 @@ function resolveMachineMaintenance(
   const manual = Number(input?.machineMaintenanceCost)
   if (Number.isFinite(manual) && manual >= 0) return Math.round(manual)
   return computeMachineMaintenanceMonthly({
-    address: input?.location,
+    address: input?.prefecture ?? input?.location,
     floorAreaTsubo,
     royaltyRate,
     config: calcParams.machineMaintenance,
@@ -405,8 +405,16 @@ export function calculateSimulation(
   options?: { formulaSet?: FormulaSetRecordLike },
 ): SimulationResult {
   const scenario = input.scenario ?? "standard"
-  const machinesCost = resolveFitnessMachineCostByAddress(input.location)
-  const machineDelta = machinesCost - FITNESS_MACHINE_BASE_COST
+  // フォームから投資総額(initialInvestmentTotal)と内訳が来ている場合、フィットネスマシン費は
+  // 既に総額へ内包済みのため、住所差分(machineDelta)を二重加算しない（フォームの内訳値を正とする）。
+  // 総額未指定（既定値）の場合のみ、住所差分で基準額を補正する。
+  const hasFormInvestmentTotal =
+    Number.isFinite(Number(input.initialInvestmentTotal)) && Number(input.initialInvestmentTotal) > 0
+  const breakdownMachinesCost = Number(input.investmentBreakdown?.fitnessMachineCost)
+  const machinesCost = Number.isFinite(breakdownMachinesCost) && breakdownMachinesCost >= 0
+    ? Math.round(breakdownMachinesCost)
+    : resolveFitnessMachineCostByAddress(input.prefecture ?? input.location)
+  const machineDelta = hasFormInvestmentTotal ? 0 : machinesCost - FITNESS_MACHINE_BASE_COST
   const initialInvestment = Math.max(0, resolveInitialInvestment(input) + machineDelta)
   const monthlyRent = resolveMonthlyRent(input)
   const franchiseRate = resolveFranchiseRate(input)

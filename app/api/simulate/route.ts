@@ -26,6 +26,7 @@ function buildCacheKey(body: Partial<SimulationRequestInput>, paramsUpdatedAt?: 
   return JSON.stringify({
     storeName: body.storeName?.trim() || "",
     location: body.location?.trim() || "",
+    prefecture: body.prefecture?.trim() || "",
     scenario: body.scenario || "standard",
     floorAreaTsubo: Number(body.floorAreaTsubo) || 0,
     rentPerTsubo: Number(body.rentPerTsubo) || 0,

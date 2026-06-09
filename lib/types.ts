@@ -93,6 +93,8 @@ export type LocationType = "urban" | "suburban" | "rural"
 export interface SimulationRequestInput {
   storeName: string
   location?: string
+  /** 都道府県名（試算フォームで明示選択）。フィットネスマシン費・マシンメンテナンス費の単価算出に使用 */
+  prefecture?: string
   scenario?: ScenarioType
   createdBy?: string
   floorAreaTsubo?: number
