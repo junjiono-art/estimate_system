@@ -586,8 +586,8 @@ export default function RunningCostPage() {
                       <Input
                         className="h-8 text-xs"
                         type="number"
-                        value={form.amountWithoutRoyalty || ""}
-                        onChange={(e) => setForm((f) => ({ ...f, amountWithoutRoyalty: Number(e.target.value) }))}
+                        value={Number.isFinite(form.amountWithoutRoyalty) ? form.amountWithoutRoyalty : ""}
+                        onChange={(e) => setForm((f) => ({ ...f, amountWithoutRoyalty: e.target.value === "" ? Number.NaN : Number(e.target.value) }))}
                       />
                     </div>
                     {form.royaltyRuleMode === "rate" ? (
@@ -597,8 +597,8 @@ export default function RunningCostPage() {
                           <Input
                             className="h-8 text-xs"
                             type="number"
-                            value={form.amountWithRoyalty10 || ""}
-                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty10: Number(e.target.value) }))}
+                            value={Number.isFinite(form.amountWithRoyalty10) ? form.amountWithRoyalty10 : ""}
+                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty10: e.target.value === "" ? Number.NaN : Number(e.target.value) }))}
                           />
                         </div>
                         <div className="flex flex-col gap-1.5">
@@ -606,8 +606,8 @@ export default function RunningCostPage() {
                           <Input
                             className="h-8 text-xs"
                             type="number"
-                            value={form.amountWithRoyalty15 || ""}
-                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty15: Number(e.target.value) }))}
+                            value={Number.isFinite(form.amountWithRoyalty15) ? form.amountWithRoyalty15 : ""}
+                            onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty15: e.target.value === "" ? Number.NaN : Number(e.target.value) }))}
                           />
                         </div>
                       </>
@@ -617,8 +617,8 @@ export default function RunningCostPage() {
                         <Input
                           className="h-8 text-xs"
                           type="number"
-                          value={form.amountWithRoyalty || ""}
-                          onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty: Number(e.target.value) }))}
+                          value={Number.isFinite(form.amountWithRoyalty) ? form.amountWithRoyalty : ""}
+                          onChange={(e) => setForm((f) => ({ ...f, amountWithRoyalty: e.target.value === "" ? Number.NaN : Number(e.target.value) }))}
                         />
                       </div>
                     )}
