@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   AlertTriangleIcon,
   ChevronRightIcon,
@@ -22,8 +22,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { CalcParameterConfig, CalcPricingOption } from "@/lib/types"
+import type { CalcMachineMaintenanceConfig, CalcParameterConfig, CalcPricingOption } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
+import { resolveMaintenanceUnitPrice } from "@/lib/machine-maintenance"
 import { computeAveragePrice } from "@/lib/average-price"
 import { formatThousands, toDigits } from "@/lib/number-format"
 import { toast } from "sonner"
@@ -199,6 +200,7 @@ function SuffixedInput({
   disabled,
   suffix,
   inputMode = "decimal",
+  placeholder,
 }: {
   id: string
   value: string
@@ -206,6 +208,7 @@ function SuffixedInput({
   disabled?: boolean
   suffix: string
   inputMode?: "decimal" | "numeric"
+  placeholder?: string
 }) {
   // 金額（円）フィールドは3桁区切りで表示する。状態へはカンマ無しの数字文字列を渡す。
   const isAmount = suffix.includes("円")
@@ -217,6 +220,7 @@ function SuffixedInput({
         value={isAmount ? formatThousands(value) : value}
         onChange={(event) => onChange(isAmount ? toDigits(event.target.value) : event.target.value)}
         disabled={disabled}
+        placeholder={placeholder}
         className="pr-10"
       />
       <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
@@ -336,6 +340,36 @@ export function LogicVisualizationView() {
   const [mmIntervalMonths, setMmIntervalMonths] = useState("")
   const [mmFallbackUnitPrice, setMmFallbackUnitPrice] = useState("")
   const [mmTsuboTiers, setMmTsuboTiers] = useState<Array<{ minTsubo: string; workers: string; days: string }>>([])
+  // 距離連動の単価モデル（入力欄 Q=P/2, P=$L$47+O, O=N×20000, N=ROUNDDOWN(L,-2)/100）
+  const [mmBaseUnitPrice, setMmBaseUnitPrice] = useState("")
+  const [mmDistanceStepKm, setMmDistanceStepKm] = useState("")
+  const [mmDistanceStepCost, setMmDistanceStepCost] = useState("")
+  const [mmUnitPriceDivisor, setMmUnitPriceDivisor] = useState("")
+  // 都道府県別 距離(L列) / 固定値上書き(Q列が手入力の県)
+  const [mmPrefRows, setMmPrefRows] = useState<Array<{ key: string; distance: string; override: string }>>([])
+  // 算出単価プレビュー用の設定（編集中の値を実エンジン resolveMaintenanceUnitPrice に渡して表示）
+  const mmPreviewConfig = useMemo<CalcMachineMaintenanceConfig>(() => {
+    const distanceByPrefecture: Record<string, number> = {}
+    const unitPriceByPrefecture: Record<string, number> = {}
+    for (const row of mmPrefRows) {
+      if (row.distance.trim() !== "" && Number.isFinite(Number(row.distance))) {
+        distanceByPrefecture[row.key] = Number(row.distance)
+      }
+      if (row.override.trim() !== "" && Number.isFinite(Number(row.override))) {
+        unitPriceByPrefecture[row.key] = Number(row.override)
+      }
+    }
+    return {
+      ...DEFAULT_CALC_PARAMS.machineMaintenance,
+      baseUnitPrice: Number(mmBaseUnitPrice) || 0,
+      distanceStepKm: Number(mmDistanceStepKm) || 100,
+      distanceStepCost: Number(mmDistanceStepCost) || 0,
+      unitPriceDivisor: Number(mmUnitPriceDivisor) || 1,
+      fallbackUnitPrice: Number(mmFallbackUnitPrice) || 0,
+      distanceByPrefecture,
+      unitPriceByPrefecture,
+    }
+  }, [mmPrefRows, mmBaseUnitPrice, mmDistanceStepKm, mmDistanceStepCost, mmUnitPriceDivisor, mmFallbackUnitPrice])
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
@@ -430,6 +464,21 @@ export function LogicVisualizationView() {
       [...mm.tsuboTiers]
         .sort((a, b) => a.minTsubo - b.minTsubo)
         .map((t) => ({ minTsubo: String(t.minTsubo), workers: String(t.workers), days: String(t.days) })),
+    )
+    setMmBaseUnitPrice(String(mm.baseUnitPrice ?? ""))
+    setMmDistanceStepKm(String(mm.distanceStepKm ?? ""))
+    setMmDistanceStepCost(String(mm.distanceStepCost ?? ""))
+    setMmUnitPriceDivisor(String(mm.unitPriceDivisor ?? ""))
+    const distMap = mm.distanceByPrefecture ?? {}
+    const overrideMap = mm.unitPriceByPrefecture ?? {}
+    // 距離テーブルを基準に全県を列挙（固定値しか無い県があれば併合）
+    const prefKeys = Array.from(new Set([...Object.keys(distMap), ...Object.keys(overrideMap)]))
+    setMmPrefRows(
+      prefKeys.map((key) => ({
+        key,
+        distance: distMap[key] != null ? String(distMap[key]) : "",
+        override: overrideMap[key] != null ? String(overrideMap[key]) : "",
+      })),
     )
   }
 
@@ -908,6 +957,50 @@ export function LogicVisualizationView() {
       toast.error("都道府県不明時の単価は 0 以上で入力してください。")
       return
     }
+    // 距離連動モデルのパラメータ
+    const baseUnitPrice = parseRequiredNumber(mmBaseUnitPrice)
+    if (baseUnitPrice === null || baseUnitPrice < 0) {
+      toast.error("基本料金は 0 以上で入力してください。")
+      return
+    }
+    const distanceStepKm = parseRequiredNumber(mmDistanceStepKm)
+    if (distanceStepKm === null || distanceStepKm < 1) {
+      toast.error("距離の丸め単位(km)は 1 以上で入力してください。")
+      return
+    }
+    const distanceStepCost = parseRequiredNumber(mmDistanceStepCost)
+    if (distanceStepCost === null || distanceStepCost < 0) {
+      toast.error("距離加算額は 0 以上で入力してください。")
+      return
+    }
+    const unitPriceDivisor = parseRequiredNumber(mmUnitPriceDivisor)
+    if (unitPriceDivisor === null || unitPriceDivisor < 1) {
+      toast.error("割り戻し係数は 1 以上で入力してください。")
+      return
+    }
+    // 都道府県別 距離(L列) / 固定値上書き(Q列)
+    const distanceByPrefecture: Record<string, number> = {}
+    const unitPriceByPrefecture: Record<string, number> = {}
+    for (const row of mmPrefRows) {
+      const distRaw = row.distance.trim()
+      if (distRaw !== "") {
+        const dist = Number(distRaw)
+        if (!Number.isFinite(dist) || dist < 0) {
+          toast.error(`${row.key} の距離は 0 以上の数値で入力してください。`)
+          return
+        }
+        distanceByPrefecture[row.key] = dist
+      }
+      const overrideRaw = row.override.trim()
+      if (overrideRaw !== "") {
+        const override = Number(overrideRaw)
+        if (!Number.isFinite(override) || override < 0) {
+          toast.error(`${row.key} の固定単価は 0 以上の数値で入力してください。`)
+          return
+        }
+        unitPriceByPrefecture[row.key] = Math.round(override)
+      }
+    }
     const tiers: CalcParameterConfig["machineMaintenance"]["tsuboTiers"] = []
     for (const [index, row] of mmTsuboTiers.entries()) {
       const minTsubo = parseRequiredNumber(row.minTsubo)
@@ -934,12 +1027,17 @@ export function LogicVisualizationView() {
     await persistParams(
       {
         machineMaintenance: {
-          // 都道府県別単価テーブルは現行値を維持（UIでは編集対象外）
           ...calcParams.machineMaintenance,
           applyOnlyWhenFranchise: mmApplyOnlyWhenFranchise,
           intervalMonths: Math.round(interval),
           fallbackUnitPrice: Math.round(fallback),
           tsuboTiers: tiers.sort((a, b) => a.minTsubo - b.minTsubo),
+          baseUnitPrice: Math.round(baseUnitPrice),
+          distanceStepKm: Math.round(distanceStepKm),
+          distanceStepCost: Math.round(distanceStepCost),
+          unitPriceDivisor,
+          distanceByPrefecture,
+          unitPriceByPrefecture,
         },
       },
       setIsSavingStepMM,
@@ -1692,6 +1790,33 @@ export function LogicVisualizationView() {
             </label>
           </div>
         </div>
+
+        {/* 距離連動の単価モデル（入力欄 Q=P/2, P=基本料+距離加算, 距離加算=⌊距離/丸め単位⌋×加算額） */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">距離連動の単価モデル（入力欄 K25:Q72）</Label>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">基本料金（距離0=拠点）</Label>
+              <SuffixedInput id="mmBaseUnitPrice" value={mmBaseUnitPrice} onChange={setMmBaseUnitPrice} disabled={isSavingStepMM} suffix="円" inputMode="numeric" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">距離の丸め単位</Label>
+              <SuffixedInput id="mmDistanceStepKm" value={mmDistanceStepKm} onChange={setMmDistanceStepKm} disabled={isSavingStepMM} suffix="km" inputMode="numeric" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">丸め単位ごとの距離加算</Label>
+              <SuffixedInput id="mmDistanceStepCost" value={mmDistanceStepCost} onChange={setMmDistanceStepCost} disabled={isSavingStepMM} suffix="円" inputMode="numeric" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] text-muted-foreground">割り戻し係数（Q=P÷係数）</Label>
+              <SuffixedInput id="mmUnitPriceDivisor" value={mmUnitPriceDivisor} onChange={setMmUnitPriceDivisor} disabled={isSavingStepMM} suffix="で割る" inputMode="numeric" />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            単価 = （基本料 + ⌊距離 ÷ 丸め単位⌋ × 距離加算）÷ 割り戻し係数。固定値が入力された県はこの計算より固定値を優先します。
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label className="text-xs font-medium">坪数帯 → 作業人数・日数（入力欄 N19/P19）</Label>
           <div className="overflow-hidden rounded-lg border border-border/60">
@@ -1725,8 +1850,52 @@ export function LogicVisualizationView() {
             </Table>
           </div>
         </div>
+
+        {/* 都道府県別 距離・単価表（入力欄 K25:Q72） */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">都道府県別 距離・単価表（入力欄 L列＝拠点からの距離 / Q列＝単価）</Label>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-border/60">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="text-xs">都道府県</TableHead>
+                  <TableHead className="text-xs">距離（km）</TableHead>
+                  <TableHead className="text-xs">固定値上書き</TableHead>
+                  <TableHead className="text-right text-xs">算出単価</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {mmPrefRows.map((row, index) => {
+                  const updateRow = (field: "distance" | "override", value: string) =>
+                    setMmPrefRows((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+                  const resolved = resolveMaintenanceUnitPrice(row.key, mmPreviewConfig)
+                  const isOverride = row.override.trim() !== ""
+                  return (
+                    <TableRow key={row.key}>
+                      <TableCell className="text-xs font-medium whitespace-nowrap">{row.key}</TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`mmPref-distance-${row.key}`} value={row.distance} onChange={(v) => updateRow("distance", v)} disabled={isSavingStepMM} suffix="km" inputMode="decimal" />
+                      </TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`mmPref-override-${row.key}`} value={row.override} onChange={(v) => updateRow("override", v)} disabled={isSavingStepMM} suffix="円" inputMode="numeric" placeholder="（距離計算）" />
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums whitespace-nowrap">
+                        ¥{formatThousands(String(Math.round(resolved)))}
+                        <span className={`ml-1.5 text-[10px] ${isOverride ? "text-chart-4" : "text-muted-foreground"}`}>
+                          {isOverride ? "固定" : "距離"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
         <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
-          ※ 都道府県別の単価表（入力欄 K23＝VLOOKUP の Q列、47都道府県）はマスタに保持されますが、改定頻度が低いため当画面では編集対象外です（保存時に現行値を維持）。<br />
+          ※ 「固定値上書き」が空欄の県は距離から自動計算（Excel の Q=P/2 式の県）。値を入れた県はその固定値を採用します（Excel で式を外して手入力された県）。<br />
+          ※ 距離は拠点（愛知）からの距離（入力欄 L列）。愛知は基準額アンカーのため距離0です。<br />
           ※ Excel 原本は「2〜3ヶ月に1回」と注記しつつ毎月1回分を計上していました。本システムでは実施間隔で月割りし、実態に即した月額へ補正しています。
         </div>
         <div className="flex justify-end border-t border-border/50 pt-4">

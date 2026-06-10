@@ -387,13 +387,35 @@ export interface CalcMachineMaintenanceTsuboTier {
  * マシンメンテナンス費（入力欄 B34）。
  * 1回費用 = 都道府県別単価(K23) × 作業人数(N19) × 作業日数(P19)。
  * 月額 = 1回費用 ÷ 実施間隔(ヶ月)。Excel C34=IF(C73=0,0,…) を踏襲しFC時のみ計上可。
+ *
+ * 都道府県別単価(Q列)は元Excelでは「拠点(愛知)からの距離(L列)」連動で算出する:
+ *   M = ROUNDDOWN(L, -2)      … 距離を distanceStepKm 単位に切り捨て
+ *   N = M / distanceStepKm
+ *   O = N × distanceStepCost  … 距離加算（distanceStepKm ごとに加算）
+ *   P = baseUnitPrice + O     … 基本料 + 距離加算（入力欄 P=$L$47+O）
+ *   Q = P / unitPriceDivisor  … メンテ単価（入力欄 Q=P/2）
+ * ただしExcelのQ列は一部が式ではなく手入力の固定値で上書きされており、その県は
+ * unitPriceByPrefecture（固定値）を優先採用して計算値ではなくその値を再現する。
  */
 export interface CalcMachineMaintenanceConfig {
   /** ロイヤリティ>0（FC）のときのみ計上。Excel の C73=0→0 を踏襲 */
   applyOnlyWhenFranchise: boolean
   /** 実施間隔(ヶ月)。月額 = 1回費用 ÷ この値（Excel「2〜3ヶ月に1回」を月割り） */
   intervalMonths: number
-  /** メンテ専用 都道府県別単価（入力欄 K23=VLOOKUP の Q列。購入単価表とは独立） */
+  /** 基本料金（入力欄 $L$47）。距離0（拠点=愛知）時の P 値 */
+  baseUnitPrice: number
+  /** 距離の丸め単位km（入力欄 M=ROUNDDOWN(L,-2) の -2 → 100km） */
+  distanceStepKm: number
+  /** 丸め単位ごとの距離加算額（入力欄 O=N×20000） */
+  distanceStepCost: number
+  /** メンテ単価への割り戻し係数（入力欄 Q=P/2 の 2） */
+  unitPriceDivisor: number
+  /** 都道府県別 拠点(愛知)からの距離km（入力欄 L列）。愛知=0（基準額アンカーのため距離0扱い） */
+  distanceByPrefecture: Record<string, number>
+  /**
+   * Q列が式ではなく手入力の固定値で上書きされている県の単価。
+   * 存在する県は距離計算値ではなくこの固定値を採用する（Excel の手修正を再現）。
+   */
   unitPriceByPrefecture: Record<string, number>
   /** 住所から都道府県が取れない場合の単価 */
   fallbackUnitPrice: number

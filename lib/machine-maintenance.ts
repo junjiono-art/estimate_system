@@ -19,6 +19,45 @@ export function resolveMaintenanceTsuboTier(
 }
 
 /**
+ * 都道府県別のメンテ単価（入力欄 Q列）を解決する。
+ *   1. Q列が手入力固定値で上書きされている県 → その固定値を採用（unitPriceByPrefecture）
+ *   2. それ以外（Q=P/2 の式の県） → 拠点(愛知)からの距離(L列)連動で算出
+ *        M = ROUNDDOWN(L, -2)       → Math.floor(距離 / distanceStepKm) × distanceStepKm
+ *        N = M / distanceStepKm
+ *        O = N × distanceStepCost
+ *        P = baseUnitPrice + O      （入力欄 P=$L$47+O）
+ *        Q = P / unitPriceDivisor   （入力欄 Q=P/2）
+ *   3. 距離も固定値も無い → fallbackUnitPrice
+ */
+export function resolveMaintenanceUnitPrice(
+  prefecture: string | null,
+  config: CalcMachineMaintenanceConfig,
+): number {
+  // 1. 手入力固定値の上書き（Excel で式を外して直接入力されている県）
+  const override = prefecture ? config.unitPriceByPrefecture?.[prefecture] : undefined
+  if (override != null && Number.isFinite(Number(override))) {
+    return Math.max(0, Number(override))
+  }
+
+  // 2. 距離連動の計算（Q=P/2 の式の県）
+  const distance = prefecture ? config.distanceByPrefecture?.[prefecture] : undefined
+  if (distance != null && Number.isFinite(Number(distance))) {
+    const stepKm = Math.max(1, Number(config.distanceStepKm) || 100)
+    const stepCost = Math.max(0, Number(config.distanceStepCost) || 0)
+    const base = Math.max(0, Number(config.baseUnitPrice) || 0)
+    const divisor = Math.max(1, Number(config.unitPriceDivisor) || 1)
+
+    const n = Math.floor(Math.max(0, Number(distance)) / stepKm) // M/distanceStepKm = ROUNDDOWN(L,-2)/100
+    const o = n * stepCost
+    const p = base + o
+    return p / divisor
+  }
+
+  // 3. フォールバック（都道府県が取れない／表に無い）
+  return Math.max(0, Number(config.fallbackUnitPrice) || 0)
+}
+
+/**
  * マシンメンテナンス費の月額を算出する（入力欄 B34 を移植）。
  *   1回費用 = 都道府県別単価(K23) × 作業人数(N19) × 作業日数(P19)
  *   月額    = 1回費用 ÷ 実施間隔(ヶ月)
@@ -38,13 +77,9 @@ export function computeMachineMaintenanceMonthly(args: {
 
   const interval = Math.max(1, Number(config.intervalMonths) || 1)
 
-  // 都道府県別単価（メンテ専用テーブル。取れなければフォールバック単価）
+  // 都道府県別単価（入力欄 Q列）。固定値上書きが無ければ距離(L列)連動で算出
   const prefecture = extractPrefectureFromAddress(address)
-  const prefUnitPrice = prefecture ? config.unitPriceByPrefecture?.[prefecture] : undefined
-  const unitPrice = Math.max(
-    0,
-    Number(prefUnitPrice ?? config.fallbackUnitPrice) || 0,
-  )
+  const unitPrice = resolveMaintenanceUnitPrice(prefecture, config)
 
   // 坪数帯から作業人数・日数を決定
   const tier = resolveMaintenanceTsuboTier(config.tsuboTiers, Number(floorAreaTsubo) || 0)
