@@ -25,7 +25,7 @@ export async function GET(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ cost: unknown }>({
       method: "GET",
-      path: `${lambdaFranchiseCostsBasePath}/${id}`,
+      path: `${lambdaFranchiseCostsBasePath}/${encodeURIComponent(id)}`,
     })
 
     if (!result.ok || !result.data) {
@@ -64,7 +64,7 @@ export async function PUT(request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ cost: unknown }>({
       method: "PUT",
-      path: `${lambdaFranchiseCostsBasePath}/${id}`,
+      path: `${lambdaFranchiseCostsBasePath}/${encodeURIComponent(id)}`,
       body: { label, amount, type, note },
     })
 
@@ -94,7 +94,7 @@ export async function DELETE(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ success: boolean }>({
       method: "DELETE",
-      path: `${lambdaFranchiseCostsBasePath}/${id}`,
+      path: `${lambdaFranchiseCostsBasePath}/${encodeURIComponent(id)}`,
     })
 
     if (!result.ok || !result.data) {

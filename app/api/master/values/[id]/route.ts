@@ -37,7 +37,7 @@ export async function GET(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ value: unknown }>({
       method: "GET",
-      path: `${lambdaMasterValuesBasePath}/${id}`,
+      path: `${lambdaMasterValuesBasePath}/${encodeURIComponent(id)}`,
     })
 
     if (!result.ok || !result.data) {
@@ -92,7 +92,7 @@ export async function PUT(request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ value: unknown }>({
       method: "PUT",
-      path: `${lambdaMasterValuesBasePath}/${id}`,
+      path: `${lambdaMasterValuesBasePath}/${encodeURIComponent(id)}`,
       body: {
         category,
         code,
@@ -139,7 +139,7 @@ export async function DELETE(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ success: boolean }>({
       method: "DELETE",
-      path: `${lambdaMasterValuesBasePath}/${id}`,
+      path: `${lambdaMasterValuesBasePath}/${encodeURIComponent(id)}`,
     })
 
     if (!result.ok || !result.data) {

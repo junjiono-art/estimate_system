@@ -109,16 +109,16 @@ function readDimensionCode(row: EStatValue, classId: string): string {
 }
 
 export async function POST(request: Request) {
-  const reqBody = await request.json();
-  const { address } = reqBody as { address?: string };
+  const reqBody = (await request.json().catch(() => null)) as { address?: string } | null;
+  const address = reqBody?.address;
   if (!address?.trim()) {
-    return NextResponse.json({ error: "住所を入力してください。", requestBody: reqBody }, { status: 400 });
+    return NextResponse.json({ error: "住所を入力してください。" }, { status: 400 });
   }
 
   const municipality = extractMunicipality(address);
   if (!municipality) {
     return NextResponse.json(
-      { error: "住所から都道府県・市区町村を判定できませんでした。『東京都渋谷区...』の形式で入力してください。", requestBody: reqBody },
+      { error: "住所から都道府県・市区町村を判定できませんでした。『東京都渋谷区...』の形式で入力してください。" },
       { status: 400 },
     );
   }
@@ -128,7 +128,6 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: `市区町村コードを解決できませんでした: ${municipality.prefecture}${municipality.city}。住所表記を見直してください。`,
-        requestBody: reqBody,
       },
       { status: 400 },
     );
@@ -137,7 +136,7 @@ export async function POST(request: Request) {
   const appId = process.env.ESTAT_APP_ID;
   if (!appId) {
     return NextResponse.json(
-      { error: "ESTAT_APP_ID が未設定です。実行環境の環境変数を設定してください。", requestBody: reqBody },
+      { error: "ESTAT_APP_ID が未設定です。実行環境の環境変数を設定してください。" },
       { status: 500 },
     );
   }
@@ -156,11 +155,17 @@ export async function POST(request: Request) {
   })
 
   const endpoint = `https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData?${params.toString()}`
-  console.info("[e-stat] requestUrl:", endpoint)
+
+  // appId はシークレットのため、レスポンス・ログには appId を伏せたURLのみを使用する
+  const maskedParams = new URLSearchParams(params)
+  maskedParams.set("appId", "***")
+  const maskedEndpoint = `https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData?${maskedParams.toString()}`
+
+  console.info("[e-stat] requestUrl:", maskedEndpoint)
   const response = await fetch(endpoint, { cache: "no-store" })
 
   if (!response.ok) {
-    return NextResponse.json({ error: "e-Stat APIへの接続に失敗しました。", requestUrl: endpoint }, { status: 502 })
+    return NextResponse.json({ error: "e-Stat APIへの接続に失敗しました。", requestUrl: maskedEndpoint }, { status: 502 })
   }
 
   const payload = await response.json()
@@ -174,7 +179,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "e-Stat APIのレスポンスに統計データがありません。",
-        requestUrl: endpoint,
+        requestUrl: maskedEndpoint,
         upstreamStatus,
         upstreamMessage,
       },
@@ -191,7 +196,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "男女・年齢の分類軸を判定できませんでした。ESTAT_STATS_DATA_ID の統計表定義を確認してください。",
-        requestUrl: endpoint,
+        requestUrl: maskedEndpoint,
         upstreamStatus,
         upstreamMessage,
       },
@@ -255,7 +260,7 @@ export async function POST(request: Request) {
       {
         error:
           "男女・年齢別データの抽出に失敗しました。ESTAT_STATS_DATA_ID が対象統計（男女・年齢階級）になっているか確認してください。",
-        requestUrl: endpoint,
+        requestUrl: maskedEndpoint,
       },
       { status: 502 },
     )
@@ -283,7 +288,7 @@ export async function POST(request: Request) {
       statsDataId,
       sexClassId,
       ageClassId,
-      requestUrl: endpoint,
+      requestUrl: maskedEndpoint,
       upstreamStatus,
       upstreamMessage,
     },

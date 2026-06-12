@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ item: unknown }>({
       method: "GET",
-      path: `${lambdaResultsBasePath}/${resultId}`,
+      path: `${lambdaResultsBasePath}/${encodeURIComponent(resultId)}`,
     })
 
     if (!result.ok || !result.data) {
@@ -47,7 +47,7 @@ export async function DELETE(_request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ success: boolean }>({
       method: "DELETE",
-      path: `${lambdaResultsBasePath}/${resultId}`,
+      path: `${lambdaResultsBasePath}/${encodeURIComponent(resultId)}`,
     })
 
     if (!result.ok || !result.data) {

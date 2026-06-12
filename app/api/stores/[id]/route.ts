@@ -16,7 +16,7 @@ export async function GET(_request: Request, context: Context) {
     if (hasLambdaGatewayConfigured()) {
       const result = await invokeLambdaGateway<{ store: unknown }>({
         method: "GET",
-        path: `${lambdaStoreBasePath}/${id}`,
+        path: `${lambdaStoreBasePath}/${encodeURIComponent(id)}`,
       })
 
       if (!result.ok || !result.data) {
@@ -64,7 +64,7 @@ export async function PUT(request: Request, context: Context) {
     if (hasLambdaGatewayConfigured()) {
       const result = await invokeLambdaGateway<{ store: unknown }>({
         method: "PUT",
-        path: `${lambdaStoreBasePath}/${id}`,
+        path: `${lambdaStoreBasePath}/${encodeURIComponent(id)}`,
         body: { name, address, openedAt, note },
       })
 
@@ -98,7 +98,7 @@ export async function DELETE(_request: Request, context: Context) {
     if (hasLambdaGatewayConfigured()) {
       const result = await invokeLambdaGateway<{ success: boolean }>({
         method: "DELETE",
-        path: `${lambdaStoreBasePath}/${id}`,
+        path: `${lambdaStoreBasePath}/${encodeURIComponent(id)}`,
       })
 
       if (!result.ok || !result.data) {

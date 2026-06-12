@@ -24,7 +24,7 @@ export async function PUT(request: Request, context: Context) {
 
     const result = await invokeLambdaGateway<{ message: string; resultId: string; rating: number }>({
       method: "PUT",
-      path: `${lambdaResultsBasePath}/${resultId}/rating`,
+      path: `${lambdaResultsBasePath}/${encodeURIComponent(resultId)}/rating`,
       body: { rating },
     })
 
