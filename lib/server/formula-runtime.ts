@@ -45,6 +45,11 @@ export function buildInitialPhaseContext(
     populationKm5Ring: km5Ring,
     rentPerTsubo: toNumber(input.rentPerTsubo, 0),
     runningCostTotal: toNumber(input.runningCostTotal, 0),
+    // 競合影響率（initialJoiners 式が参照）。パラメータ連動維持
+    competitorImpactUpTo2: toNumber(calcParams?.competitorImpact?.upTo2, 0),
+    competitorImpactFor3: toNumber(calcParams?.competitorImpact?.for3, 0),
+    competitorImpactFor4: toNumber(calcParams?.competitorImpact?.for4, 0),
+    competitorImpactOver4: toNumber(calcParams?.competitorImpact?.over4, 0),
   }
 }
 
@@ -83,6 +88,14 @@ export function buildFormulaContext({
     paymentFeeRate: toNumber(calcParams.paymentFeeRate, 0),
     royaltyCapMonthly: toNumber(calcParams.royaltyCapMonthly, 0),
     appFeeMonthly: toNumber(calcParams.appFeeMonthly, 0),
+
+    // 広告費スケジュール（adCostMonthly 式が参照。パラメータ連動維持）
+    adCostYear1Month1: toNumber(calcParams.adCost?.year1Month1, 0),
+    adCostYear1Month2: toNumber(calcParams.adCost?.year1Month2, 0),
+    adCostYear1Month3To4: toNumber(calcParams.adCost?.year1Month3To4, 0),
+    adCostYear1Month5To12: toNumber(calcParams.adCost?.year1Month5To12, 0),
+    adCostYear2Monthly: toNumber(calcParams.adCost?.year2Monthly, 0),
+    adCostYear3PlusMonthly: toNumber(calcParams.adCost?.year3PlusMonthly, 0),
 
     // ───── Constant層 ─────
     monthlyMemberFeeExTax: toNumber(MONTHLY_MEMBER_FEE_EX_TAX, 0),
@@ -135,9 +148,14 @@ function tokenOperator(token: FormulaToken): string | null {
   return null
 }
 
+// 比較演算子（結果は 1/0）。算術より低い優先順位。
+const COMPARISON_OPERATORS = new Set([">", "<", ">=", "<=", "==", "!="])
+
 function precedence(operator: string): number {
-  if (operator === "*" || operator === "/") return 2
-  if (operator === "+" || operator === "-") return 1
+  if (operator === "*" || operator === "/") return 3
+  if (operator === "+" || operator === "-") return 2
+  if (COMPARISON_OPERATORS.has(operator)) return 1
+  // カンマ "," や閉じ括弧は式の終端として扱う（演算子適用しない）
   return -1
 }
 
@@ -205,19 +223,51 @@ class Parser {
       if (!tokenIsOpenParen(open)) {
         throw new Error(`関数 ${fn} の後に '(' が必要です。`)
       }
-      const argument = this.parseExpression(0)
-      const close = this.consume()
-      if (!tokenIsCloseParen(close)) {
-        throw new Error(`関数 ${fn} の閉じ括弧 ')' が不足しています。`)
-      }
-
-      if (fn === "round") return Math.round(argument)
-      if (fn === "ceil") return Math.ceil(argument)
-      if (fn === "floor") return Math.floor(argument)
-      throw new Error(`未対応の関数です: ${fn}`)
+      const args = this.parseFunctionArgs(fn)
+      return this.applyFunction(fn, args)
     }
 
     throw new Error(`未対応トークンです: ${token.type}`)
+  }
+
+  // 関数引数をカンマ区切りでパースする（'(' は呼び出し元で消費済み）。
+  private parseFunctionArgs(fn: string): number[] {
+    const args: number[] = []
+    // 引数なし関数は無いので、最初の引数を必ず読む
+    args.push(this.parseExpression(0))
+
+    while (true) {
+      const next = this.peek()
+      if (next && tokenOperator(next) === ",") {
+        this.consume() // カンマを消費
+        args.push(this.parseExpression(0))
+        continue
+      }
+      break
+    }
+
+    const close = this.consume()
+    if (!tokenIsCloseParen(close)) {
+      throw new Error(`関数 ${fn} の閉じ括弧 ')' が不足しています。`)
+    }
+    return args
+  }
+
+  private applyFunction(fn: string, args: number[]): number {
+    const expect = (n: number) => {
+      if (args.length !== n) {
+        throw new Error(`関数 ${fn} は引数 ${n} 個が必要です（実際: ${args.length}）。`)
+      }
+    }
+
+    if (fn === "round") { expect(1); return Math.round(args[0]) }
+    if (fn === "ceil") { expect(1); return Math.ceil(args[0]) }
+    if (fn === "floor") { expect(1); return Math.floor(args[0]) }
+    if (fn === "min") { expect(2); return Math.min(args[0], args[1]) }
+    if (fn === "max") { expect(2); return Math.max(args[0], args[1]) }
+    // if(cond, a, b): cond が真（≠0）なら a、偽（0）なら b
+    if (fn === "if") { expect(3); return args[0] !== 0 ? args[1] : args[2] }
+    throw new Error(`未対応の関数です: ${fn}`)
   }
 
   private applyOperator(op: string, left: number, right: number): number {
@@ -228,6 +278,13 @@ class Parser {
       if (right === 0) throw new Error("0除算はできません。")
       return left / right
     }
+    // 比較演算子（結果は 1/0）
+    if (op === ">") return left > right ? 1 : 0
+    if (op === "<") return left < right ? 1 : 0
+    if (op === ">=") return left >= right ? 1 : 0
+    if (op === "<=") return left <= right ? 1 : 0
+    if (op === "==") return left === right ? 1 : 0
+    if (op === "!=") return left !== right ? 1 : 0
     throw new Error(`未対応演算子です: ${op}`)
   }
 

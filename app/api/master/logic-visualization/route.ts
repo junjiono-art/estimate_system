@@ -28,6 +28,11 @@ function tokenToText(token: FormulaToken): string {
     const op = token.op || String(token.value ?? "?")
     if (op === "*") return "×"
     if (op === "/") return "÷"
+    if (op === ",") return ","
+    if (op === ">=") return "≥"
+    if (op === "<=") return "≤"
+    if (op === "==") return "="
+    if (op === "!=") return "≠"
     return op
   }
   if (token.type === "fn") return token.fnName || token.label || "fn"

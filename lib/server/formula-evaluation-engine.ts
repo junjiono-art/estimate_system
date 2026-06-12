@@ -115,7 +115,8 @@ export class FormulaEvaluationEngine {
         return fallbackValue
       }
 
-      const result = Math.round(evaluated)
+      // roundResult === false の式は丸めずに小数のまま扱う（例: initialJoiners）
+      const result = formula.roundResult === false ? evaluated : Math.round(evaluated)
 
       // メタデータ定義の制約を適用
       return applyConstraints(result, formula.minValue, formula.maxValue)
@@ -188,11 +189,11 @@ export function evaluateFormulaWithValidation(
 
     // 式を評価
     const evaluated = evaluateFormulaByKey(formulaSet, formulaKey, context)
-    if (!Number.isFinite(evaluated)) {
+    if (evaluated == null || !Number.isFinite(evaluated)) {
       return applyConstraints(fallbackValue, formula?.minValue, formula?.maxValue)
     }
 
-    const result = Math.round(evaluated)
+    const result = formula?.roundResult === false ? evaluated : Math.round(evaluated)
 
     // メタデータ定義の制約を適用
     return applyConstraints(result, formula?.minValue, formula?.maxValue)

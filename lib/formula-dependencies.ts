@@ -73,8 +73,10 @@ export const DEFAULT_FORMULA_DEPENDENCIES: Record<string, FormulaDependencyMeta>
   },
   monthlyCost: {
     key: "monthlyCost",
+    // 総コスト = 家賃+ランニング+広告+決済手数料+ロイヤリティ+アプリ利用料。
+    // 評価値を context に注入させるため、加算対象の式すべてを依存に含める。
     label: "月次総コスト",
-    dependsOn: ["paymentFee", "monthlyRoyalty"],  // ← 形式上の依存
+    dependsOn: ["paymentFee", "monthlyRoyalty", "appFee", "adCostMonthly"],
     phase: "monthly",
   },
   adCostMonthly: {

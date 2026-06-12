@@ -1,4 +1,4 @@
-export type FormulaFunctionName = "round" | "ceil" | "floor"
+export type FormulaFunctionName = "round" | "ceil" | "floor" | "min" | "max" | "if"
 
 export type FormulaTokenType = "var" | "const" | "namedConst" | "op" | "fn" | "paren"
 
@@ -27,6 +27,11 @@ export type FormulaDefinition = {
   minValue?: number
   /** 最大値制約 */
   maxValue?: number
+  /**
+   * 評価結果を四捨五入するか（既定 true）。
+   * false の場合は小数のまま返す（例: 初月入会人数は未丸めで会員成長へ渡すため）。
+   */
+  roundResult?: boolean
   /** 説明文 */
   description?: string
   /** 廃止フラグ */
