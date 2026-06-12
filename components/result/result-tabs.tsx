@@ -16,6 +16,7 @@ import { KpiCards } from "./kpi-cards"
 import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
 import { DemographicsView } from "./demographics-view"
+import { BusinessPlanView } from "./business-plan-view"
 import { StarRating } from "@/components/star-rating"
 import type { MasterValue, SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
 import type { FormSubmitData } from "@/components/simulation-form"
@@ -557,6 +558,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <TabsTrigger value="dashboard" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             ダッシュボード
           </TabsTrigger>
+          <TabsTrigger value="business-plan" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            事業計画
+          </TabsTrigger>
           <TabsTrigger value="demographics" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             エリア人口統計
           </TabsTrigger>
@@ -566,6 +570,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         </TabsContent>
         <TabsContent value="dashboard" className="mt-4">
           <DashboardView data={filteredData} />
+        </TabsContent>
+        <TabsContent value="business-plan" className="mt-4">
+          <BusinessPlanView data={currentData} />
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
           <DemographicsView

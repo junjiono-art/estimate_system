@@ -109,6 +109,11 @@ export interface SimulationRequestInput {
    * runningCostTotal には含めない（calc-engine 側で別途加算する）。
    */
   machineMaintenanceCost?: number
+  /**
+   * ランニングコスト内訳（事業計画シートの経費計画行の再現用。坪数換算後の月額）。
+   * 合計は runningCostTotal と一致する想定。未指定時は内訳なし（合計1行で表示）。
+   */
+  runningCostBreakdown?: Array<{ id: string; label: string; monthlyAmount: number }>
   initialInvestmentTotal?: number
   initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
   franchiseRate?: 0 | 10 | 15
@@ -162,6 +167,65 @@ export interface LtvResult {
   acquisitionCostCapHalfYear: number
   /** 理想の獲得単価（年間LTVの30%）= 1年間LTV × 30% */
   idealAcquisitionCost: number
+}
+
+/** 事業計画シートの月次内訳1ヶ月分（元Excel「事業計画」シートの行構成を再現） */
+export interface BusinessPlanMonth {
+  /** 1始まりの通し月（最大120） */
+  month: number
+  /** 会員数（丸め済み。事業計画 R26/R31） */
+  members: number
+  /** 新規会員数（R32。未丸めの生値） */
+  newMembers: number
+  /** 継続会員数（R33。未丸めの生値） */
+  retainedMembers: number
+  /** 店頭看板効果（R35） */
+  signageJoiners: number
+  /** Web広告獲得（R37） */
+  webJoiners: number
+  /** SNS広告（R38） */
+  snsJoiners: number
+  /** 自然検索（R39） */
+  organicJoiners: number
+  /** 口コミ紹介（R40） */
+  referralJoiners: number
+  /** 売上（月契約）（R27） */
+  revenue: number
+  /** 広告費合計（R42） */
+  adCost: number
+  /** Web広告費（R43） */
+  adCostWeb: number
+  /** SNS広告費（R44） */
+  adCostSns: number
+  /** 固定費計（R60 = 家賃＋ランニング費目＋マシンメンテ） */
+  fixedCostTotal: number
+  /** アプリ利用料（R61） */
+  appFee: number
+  /** ロイヤリティ（R62） */
+  royalty: number
+  /** 決済手数料（R63） */
+  paymentFee: number
+  /** 変動費計（R65 = アプリ＋ロイヤリティ＋決済手数料） */
+  variableCostTotal: number
+  /** 経費合計（R68。試算上の実際の月次コスト。減価償却を含める設定の場合は含む） */
+  totalCost: number
+  /** 税引前利益（R69 = 売上 − 経費合計） */
+  pretaxProfit: number
+}
+
+/** 事業計画シート再現データ（試算結果に付随） */
+export interface BusinessPlanData {
+  /**
+   * 固定費の内訳行（毎月一定）。家賃・マスタ費目・マシンメンテナンス費の順。
+   * 内訳合計と試算上の固定費に差がある場合は調整行（runningCostAdjustment）を含む。
+   */
+  fixedCostItems: Array<{ id: string; label: string; monthlyAmount: number }>
+  /** 減価償却費（月額。事業計画 R72） */
+  monthlyDepreciation: number
+  /** 減価償却費を経費合計（totalCost）に含めているか */
+  depreciationIncludedInCost: boolean
+  /** 月次内訳（最大120ヶ月） */
+  months: BusinessPlanMonth[]
 }
 
 /** 試算結果 */
@@ -259,6 +323,8 @@ export interface SimulationResult {
     /** 入金サイクル反映後の累計キャッシュ */
     cumulativeCash?: number
   }[]
+  /** 事業計画シート再現データ（月次の金額内訳。元Excel「事業計画」シート相当） */
+  businessPlan?: BusinessPlanData
 }
 
 export interface CalcCompetitorImpactConfig {
@@ -275,6 +341,14 @@ export interface CalcAdCostConfig {
   year1Month5To12: number
   year2Monthly: number
   year3PlusMonthly: number
+}
+
+/** 広告費のうちWeb広告費の月次スケジュール（事業計画 R43）。SNS広告費 = 広告費合計 − Web広告費 */
+export interface CalcAdCostWebConfig {
+  year1Month1: number
+  year1Month2: number
+  /** 1年目3ヶ月目以降・2年目以降共通の月額 */
+  monthly: number
 }
 
 /** 平均単価の構成（入力欄!C81 = SUMPRODUCT(オプション単価×構成比)+会費） */
@@ -431,6 +505,8 @@ export interface CalcParameterConfig {
   appFeeMonthly: number
   competitorImpact: CalcCompetitorImpactConfig
   adCost: CalcAdCostConfig
+  /** Web広告費スケジュール（事業計画 R43）。未設定時は既定値（80,000/80,000/120,000） */
+  adCostWeb?: CalcAdCostWebConfig
   // ── Excel計算モデル移植で追加 ──
   pricing: CalcPricingConfig
   retention: CalcRetentionConfig

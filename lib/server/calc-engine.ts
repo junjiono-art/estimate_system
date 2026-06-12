@@ -22,6 +22,26 @@ export type RegressionMonthlyRow = {
   revenue: number
   cost: number
   profit: number
+  /** 事業計画シート再現用の月次内訳。合計値（cost/profit）の計算には影響しない */
+  breakdown?: RegressionRowBreakdown
+}
+
+export type RegressionRowBreakdown = {
+  newMembers: number
+  retainedMembers: number
+  signageJoiners: number
+  webJoiners: number
+  snsJoiners: number
+  organicJoiners: number
+  referralJoiners: number
+  adCost: number
+  adCostWeb: number
+  adCostSns: number
+  /** 固定費計（家賃＋ランニング＋マシンメンテ） */
+  fixedCost: number
+  paymentFee: number
+  royalty: number
+  appFee: number
 }
 
 const PROJECTION_MONTHS = 120
@@ -96,6 +116,16 @@ function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig): numbe
 
   if (year === 2) return calcParams.adCost.year2Monthly
   return calcParams.adCost.year3PlusMonthly
+}
+
+// Web広告費の月次スケジュール（事業計画 R43）。SNS広告費（R44）は合計との差分。
+const DEFAULT_AD_COST_WEB = { year1Month1: 80_000, year1Month2: 80_000, monthly: 120_000 }
+
+function getMonthlyAdCostWeb(month: number, adCostTotal: number, calcParams: CalcParameterConfig): number {
+  const cfg = calcParams.adCostWeb ?? DEFAULT_AD_COST_WEB
+  const raw = month === 1 ? cfg.year1Month1 : month === 2 ? cfg.year1Month2 : cfg.monthly
+  // Web広告費が合計を超えない範囲にクランプ（年3以降の合計12万円＝Web全額のケースを許容）
+  return Math.max(0, Math.min(raw, adCostTotal))
 }
 
 function resolveMonthlyRent(input?: SimulateInput): number {
@@ -302,6 +332,10 @@ export function buildRegressionRows(
     const defaultCost = fixedCost + adCost + defaultPaymentFee + defaultRoyalty + defaultAppFee
 
     let cost = defaultCost
+    // 内訳表示用に確定値を保持する（式セットの上書きがあれば上書き後の値）
+    let resolvedPaymentFee = defaultPaymentFee
+    let resolvedRoyalty = defaultRoyalty
+    let resolvedAppFee = defaultAppFee
 
     if (engine) {
       try {
@@ -323,10 +357,15 @@ export function buildRegressionRows(
         cost = Number.isFinite(results.monthlyCost)
           ? results.monthlyCost
           : fixedCost + adCost + paymentFee + royalty + appFee
+        resolvedPaymentFee = paymentFee
+        resolvedRoyalty = royalty
+        resolvedAppFee = appFee
       } catch {
         cost = defaultCost
       }
     }
+
+    const adCostWeb = getMonthlyAdCostWeb(g.month, adCost, calcParams)
 
     return {
       month: g.month,
@@ -334,6 +373,22 @@ export function buildRegressionRows(
       revenue,
       cost,
       profit: revenue - cost,
+      breakdown: {
+        newMembers: g.newMembers,
+        retainedMembers: g.retainedMembers,
+        signageJoiners: g.signageJoiners,
+        webJoiners: g.webJoiners,
+        snsJoiners: g.snsJoiners,
+        organicJoiners: g.organicJoiners,
+        referralJoiners: g.referralJoiners,
+        adCost,
+        adCostWeb,
+        adCostSns: adCost - adCostWeb,
+        fixedCost,
+        paymentFee: resolvedPaymentFee,
+        royalty: resolvedRoyalty,
+        appFee: resolvedAppFee,
+      },
     }
   })
 }
@@ -397,6 +452,94 @@ function buildAnnualProjection(rows: RegressionMonthlyRow[], initialInvestment: 
   }
 
   return annual
+}
+
+// ────────────────────────────────────────────────────
+// 事業計画シート再現データを組み立てる。
+// 固定費の内訳行（家賃＋マスタ費目＋マシンメンテ）と月次の金額内訳を保持する。
+// 合計値（cost/profit）は rows の確定値をそのまま使い、再計算しない。
+// ────────────────────────────────────────────────────
+function buildBusinessPlan(args: {
+  rows: RegressionMonthlyRow[]
+  monthlyRent: number
+  monthlyRunning: number
+  monthlyMachineMaintenance: number
+  runningCostBreakdown?: SimulationRequestInput["runningCostBreakdown"]
+  monthlyDepreciation: number
+  depreciationIncludedInCost: boolean
+}): NonNullable<SimulationResult["businessPlan"]> {
+  const {
+    rows,
+    monthlyRent,
+    monthlyRunning,
+    monthlyMachineMaintenance,
+    runningCostBreakdown,
+    monthlyDepreciation,
+    depreciationIncludedInCost,
+  } = args
+
+  const fixedCostItems: Array<{ id: string; label: string; monthlyAmount: number }> = [
+    { id: "rent", label: "家賃", monthlyAmount: monthlyRent },
+  ]
+
+  if (runningCostBreakdown?.length) {
+    for (const item of runningCostBreakdown) {
+      const amount = Number(item.monthlyAmount)
+      fixedCostItems.push({
+        id: String(item.id),
+        label: String(item.label || item.id),
+        monthlyAmount: Number.isFinite(amount) ? Math.round(amount) : 0,
+      })
+    }
+  } else {
+    fixedCostItems.push({ id: "runningCostTotal", label: "ランニングコスト", monthlyAmount: monthlyRunning })
+  }
+
+  fixedCostItems.push({
+    id: "machineMaintenance",
+    label: "マシンメンテナンス費",
+    monthlyAmount: monthlyMachineMaintenance,
+  })
+
+  // 内訳合計と試算上の固定費（家賃＋ランニング＋マシンメンテ）の差を調整行として埋める。
+  // 内訳が渡されないケース（履歴の再計算等）や手動上書きで生じうる。
+  const fixedCostActual = monthlyRent + monthlyRunning + monthlyMachineMaintenance
+  const itemsTotal = fixedCostItems.reduce((sum, item) => sum + item.monthlyAmount, 0)
+  const diff = fixedCostActual - itemsTotal
+  if (Math.abs(diff) >= 1) {
+    fixedCostItems.push({ id: "runningCostAdjustment", label: "その他（調整）", monthlyAmount: diff })
+  }
+
+  return {
+    fixedCostItems,
+    monthlyDepreciation,
+    depreciationIncludedInCost,
+    months: rows.map((row) => {
+      const b = row.breakdown
+      return {
+        month: row.month,
+        members: row.members,
+        newMembers: b?.newMembers ?? 0,
+        retainedMembers: b?.retainedMembers ?? 0,
+        signageJoiners: b?.signageJoiners ?? 0,
+        webJoiners: b?.webJoiners ?? 0,
+        snsJoiners: b?.snsJoiners ?? 0,
+        organicJoiners: b?.organicJoiners ?? 0,
+        referralJoiners: b?.referralJoiners ?? 0,
+        revenue: row.revenue,
+        adCost: b?.adCost ?? 0,
+        adCostWeb: b?.adCostWeb ?? 0,
+        adCostSns: b?.adCostSns ?? 0,
+        fixedCostTotal: b?.fixedCost ?? fixedCostActual,
+        appFee: b?.appFee ?? 0,
+        royalty: b?.royalty ?? 0,
+        paymentFee: b?.paymentFee ?? 0,
+        variableCostTotal: (b?.appFee ?? 0) + (b?.royalty ?? 0) + (b?.paymentFee ?? 0),
+        totalCost: row.cost,
+        pretaxProfit: row.profit,
+      }
+    }),
+  }
 }
 
 export function calculateSimulation(
@@ -486,6 +629,17 @@ export function calculateSimulation(
       }
     : undefined
 
+  // 事業計画シート再現データ（減価償却加算後の rows から組み立てる）
+  const businessPlan = buildBusinessPlan({
+    rows,
+    monthlyRent,
+    monthlyRunning: resolveMonthlyRunning(input),
+    monthlyMachineMaintenance,
+    runningCostBreakdown: input.runningCostBreakdown,
+    monthlyDepreciation: depreciationForBreakeven,
+    depreciationIncludedInCost: includeDepreciation,
+  })
+
   const interiorCostInput = Number(input.investmentBreakdown?.interiorCost)
   const interiorCost = Number.isFinite(interiorCostInput) && interiorCostInput >= 0
     ? Math.round(interiorCostInput)
@@ -529,6 +683,7 @@ export function calculateSimulation(
     annualProjection,
     cashCollectionLagMonths: calcParams.cashCollectionLagMonths,
     monthlyProjection,
+    businessPlan,
     ltv: calculateLtv({
       monthlyFee: calcParams.pricing.memberFeeExTax,
       firstMonthRetention: calcParams.retention.firstMonth,

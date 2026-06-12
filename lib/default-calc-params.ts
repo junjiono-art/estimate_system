@@ -22,6 +22,12 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
     year2Monthly: 180_000,
     year3PlusMonthly: 120_000,
   },
+  adCostWeb: {
+    // 事業計画 R43（Web広告費）。SNS広告費（R44）は adCost との差分で算出する
+    year1Month1: 80_000,
+    year1Month2: 80_000,
+    monthly: 120_000,
+  },
   // ── Excel計算モデル移植で追加 ──
   pricing: {
     memberFeeExTax: 2_980, // 入力欄!C72

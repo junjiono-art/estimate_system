@@ -92,6 +92,8 @@ export type FormSubmitData = {
   }
   runningCosts: {
     byField: Record<string, number>
+    /** 費目別内訳（ラベル付き・坪数換算後の月額）。事業計画シートの経費計画行に使用 */
+    items: Array<{ id: string; label: string; monthlyAmount: number }>
     /** マスタ駆動の費目合計（坪数換算後・家賃/マシンメンテ費は含めない） */
     total: number
     /** マシンメンテナンス費（固定枠）の月額。total には含めず別枠で渡す */
@@ -564,6 +566,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         runningCosts: {
           // 坪数依存の費目は坪数換算後の実コストを渡す（試算側は坪数を掛けた後を使用）
           byField: runningEffectiveByField,
+          items: RC_ITEMS.map((item) => ({
+            id: item.id,
+            label: item.label,
+            monthlyAmount: runningEffectiveByField[item.id] ?? 0,
+          })),
           total: runningEffectiveTotal,
           machineMaintenance: machineMaintenanceValue,
         },

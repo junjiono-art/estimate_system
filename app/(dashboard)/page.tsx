@@ -157,6 +157,7 @@ export default function NewSimulationPage() {
       competitorCount: data.calcParams.competitorCount,
       locationType: data.calcParams.locationType,
       runningCostTotal: data.runningCosts.total,
+      runningCostBreakdown: data.runningCosts.items,
       machineMaintenanceCost: data.runningCosts.machineMaintenance,
       initialInvestmentTotal: data.investmentCosts.total,
       initialInvestmentByRoyaltyRate: data.investmentCosts.byRoyaltyRate,
