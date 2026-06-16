@@ -40,6 +40,8 @@ const RADII = [
   { km: 5, color: "oklch(0.62 0.13 240)" },
 ] as const
 const NEARBY_RADIUS_KM = RADII[RADII.length - 1].km
+// 競合ジム（OSM）の検索半径(km)
+const GYM_RADIUS_KM = 3
 
 const storeIcon = L.divIcon({
   className: "",
@@ -58,6 +60,23 @@ const nearbyIcon = L.divIcon({
   iconSize: [13, 13],
   iconAnchor: [6, 6],
 })
+
+// 競合ジム（OSM）。自社店舗と区別するため菱形（45度回転）にする。
+const gymIcon = L.divIcon({
+  className: "",
+  html:
+    '<div style="width:12px;height:12px;background:oklch(0.58 0.20 300);' +
+    'border:2px solid white;box-shadow:0 0 0 1px oklch(0 0 0 / 0.3);transform:rotate(45deg)"></div>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+})
+
+type GymPoi = {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+}
 
 // セグメント切替ボタン
 function SegButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -89,6 +108,11 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
   const [zoomKey, setZoomKey] = useState<ZoomKey>("標準")
   const [showRadii, setShowRadii] = useState(true)
   const [showNearby, setShowNearby] = useState(true)
+  const [showGyms, setShowGyms] = useState(true)
+
+  // 競合ジム（OSM Overpass）
+  const [gyms, setGyms] = useState<GymPoi[]>([])
+  const [gymsLoading, setGymsLoading] = useState(false)
 
   const trimmedAddress = address?.trim() ?? ""
 
@@ -147,6 +171,35 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
     void load()
     return () => controller.abort()
   }, [trimmedAddress, prefecture])
+
+  // 競合ジムの取得（地図表示をブロックしないよう座標確定後に別途取得）
+  useEffect(() => {
+    if (!geo) {
+      setGyms([])
+      return
+    }
+    const controller = new AbortController()
+    setGymsLoading(true)
+    void (async () => {
+      try {
+        const res = await fetch("/api/nearby-gyms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latitude: geo.latitude, longitude: geo.longitude, radiusKm: GYM_RADIUS_KM }),
+          signal: controller.signal,
+        })
+        const payload = await res.json().catch(() => null)
+        if (!controller.signal.aborted && res.ok && Array.isArray(payload?.gyms)) {
+          setGyms(payload.gyms as GymPoi[])
+        }
+      } catch {
+        // 競合ジムは取得失敗しても地図表示は継続する
+      } finally {
+        if (!controller.signal.aborted) setGymsLoading(false)
+      }
+    })()
+    return () => controller.abort()
+  }, [geo])
 
   const nearby = useMemo<NearbyStore[]>(() => {
     if (!geo) return []
@@ -230,6 +283,10 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
             <input type="checkbox" className="size-3.5 accent-primary" checked={showNearby} onChange={(e) => setShowNearby(e.target.checked)} />
             近隣店舗
           </label>
+          <label className="flex cursor-pointer items-center gap-1">
+            <input type="checkbox" className="size-3.5 accent-primary" checked={showGyms} onChange={(e) => setShowGyms(e.target.checked)} />
+            近隣ジム{gymsLoading ? "（検索中…）" : ""}
+          </label>
         </div>
       </div>
 
@@ -264,6 +321,17 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
               </Marker>
             ))}
 
+          {showGyms &&
+            gyms.map((g) => (
+              <Marker key={g.id} position={[g.latitude, g.longitude]} icon={gymIcon}>
+                <Popup>
+                  <span className="font-medium">{g.name}</span>
+                  <br />
+                  競合ジム（OSM）
+                </Popup>
+              </Marker>
+            ))}
+
           <Marker position={center} icon={storeIcon}>
             <Popup>
               <span className="font-medium">出店地点</span>
@@ -284,6 +352,12 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
           <span className="flex items-center gap-1">
             <span className="size-2.5 rounded-full" style={{ background: "oklch(0.55 0.10 260)" }} />
             既存店舗（{NEARBY_RADIUS_KM}km圏 {nearby.length}件）
+          </span>
+        )}
+        {showGyms && (
+          <span className="flex items-center gap-1">
+            <span className="size-2.5 rotate-45" style={{ background: "oklch(0.58 0.20 300)" }} />
+            競合ジム（{GYM_RADIUS_KM}km圏 {gyms.length}件・OSM）
           </span>
         )}
         {showRadii &&
