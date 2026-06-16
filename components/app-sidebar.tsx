@@ -35,7 +35,6 @@ const navMain = [
   {
     label: "マスタ管理",
     items: [
-      { title: "FC費用",        href: "/master/franchise",     icon: DatabaseIcon },
       { title: "投資コスト",    href: "/master/investment-cost", icon: DatabaseIcon },
       { title: "ランニングコスト", href: "/master/running-cost", icon: DatabaseIcon },
       { title: "ロジック可視化", href: "/master/logic-visualization", icon: DatabaseIcon },
