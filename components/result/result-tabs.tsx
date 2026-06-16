@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useState, useRef } from "react"
 import { ChevronRightIcon, DownloadIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,16 @@ import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
 import { extractCity } from "@/lib/utils"
+
+// 地図(leaflet)はブラウザ専用のため SSR を無効化して読み込む。
+const StoreMap = dynamic(() => import("./store-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-lg border border-border bg-muted/20 px-4 py-6 text-xs text-muted-foreground">
+      地図を読み込み中...
+    </div>
+  ),
+})
 
 interface ResultTabsProps {
   data: SimulationResult
@@ -582,12 +593,23 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           <BusinessPlanView data={currentData} />
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
-          <DemographicsView
-            data={currentData}
-            demographicsData={demographicsData}
-            demographicsError={demographicsError}
-            simulationRequest={simulationRequest}
-          />
+          <div className="flex flex-col gap-4">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">出店地点と商圏</h3>
+                {simulationRequest?.location && (
+                  <span className="truncate text-[11px] text-muted-foreground">{simulationRequest.location}</span>
+                )}
+              </div>
+              <StoreMap address={simulationRequest?.location} prefecture={simulationRequest?.prefecture} />
+            </div>
+            <DemographicsView
+              data={currentData}
+              demographicsData={demographicsData}
+              demographicsError={demographicsError}
+              simulationRequest={simulationRequest}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
