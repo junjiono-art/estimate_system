@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useEffect, useState, useRef } from "react"
-import { ChevronRightIcon, DownloadIcon, SaveIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, SaveIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -23,7 +23,7 @@ import type { MasterValue, SimulationRequestInput, SimulationResult, ScenarioTyp
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
-import { extractCity } from "@/lib/utils"
+import { cn, extractCity } from "@/lib/utils"
 
 // 地図(leaflet)はブラウザ専用のため SSR を無効化して読み込む。
 const StoreMap = dynamic(() => import("./store-map"), {
@@ -117,6 +117,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [scenarioData, setScenarioData] = useState<SimulationResult>(initialData)
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const [isRecalculating, setIsRecalculating] = useState(false)
+  const [mapOpen, setMapOpen] = useState(true)
   const prevIncludeDepreciation = useRef(true)
   const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
   // 坪連動(perTsubo)の費目を実効額（単価×坪数×数量）へ換算するための床面積。フォームと同じ基準に揃える。
@@ -594,14 +595,26 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         </TabsContent>
         <TabsContent value="demographics" className="mt-4">
           <div className="flex flex-col gap-4">
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground">出店地点と商圏</h3>
-                {simulationRequest?.location && (
-                  <span className="truncate text-[11px] text-muted-foreground">{simulationRequest.location}</span>
-                )}
-              </div>
-              <StoreMap address={simulationRequest?.location} prefecture={simulationRequest?.prefecture} />
+            <div className="rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                onClick={() => setMapOpen((o) => !o)}
+                aria-expanded={mapOpen}
+                className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-muted/40"
+              >
+                <h3 className="shrink-0 text-sm font-semibold text-foreground">出店地点と商圏</h3>
+                <span className="flex min-w-0 items-center gap-2">
+                  {simulationRequest?.location && (
+                    <span className="truncate text-[11px] text-muted-foreground">{simulationRequest.location}</span>
+                  )}
+                  <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform", mapOpen && "rotate-180")} />
+                </span>
+              </button>
+              {mapOpen && (
+                <div className="px-4 pb-4">
+                  <StoreMap address={simulationRequest?.location} prefecture={simulationRequest?.prefecture} />
+                </div>
+              )}
             </div>
             <DemographicsView
               data={currentData}

@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Circle, Popup } from "react-leaflet"
 import L from "leaflet"
 import "leaflet/dist/leaflet.css"
 import { MapPinIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { haversineDistanceKm } from "@/lib/geospatial"
 import type { Store } from "@/lib/types"
 
@@ -17,17 +18,29 @@ type GeoResult = {
 
 type NearbyStore = Store & { distanceKm: number }
 
+// 地図の種類（国土地理院タイル）
+const TILE_TYPES = {
+  std: { label: "標準", url: "https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png" },
+  pale: { label: "淡色", url: "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png" },
+  photo: { label: "写真", url: "https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg" },
+} as const
+type TileType = keyof typeof TILE_TYPES
+const GSI_ATTRIBUTION = '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+
+// 高さ・初期ズームのプリセット
+const HEIGHTS = { 小: 280, 中: 380, 大: 560 } as const
+type HeightKey = keyof typeof HEIGHTS
+const ZOOMS = { 広域: 11, 標準: 13, 詳細: 15 } as const
+type ZoomKey = keyof typeof ZOOMS
+
 // 商圏円（半径km・色）。人口分析と同じ 1/3/5km に揃える。色は OKLCH。
 const RADII = [
   { km: 1, color: "oklch(0.62 0.20 25)" },
   { km: 3, color: "oklch(0.70 0.15 70)" },
   { km: 5, color: "oklch(0.62 0.13 240)" },
 ] as const
-
-// 近隣店舗を含める最大半径（km）。最大商圏円に合わせる。
 const NEARBY_RADIUS_KM = RADII[RADII.length - 1].km
 
-// 出店地点のマーカー（強調した丸ピン）
 const storeIcon = L.divIcon({
   className: "",
   html:
@@ -37,7 +50,6 @@ const storeIcon = L.divIcon({
   iconAnchor: [10, 10],
 })
 
-// 近隣の既存店舗マーカー（小さめの丸）
 const nearbyIcon = L.divIcon({
   className: "",
   html:
@@ -47,11 +59,36 @@ const nearbyIcon = L.divIcon({
   iconAnchor: [6, 6],
 })
 
+// セグメント切替ボタン
+function SegButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded border px-2 py-0.5 text-[11px] transition-colors",
+        active
+          ? "border-primary bg-primary/10 font-medium text-primary"
+          : "border-border text-muted-foreground hover:bg-muted",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function StoreMap({ address, prefecture }: { address?: string; prefecture?: string }) {
   const [geo, setGeo] = useState<GeoResult | null>(null)
   const [stores, setStores] = useState<Store[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+
+  // 表示コントロール
+  const [tileType, setTileType] = useState<TileType>("std")
+  const [heightKey, setHeightKey] = useState<HeightKey>("中")
+  const [zoomKey, setZoomKey] = useState<ZoomKey>("標準")
+  const [showRadii, setShowRadii] = useState(true)
+  const [showNearby, setShowNearby] = useState(true)
 
   const trimmedAddress = address?.trim() ?? ""
 
@@ -68,7 +105,6 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
 
     async function load() {
       try {
-        // 住所 → 緯度経度（国土地理院ジオコーディング）
         const geoRes = await fetch("/api/geocoding", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -88,7 +124,6 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
         if (controller.signal.aborted) return
         setGeo(resolvedGeo)
 
-        // 同一都道府県の既存店舗を取得（座標付き）。距離フィルタはクライアント側で行う。
         const pref = (prefecture?.trim() || resolvedGeo.prefecture).trim()
         if (pref) {
           const storesRes = await fetch(`/api/stores?prefecture=${encodeURIComponent(pref)}`, {
@@ -155,44 +190,80 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
   }
 
   const center: [number, number] = [geo.latitude, geo.longitude]
+  const heightPx = HEIGHTS[heightKey]
+  const zoom = ZOOMS[zoomKey]
 
   return (
     <div className="flex flex-col gap-2">
+      {/* 表示コントロール */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px]">
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">地図</span>
+          {(Object.keys(TILE_TYPES) as TileType[]).map((t) => (
+            <SegButton key={t} active={tileType === t} onClick={() => setTileType(t)}>
+              {TILE_TYPES[t].label}
+            </SegButton>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">高さ</span>
+          {(Object.keys(HEIGHTS) as HeightKey[]).map((h) => (
+            <SegButton key={h} active={heightKey === h} onClick={() => setHeightKey(h)}>
+              {h}
+            </SegButton>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground">ズーム</span>
+          {(Object.keys(ZOOMS) as ZoomKey[]).map((z) => (
+            <SegButton key={z} active={zoomKey === z} onClick={() => setZoomKey(z)}>
+              {z}
+            </SegButton>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-1">
+            <input type="checkbox" className="size-3.5 accent-primary" checked={showRadii} onChange={(e) => setShowRadii(e.target.checked)} />
+            商圏円
+          </label>
+          <label className="flex cursor-pointer items-center gap-1">
+            <input type="checkbox" className="size-3.5 accent-primary" checked={showNearby} onChange={(e) => setShowNearby(e.target.checked)} />
+            近隣店舗
+          </label>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-lg border border-border">
         <MapContainer
-          key={`${center[0]},${center[1]}`}
+          key={`${center[0]},${center[1]}-${heightPx}-${zoom}`}
           center={center}
-          zoom={13}
+          zoom={zoom}
           scrollWheelZoom={false}
-          style={{ height: 380, width: "100%" }}
+          style={{ height: heightPx, width: "100%" }}
         >
-          <TileLayer
-            url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
-          />
+          <TileLayer key={tileType} url={TILE_TYPES[tileType].url} attribution={GSI_ATTRIBUTION} />
 
-          {/* 商圏円（大きい順に描画して重なりを見やすく） */}
-          {[...RADII].reverse().map((r) => (
-            <Circle
-              key={r.km}
-              center={center}
-              radius={r.km * 1000}
-              pathOptions={{ color: r.color, weight: 1.5, fillColor: r.color, fillOpacity: 0.05 }}
-            />
-          ))}
+          {showRadii &&
+            [...RADII].reverse().map((r) => (
+              <Circle
+                key={r.km}
+                center={center}
+                radius={r.km * 1000}
+                pathOptions={{ color: r.color, weight: 1.5, fillColor: r.color, fillOpacity: 0.05 }}
+              />
+            ))}
 
-          {/* 近隣の既存店舗 */}
-          {nearby.map((s) => (
-            <Marker key={s.id} position={[s.latitude, s.longitude]} icon={nearbyIcon}>
-              <Popup>
-                <span className="font-medium">{s.name}</span>
-                <br />
-                {s.distanceKm.toFixed(2)} km / {s.address}
-              </Popup>
-            </Marker>
-          ))}
+          {showNearby &&
+            nearby.map((s) => (
+              <Marker key={s.id} position={[s.latitude, s.longitude]} icon={nearbyIcon}>
+                <Popup>
+                  <span className="font-medium">{s.name}</span>
+                  <br />
+                  {s.distanceKm.toFixed(2)} km / {s.address}
+                </Popup>
+              </Marker>
+            ))}
 
-          {/* 出店地点 */}
           <Marker position={center} icon={storeIcon}>
             <Popup>
               <span className="font-medium">出店地点</span>
@@ -209,16 +280,19 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
           <span className="size-2.5 rounded-full" style={{ background: "oklch(0.58 0.22 25)" }} />
           出店地点
         </span>
-        <span className="flex items-center gap-1">
-          <span className="size-2.5 rounded-full" style={{ background: "oklch(0.55 0.10 260)" }} />
-          既存店舗（{NEARBY_RADIUS_KM}km圏 {nearby.length}件）
-        </span>
-        {RADII.map((r) => (
-          <span key={r.km} className="flex items-center gap-1">
-            <span className="size-2.5 rounded-full border" style={{ borderColor: r.color }} />
-            半径{r.km}km
+        {showNearby && (
+          <span className="flex items-center gap-1">
+            <span className="size-2.5 rounded-full" style={{ background: "oklch(0.55 0.10 260)" }} />
+            既存店舗（{NEARBY_RADIUS_KM}km圏 {nearby.length}件）
           </span>
-        ))}
+        )}
+        {showRadii &&
+          RADII.map((r) => (
+            <span key={r.km} className="flex items-center gap-1">
+              <span className="size-2.5 rounded-full border" style={{ borderColor: r.color }} />
+              半径{r.km}km
+            </span>
+          ))}
       </div>
     </div>
   )
