@@ -181,6 +181,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // ランニングコスト・投資コストの入力値（フィールドID → 入力文字列）。
   // 項目構成・項目名・並び順はマスタから動的に決まるため、汎用マップで保持する。
   const [runningValues,    setRunningValues]    = useState<Record<string, string>>({})
+  // 数量基準が fixed（数量×単価）の費目の数量入力値（フィールドID → 入力文字列）。
+  const [runningQuantities, setRunningQuantities] = useState<Record<string, string>>({})
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
   // マシンメンテナンス費（固定枠）。初期値は machineMaintenance パラメータから自動算出し、手動で上書き可能。
@@ -198,6 +200,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   function handleRunningCostChange(fieldId: string, value: string) {
     setRunningValues((prev) => ({ ...prev, [fieldId]: value }))
+  }
+
+  function handleRunningQuantityChange(fieldId: string, value: string) {
+    setRunningQuantities((prev) => ({ ...prev, [fieldId]: value }))
   }
 
   function handleInvestmentCostChange(fieldId: string, value: string) {
@@ -260,7 +266,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
     const model = withFitnessMachineItem(resolveMasterFormModel(values, numericRoyaltyRate))
 
-    setRunningValues(Object.fromEntries(model.running.map((m) => [m.fieldId, String(m.amount ?? 0)])))
+    // fixed（数量×単価）は単価と数量を分けて保持する。それ以外は従来どおり金額をそのまま保持する。
+    setRunningValues(Object.fromEntries(model.running.map((m) =>
+      [m.fieldId, String((m.quantityBasis === "fixed" ? m.unitAmount : m.amount) ?? 0)],
+    )))
+    setRunningQuantities(Object.fromEntries(
+      model.running
+        .filter((m) => m.quantityBasis === "fixed")
+        .map((m) => [m.fieldId, String(m.quantity ?? 1)]),
+    ))
 
     const investmentDefaults = Object.fromEntries(model.investment.map((m) => [m.fieldId, String(m.amount ?? 0)]))
     // フィットネスマシン費はアプリ側で算出した値で上書きする（都道府県別単価×有効坪数、直営は半額）
@@ -354,6 +368,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     label: m.unit ? `${m.label}（${m.unit}）` : m.label,
     placeholder: "例: 0",
     value: runningValues[m.fieldId] ?? "",
+    quantityBasis: m.quantityBasis,
   }))
 
   const COST_ITEMS = masterModel.investment.map((m) => ({
@@ -379,10 +394,19 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const perTsuboFieldIds = new Set(
     masterModel.running.filter((m) => m.quantityBasis === "perTsubo").map((m) => m.fieldId),
   )
+  // fixed（数量×単価）の費目: 月額 = 単価(入力値) × 数量(入力値)。
+  const fixedFieldIds = new Set(
+    masterModel.running.filter((m) => m.quantityBasis === "fixed").map((m) => m.fieldId),
+  )
   const runningEffectiveByField: Record<string, number> = Object.fromEntries(
     RC_ITEMS.map((item) => {
       const raw = Math.max(0, parseInt(item.value) || 0)
-      const effective = perTsuboFieldIds.has(item.id) ? raw * floorAreaTsubo : raw
+      let effective = raw
+      if (perTsuboFieldIds.has(item.id)) {
+        effective = raw * floorAreaTsubo
+      } else if (fixedFieldIds.has(item.id)) {
+        effective = raw * Math.max(0, parseInt(runningQuantities[item.id]) || 0)
+      }
       return [item.id, Math.round(effective)]
     }),
   )
@@ -901,12 +925,41 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 {rcPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
                     <Label htmlFor={item.id} className="text-xs font-medium">{item.label}</Label>
-                    <AmountInput
-                      id={item.id}
-                      placeholder={item.placeholder}
-                      value={item.value}
-                      onValueChange={(raw) => handleRunningCostChange(item.id, raw)}
-                    />
+                    {item.quantityBasis === "fixed" ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex flex-1 flex-col gap-0.5">
+                            <span className="text-[10px] text-muted-foreground">単価</span>
+                            <AmountInput
+                              id={item.id}
+                              placeholder={item.placeholder}
+                              value={item.value}
+                              onValueChange={(raw) => handleRunningCostChange(item.id, raw)}
+                            />
+                          </div>
+                          <span className="self-end pb-2 text-xs text-muted-foreground">×</span>
+                          <div className="flex w-20 flex-col gap-0.5">
+                            <span className="text-[10px] text-muted-foreground">数量</span>
+                            <AmountInput
+                              id={`${item.id}-qty`}
+                              placeholder="例: 1"
+                              value={runningQuantities[item.id] ?? ""}
+                              onValueChange={(raw) => handleRunningQuantityChange(item.id, raw)}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-right text-[10px] text-muted-foreground">
+                          = {(runningEffectiveByField[item.id] ?? 0).toLocaleString()} 円/月
+                        </span>
+                      </div>
+                    ) : (
+                      <AmountInput
+                        id={item.id}
+                        placeholder={item.placeholder}
+                        value={item.value}
+                        onValueChange={(raw) => handleRunningCostChange(item.id, raw)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

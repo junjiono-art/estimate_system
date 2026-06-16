@@ -61,6 +61,10 @@ export type MasterFormItem = {
   depreciationYears?: number
   /** ランニングコストの数量基準。perTsubo の場合、試算画面で amount に坪数を掛けて実コスト化する */
   quantityBasis?: MasterValueQuantityBasis
+  /** ランニングコストの単価（数量を掛ける前の1単位あたり金額）。fixed の数量入力欄の初期値算出に使う */
+  unitAmount?: number
+  /** ランニングコストの既定数量（マスタ登録値。未設定は1）。fixed の数量入力欄の初期値に使う */
+  quantity?: number
 }
 
 /**
@@ -133,7 +137,8 @@ export function resolveMasterFormModel(
       const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID] ?? value.code
       // 坪連動(perTsubo)は坪数を掛ける前の単価ベース金額を表示する（坪数は試算画面側で掛ける）
       const amount = Math.round(unitAmount * resolveRunningBaseQuantity(value))
-      running.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount, quantityBasis: value.quantityBasis })
+      const quantity = Number.isFinite(Number(value.quantity)) && Number(value.quantity) > 0 ? Number(value.quantity) : 1
+      running.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount, quantityBasis: value.quantityBasis, unitAmount: Math.round(unitAmount), quantity })
       return
     }
     if (value.category === "投資コスト") {
