@@ -184,6 +184,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // 数量基準が fixed（数量×単価）の費目の数量入力値（フィールドID → 入力文字列）。
   const [runningQuantities, setRunningQuantities] = useState<Record<string, string>>({})
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
+  // ユーザーが手入力した費目（フィールドID）。ロイヤリティ変更時の再適用で上書きから保護するために記録する。
+  const [editedRunningFields,    setEditedRunningFields]    = useState<Set<string>>(() => new Set())
+  const [editedInvestmentFields, setEditedInvestmentFields] = useState<Set<string>>(() => new Set())
   const [isFitnessMachineCostManual, setIsFitnessMachineCostManual] = useState(false)
   // マシンメンテナンス費（固定枠）。初期値は machineMaintenance パラメータから自動算出し、手動で上書き可能。
   const [machineMaintenanceCost, setMachineMaintenanceCost] = useState("")
@@ -200,15 +203,18 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   function handleRunningCostChange(fieldId: string, value: string) {
     setRunningValues((prev) => ({ ...prev, [fieldId]: value }))
+    setEditedRunningFields((prev) => new Set(prev).add(fieldId))
   }
 
   function handleRunningQuantityChange(fieldId: string, value: string) {
     setRunningQuantities((prev) => ({ ...prev, [fieldId]: value }))
+    setEditedRunningFields((prev) => new Set(prev).add(fieldId))
   }
 
   function handleInvestmentCostChange(fieldId: string, value: string) {
     if (fieldId === "fitnessMachineCost") setIsFitnessMachineCostManual(true)
     setInvestmentValues((prev) => ({ ...prev, [fieldId]: value }))
+    setEditedInvestmentFields((prev) => new Set(prev).add(fieldId))
   }
 
   function handleMachineMaintenanceChange(value: string) {
@@ -262,9 +268,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     return Math.max(0, Math.round(unitPrice * Math.max(0, effectiveTsubo)))
   }
 
+  // マスタを新規取得したときの初期化（全費目をマスタ基準額へリセット）。手入力の記録もクリアする。
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
     const model = withFitnessMachineItem(resolveMasterFormModel(values, numericRoyaltyRate))
+    setEditedRunningFields(new Set())
+    setEditedInvestmentFields(new Set())
 
     // fixed（数量×単価）は単価と数量を分けて保持する。それ以外は従来どおり金額をそのまま保持する。
     setRunningValues(Object.fromEntries(model.running.map((m) =>
@@ -337,10 +346,38 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     return () => { disposed = true }
   }, [])
 
+  // ロイヤリティ変更時は全リセットせず、手入力していない費目だけマスタ基準額（ロイヤリティ別単価）を再適用する。
+  // 手入力済みの費目・手動上書きフラグは保持する（フィットネスマシン費・マシンメンテナンス費は専用effectでロイヤリティ連動）。
   useEffect(() => {
     if (masterValues.length === 0) return
-    applyMasterDefaults(masterValues, royaltyRate)
-  }, [masterValues, royaltyRate])
+    const model = withFitnessMachineItem(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15))
+    setRunningValues((prev) => {
+      const next = { ...prev }
+      model.running.forEach((m) => {
+        if (editedRunningFields.has(m.fieldId)) return
+        next[m.fieldId] = String((m.quantityBasis === "fixed" ? m.unitAmount : m.amount) ?? 0)
+      })
+      return next
+    })
+    setRunningQuantities((prev) => {
+      const next = { ...prev }
+      model.running.filter((m) => m.quantityBasis === "fixed").forEach((m) => {
+        if (editedRunningFields.has(m.fieldId)) return
+        next[m.fieldId] = String(m.quantity ?? 1)
+      })
+      return next
+    })
+    setInvestmentValues((prev) => {
+      const next = { ...prev }
+      model.investment.forEach((m) => {
+        if (m.fieldId === FITNESS_MACHINE_FIELD_ID) return
+        if (editedInvestmentFields.has(m.fieldId)) return
+        next[m.fieldId] = String(m.amount ?? 0)
+      })
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [royaltyRate])
 
   useEffect(() => {
     // フィットネスマシン費の単価はアプリ側（都道府県別料金表）で算出するため、マスタの有無に依存しない。

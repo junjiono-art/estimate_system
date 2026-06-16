@@ -36,7 +36,7 @@ const PREFECTURE_MACHINE_UNIT_PRICE: Record<string, number> = {
   岡山: 180_000,
   広島: 180_000,
   山口: 180_000,
-  徳島: 180_000,
+  徳島: 200_000,
   香川: 200_000,
   愛媛: 200_000,
   高知: 200_000,

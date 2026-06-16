@@ -54,10 +54,11 @@ function applyResolvedBreakdown(
   masterValues: MasterValue[] | null,
   royaltyRate: 0 | 10 | 15,
   totalInitialInvestmentOverride?: number,
+  floorAreaTsubo = 0,
 ): SimulationResult {
   if (!masterValues || masterValues.length === 0) return result
 
-  const resolved = resolveMasterFieldValues(masterValues, royaltyRate)
+  const resolved = resolveMasterFieldValues(masterValues, royaltyRate, floorAreaTsubo)
   const hasInvestmentValues = resolved.visibleInvestmentFieldIds.length > 0
   const hasRunningValues = resolved.visibleRunningFieldIds.length > 0
   if (!hasInvestmentValues && !hasRunningValues) return result
@@ -107,6 +108,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [isRecalculating, setIsRecalculating] = useState(false)
   const prevIncludeDepreciation = useRef(true)
   const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
+  // 坪連動(perTsubo)の費目を実効額（単価×坪数×数量）へ換算するための床面積。フォームと同じ基準に揃える。
+  const floorAreaTsubo = Number(simulationRequest?.floorAreaTsubo) || 0
 
   function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean, nextLocationType: string): string {
     return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}|${nextLocationType}`
@@ -116,10 +119,10 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     runningCostTotal: number | undefined
     requestInitialInvestmentTotal: number | undefined
   } {
-    const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate) : null
+    const resolved = masterValues ? resolveMasterFieldValues(masterValues, nextRoyaltyRate, floorAreaTsubo) : null
     const mappedInitialInvestment = simulationRequest?.initialInvestmentByRoyaltyRate?.[String(nextRoyaltyRate) as "0" | "10" | "15"]
     const baseRoyaltyRate = ((simulationRequest?.royaltyRate ?? simulationRequest?.franchiseRate ?? initialData.franchiseRate ?? 0) as 0 | 10 | 15)
-    const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate) : null
+    const baseResolved = masterValues ? resolveMasterFieldValues(masterValues, baseRoyaltyRate, floorAreaTsubo) : null
     const requestInitialInvestmentTotal =
       Number.isFinite(simulationRequest?.initialInvestmentTotal)
         ? Math.max(0, Math.round(simulationRequest?.initialInvestmentTotal as number))
@@ -140,8 +143,11 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     }
   }
 
+  // 単価マスタは静的データのため、simulationRequest の参照が変わるたびに再フェッチしない。
+  // 取得要否は「リクエストの有無」だけで決まるので、真偽値を依存にして有無の切替時のみ再取得する。
+  const hasSimulationRequest = Boolean(simulationRequest)
   useEffect(() => {
-    if (!simulationRequest) {
+    if (!hasSimulationRequest) {
       setMasterValues(null)
       return
     }
@@ -171,13 +177,13 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     return () => {
       controller.abort()
     }
-  }, [simulationRequest])
+  }, [hasSimulationRequest])
 
   useEffect(() => {
     setScenario(initialData.scenario ?? "standard")
     const initialRoyaltyRate = (initialData.franchiseRate ?? 0) as 0 | 10 | 15
     const initialRequestValues = resolveRequestValues(initialRoyaltyRate)
-    const seededData = applyResolvedBreakdown(initialData, masterValues, initialRoyaltyRate, initialRequestValues.requestInitialInvestmentTotal)
+    const seededData = applyResolvedBreakdown(initialData, masterValues, initialRoyaltyRate, initialRequestValues.requestInitialInvestmentTotal, floorAreaTsubo)
     setScenarioData({ ...seededData, locationType: simulationRequest?.locationType ?? "suburban" })
     setRating(initialData.rating)
     setFranchiseRate(String(initialData.franchiseRate ?? 0))
@@ -256,6 +262,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           masterValues,
           nextRoyaltyRate,
           requestValues.requestInitialInvestmentTotal,
+          floorAreaTsubo,
         )
         scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
         setScenarioData({ ...computed, locationType })

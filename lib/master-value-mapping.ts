@@ -182,7 +182,7 @@ export function resolveMasterValueAmount(value: MasterValue, royaltyRate: Royalt
   return Math.max(0, Number(value.amountWithRoyalty) || 0)
 }
 
-export function resolveMasterFieldValues(values: MasterValue[], royaltyRate: RoyaltyRate): ResolvedMasterValues {
+export function resolveMasterFieldValues(values: MasterValue[], royaltyRate: RoyaltyRate, floorAreaTsubo = 0): ResolvedMasterValues {
   const runningByField: Record<string, number> = {}
   const investmentByField: Record<string, number> = {}
   const visibleRunningFieldIds: string[] = []
@@ -193,7 +193,8 @@ export function resolveMasterFieldValues(values: MasterValue[], royaltyRate: Roy
     const amount = resolveMasterValueAmount(value, royaltyRate)
     if (value.category === "ランニングコスト") {
       const fieldId = RUNNING_COST_CODE_TO_FIELD_ID[value.code as keyof typeof RUNNING_COST_CODE_TO_FIELD_ID] ?? value.code
-      runningByField[fieldId] = amount
+      // 試算画面（フォーム）と同じ実効額に揃える: 単価 × 実効数量（fixed=数量, perTsubo=坪数×数量, monthly=1）。
+      runningByField[fieldId] = Math.round(amount * resolveRunningQuantity(value, floorAreaTsubo))
       visibleRunningFieldIds.push(fieldId)
       return
     }
