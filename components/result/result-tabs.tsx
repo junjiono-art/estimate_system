@@ -118,13 +118,38 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const [isRecalculating, setIsRecalculating] = useState(false)
   const [mapOpen, setMapOpen] = useState(true)
+  // 近隣ジムの選択/反映状態は StoreMap がタブ離脱でアンマウントされても保持するため親で持つ。
+  const [gymApply, setGymApply] = useState(false)
+  const [gymSelectedIds, setGymSelectedIds] = useState<Set<string>>(() => new Set())
+  const gymInitAddrRef = useRef<string | null>(null)
   const prevIncludeDepreciation = useRef(true)
+  const prevCompetitor = useRef<number | undefined>(undefined)
   const scenarioCacheRef = useRef<Map<string, SimulationResult>>(new Map())
   // 坪連動(perTsubo)の費目を実効額（単価×坪数×数量）へ換算するための床面積。フォームと同じ基準に揃える。
   const floorAreaTsubo = Number(simulationRequest?.floorAreaTsubo) || 0
+  // 競合数の上書き（近隣ジムを反映する場合は選択数、しない場合は undefined＝フォーム値）
+  const competitorOverride = gymApply ? gymSelectedIds.size : undefined
 
-  function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean, nextLocationType: string): string {
-    return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}|${nextLocationType}`
+  // StoreMap から近隣ジム一覧が読み込まれたとき、住所単位で一度だけ既定の全選択を行う。
+  function handleGymsLoaded(ids: string[]) {
+    const addr = simulationRequest?.location ?? ""
+    if (gymInitAddrRef.current !== addr) {
+      gymInitAddrRef.current = addr
+      setGymSelectedIds(new Set(ids))
+    }
+  }
+
+  function handleToggleGym(id: string) {
+    setGymSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function buildScenarioCacheKey(nextScenario: ScenarioType, nextRoyaltyRate: 0 | 10 | 15, nextIncludeDepreciation: boolean, nextLocationType: string, nextCompetitor: number): string {
+    return `${nextScenario}|${nextRoyaltyRate}|${nextIncludeDepreciation ? 1 : 0}|${nextLocationType}|c${nextCompetitor}`
   }
 
   function resolveRequestValues(nextRoyaltyRate: 0 | 10 | 15): {
@@ -202,10 +227,16 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     setLocationType(simulationRequest?.locationType ?? "suburban")
     setIncludeDepreciation(true)
     prevIncludeDepreciation.current = true
+    // 競合数の上書きは初期化（フォーム値を使用）。近隣ジムの選択もリセット。
+    const initialCompetitor = Number(simulationRequest?.competitorCount) || 0
+    setGymApply(false)
+    setGymSelectedIds(new Set())
+    gymInitAddrRef.current = null
+    prevCompetitor.current = initialCompetitor
     setScenarioError("")
     scenarioCacheRef.current.clear()
     scenarioCacheRef.current.set(
-      buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true, simulationRequest?.locationType ?? "suburban"),
+      buildScenarioCacheKey(initialData.scenario ?? "standard", initialRoyaltyRate, true, simulationRequest?.locationType ?? "suburban", initialCompetitor),
       { ...seededData, locationType: simulationRequest?.locationType ?? "suburban" },
     )
   }, [initialData, masterValues, simulationRequest])
@@ -214,10 +245,13 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   useEffect(() => {
     const nextFranchiseRate = parseInt(franchiseRate) || 0
+    // 競合数: 近隣ジムの反映があればその選択数、無ければフォーム値を使用
+    const effectiveCompetitor = competitorOverride ?? (Number(simulationRequest?.competitorCount) || 0)
     const controlsAreSame =
       scenario === scenarioData.scenario &&
       nextFranchiseRate === (scenarioData.franchiseRate ?? 0) &&
       includeDepreciation === prevIncludeDepreciation.current &&
+      effectiveCompetitor === prevCompetitor.current &&
       locationType === (scenarioData.locationType ?? simulationRequest?.locationType ?? "suburban")
 
     if (controlsAreSame) return
@@ -226,12 +260,13 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
     const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
     const requestValues = resolveRequestValues(nextRoyaltyRate)
-    const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType)
+    const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType, effectiveCompetitor)
     const cached = scenarioCacheRef.current.get(cacheKey)
 
     if (cached) {
       setScenarioData(cached)
       prevIncludeDepreciation.current = includeDepreciation
+      prevCompetitor.current = effectiveCompetitor
       // 前回 fetch が abort されたまま true 残留しうるため明示的にリセット
       setIsRecalculating(false)
       return
@@ -250,6 +285,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           royaltyRate: nextRoyaltyRate,
           franchiseRate: nextFranchiseRate as 0 | 10 | 15,
           locationType,
+          competitorCount: effectiveCompetitor,
           runningCostTotal: requestValues.runningCostTotal,
           initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
           includeDepreciation,
@@ -279,6 +315,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
         setScenarioData({ ...computed, locationType })
         prevIncludeDepreciation.current = includeDepreciation
+        prevCompetitor.current = effectiveCompetitor
       } catch (error) {
         if (controller.signal.aborted) return
         setScenarioError(error instanceof Error ? error.message : "シナリオ再計算に失敗しました。")
@@ -294,6 +331,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       controller.abort()
     }
   }, [
+    competitorOverride,
     franchiseRate,
     includeDepreciation,
     initialData.location,
@@ -612,7 +650,15 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </button>
               {mapOpen && (
                 <div className="px-4 pb-4">
-                  <StoreMap address={simulationRequest?.location} prefecture={simulationRequest?.prefecture} />
+                  <StoreMap
+                address={simulationRequest?.location}
+                prefecture={simulationRequest?.prefecture}
+                selectedGymIds={gymSelectedIds}
+                applyGymsToCalc={gymApply}
+                onApplyGymsChange={setGymApply}
+                onToggleGym={handleToggleGym}
+                onGymsLoaded={handleGymsLoaded}
+              />
                 </div>
               )}
             </div>

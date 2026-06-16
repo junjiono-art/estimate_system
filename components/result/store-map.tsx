@@ -62,11 +62,20 @@ const nearbyIcon = L.divIcon({
 })
 
 // 競合ジム（OSM）。自社店舗と区別するため菱形（45度回転）にする。
+// 選択中（試算に含める）は塗りつぶし、未選択は白抜きで区別する。
 const gymIcon = L.divIcon({
   className: "",
   html:
     '<div style="width:12px;height:12px;background:oklch(0.58 0.20 300);' +
     'border:2px solid white;box-shadow:0 0 0 1px oklch(0 0 0 / 0.3);transform:rotate(45deg)"></div>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+})
+const gymIconOff = L.divIcon({
+  className: "",
+  html:
+    '<div style="width:12px;height:12px;background:white;' +
+    'border:2px solid oklch(0.58 0.20 300);box-shadow:0 0 0 1px oklch(0 0 0 / 0.2);transform:rotate(45deg)"></div>',
   iconSize: [12, 12],
   iconAnchor: [6, 6],
 })
@@ -96,7 +105,26 @@ function SegButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-export default function StoreMap({ address, prefecture }: { address?: string; prefecture?: string }) {
+export default function StoreMap({
+  address,
+  prefecture,
+  selectedGymIds,
+  applyGymsToCalc,
+  onApplyGymsChange,
+  onToggleGym,
+  onGymsLoaded,
+}: {
+  address?: string
+  prefecture?: string
+  /** 試算に含める近隣ジムのid集合（親で保持） */
+  selectedGymIds: Set<string>
+  /** 選択数を競合数として試算へ反映するか */
+  applyGymsToCalc: boolean
+  onApplyGymsChange: (apply: boolean) => void
+  onToggleGym: (id: string) => void
+  /** 近隣ジム一覧を取得したとき、id配列を親へ通知（既定選択の初期化に使用） */
+  onGymsLoaded: (ids: string[]) => void
+}) {
   const [geo, setGeo] = useState<GeoResult | null>(null)
   const [stores, setStores] = useState<Store[]>([])
   const [loading, setLoading] = useState(false)
@@ -190,7 +218,10 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
         })
         const payload = await res.json().catch(() => null)
         if (!controller.signal.aborted && res.ok && Array.isArray(payload?.gyms)) {
-          setGyms(payload.gyms as GymPoi[])
+          const fetched = payload.gyms as GymPoi[]
+          setGyms(fetched)
+          // 既定選択の初期化は親側（住所単位で一度だけ）に委ねる
+          onGymsLoaded(fetched.map((g) => g.id))
         }
       } catch {
         // 競合ジムは取得失敗しても地図表示は継続する
@@ -199,6 +230,8 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
       }
     })()
     return () => controller.abort()
+    // onGymsLoaded は毎レンダーで identity が変わりうるため依存に含めない（geo 変化時のみ実行）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geo])
 
   const nearby = useMemo<NearbyStore[]>(() => {
@@ -215,6 +248,25 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
       .filter((s) => s.distanceKm <= NEARBY_RADIUS_KM)
       .sort((a, b) => a.distanceKm - b.distanceKm)
   }, [geo, stores])
+
+  // 競合ジムを距離付き・近い順に整列（一覧表用）
+  const gymsWithDistance = useMemo(() => {
+    if (!geo) return [] as Array<GymPoi & { distanceKm: number }>
+    return gyms
+      .map((g) => ({
+        ...g,
+        distanceKm: haversineDistanceKm(
+          { latitude: geo.latitude, longitude: geo.longitude },
+          { latitude: g.latitude, longitude: g.longitude },
+        ),
+      }))
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+  }, [geo, gyms])
+
+  const selectedGymCount = useMemo(
+    () => gyms.reduce((n, g) => (selectedGymIds.has(g.id) ? n + 1 : n), 0),
+    [gyms, selectedGymIds],
+  )
 
   if (!trimmedAddress) {
     return (
@@ -323,11 +375,15 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
 
           {showGyms &&
             gyms.map((g) => (
-              <Marker key={g.id} position={[g.latitude, g.longitude]} icon={gymIcon}>
+              <Marker
+                key={g.id}
+                position={[g.latitude, g.longitude]}
+                icon={selectedGymIds.has(g.id) ? gymIcon : gymIconOff}
+              >
                 <Popup>
                   <span className="font-medium">{g.name}</span>
                   <br />
-                  競合ジム（OSM）
+                  競合ジム（OSM）{selectedGymIds.has(g.id) ? "・試算に反映" : "・除外中"}
                 </Popup>
               </Marker>
             ))}
@@ -367,6 +423,56 @@ export default function StoreMap({ address, prefecture }: { address?: string; pr
               半径{r.km}km
             </span>
           ))}
+      </div>
+
+      {/* 近隣ジム一覧（試算に含める選択） */}
+      <div className="rounded-lg border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/20 px-3 py-2">
+          <span className="text-xs font-medium text-foreground">
+            近隣ジム一覧（{GYM_RADIUS_KM}km圏 {gymsWithDistance.length}件）
+            {gymsLoading && <span className="ml-1 text-[10px] text-muted-foreground">検索中…</span>}
+          </span>
+          <label className="flex cursor-pointer items-center gap-1.5 text-[11px]">
+            <input
+              type="checkbox"
+              className="size-3.5 accent-primary"
+              checked={applyGymsToCalc}
+              onChange={(e) => onApplyGymsChange(e.target.checked)}
+              disabled={gymsWithDistance.length === 0}
+            />
+            <span className={applyGymsToCalc ? "font-medium text-foreground" : "text-muted-foreground"}>
+              選択{selectedGymCount}件を競合数として試算に反映
+            </span>
+          </label>
+        </div>
+
+        {gymsWithDistance.length === 0 ? (
+          <p className="px-3 py-4 text-[11px] text-muted-foreground">
+            {gymsLoading ? "近隣ジムを検索中です…" : "近隣に該当するジムが見つかりませんでした（OSM登録分）。"}
+          </p>
+        ) : (
+          <ul className="max-h-56 divide-y divide-border/60 overflow-auto">
+            {gymsWithDistance.map((g) => (
+              <li key={g.id} className="flex items-center gap-2 px-3 py-1.5">
+                <input
+                  type="checkbox"
+                  className="size-3.5 shrink-0 accent-primary"
+                  checked={selectedGymIds.has(g.id)}
+                  onChange={() => onToggleGym(g.id)}
+                  aria-label={`${g.name} を試算に含める`}
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-foreground">{g.name}</span>
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{g.distanceKm.toFixed(2)} km</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {applyGymsToCalc && (
+          <p className="border-t border-border bg-muted/10 px-3 py-1.5 text-[10px] text-muted-foreground">
+            競合数 = <span className="font-medium text-foreground">{selectedGymCount}</span> 件として試算に反映中（試算フォームの競合数より優先）。
+          </p>
+        )}
       </div>
     </div>
   )
