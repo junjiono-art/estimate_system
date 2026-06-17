@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import { KpiCards } from "./kpi-cards"
 import { ChartTableView } from "./chart-table-view"
 import { DashboardView } from "./dashboard-view"
@@ -461,19 +469,28 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </button>
             )}
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPrinting(true)} disabled={printing}>
-            <DownloadIcon className="size-3.5" />
-            {printing ? "PDF準備中..." : "PDF出力"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs"
-            onClick={() => { void exportResultToPptx(currentData).catch(() => alert("PPTXの生成に失敗しました。")) }}
-          >
-            <DownloadIcon className="size-3.5" />
-            PPTX出力
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={printing}>
+                <DownloadIcon className="size-3.5" />
+                {printing ? "PDF準備中..." : "エクスポート"}
+                <ChevronDownIcon className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="text-xs">形式を選択</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-xs" onClick={() => setPrinting(true)}>
+                PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-xs"
+                onClick={() => { void exportResultToPptx(currentData).catch(() => alert("PPTXの生成に失敗しました。")) }}
+              >
+                PowerPoint（PPTX）
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" className="gap-1.5 text-xs" onClick={() => setSaveDialogOpen(true)}>
             <SaveIcon className="size-3.5" />
             保存
