@@ -107,7 +107,6 @@ function SegButton({ active, onClick, children }: { active: boolean; onClick: ()
 
 export default function StoreMap({
   address,
-  prefecture,
   selectedGymIds,
   applyGymsToCalc,
   onApplyGymsChange,
@@ -115,7 +114,6 @@ export default function StoreMap({
   onGymsLoaded,
 }: {
   address?: string
-  prefecture?: string
   /** 試算に含める近隣ジムのid集合（親で保持） */
   selectedGymIds: Set<string>
   /** 選択数を競合数として試算へ反映するか */
@@ -176,16 +174,15 @@ export default function StoreMap({
         if (controller.signal.aborted) return
         setGeo(resolvedGeo)
 
-        const pref = (prefecture?.trim() || resolvedGeo.prefecture).trim()
-        if (pref) {
-          const storesRes = await fetch(`/api/stores?prefecture=${encodeURIComponent(pref)}`, {
-            cache: "no-store",
-            signal: controller.signal,
-          })
-          const storesPayload = await storesRes.json().catch(() => null)
-          if (!controller.signal.aborted && storesRes.ok && Array.isArray(storesPayload?.stores)) {
-            setStores(storesPayload.stores as Store[])
-          }
+        // 出店済み店舗は全件取得（Scan）し、距離はクライアント側で判定する。
+        // 都道府県GSI(prefecture-index)に依存せず、prefectureキー不一致・県またぎ5km圏でも取りこぼさない。
+        const storesRes = await fetch("/api/stores", {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        const storesPayload = await storesRes.json().catch(() => null)
+        if (!controller.signal.aborted && storesRes.ok && Array.isArray(storesPayload?.stores)) {
+          setStores(storesPayload.stores as Store[])
         }
       } catch (err) {
         if (controller.signal.aborted) return
@@ -198,7 +195,7 @@ export default function StoreMap({
 
     void load()
     return () => controller.abort()
-  }, [trimmedAddress, prefecture])
+  }, [trimmedAddress])
 
   // 競合ジムの取得（地図表示をブロックしないよう座標確定後に別途取得）
   useEffect(() => {

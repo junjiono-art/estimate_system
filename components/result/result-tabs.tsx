@@ -652,7 +652,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
                 <div className="px-4 pb-4">
                   <StoreMap
                 address={simulationRequest?.location}
-                prefecture={simulationRequest?.prefecture}
                 selectedGymIds={gymSelectedIds}
                 applyGymsToCalc={gymApply}
                 onApplyGymsChange={setGymApply}
