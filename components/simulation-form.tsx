@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   CalculatorIcon,
   BuildingIcon,
@@ -150,6 +150,39 @@ type DemographicRow = {
   total: number
 }
 
+// ── 新規試算フォームの途中保存（下書き）。localStorage に自動保存し、次回起動時に復元を提示する。──
+const DRAFT_STORAGE_KEY = "estimate-form-draft-v1"
+const DRAFT_VERSION = 1
+
+type FormDraft = {
+  version: number
+  savedAt: string
+  storeName: string
+  address: string
+  floorArea: string
+  rentPerTsubo: string
+  royaltyRate: "0" | "10" | "15"
+  competitorCount: string
+  locationType: LocationType
+  golfRightBayCount: string
+  golfDualBayCount: string
+  runningValues: Record<string, string>
+  runningQuantities: Record<string, string>
+  investmentValues: Record<string, string>
+  editedRunningFields: string[]
+  editedInvestmentFields: string[]
+  machineMaintenanceCost: string
+  isMachineMaintenanceManual: boolean
+  isFitnessMachineCostManual: boolean
+}
+
+function formatDraftTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
@@ -193,6 +226,112 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [isMachineMaintenanceManual, setIsMachineMaintenanceManual] = useState(false)
   const [machineMaintenanceConfig, setMachineMaintenanceConfig] =
     useState<CalcMachineMaintenanceConfig>(DEFAULT_CALC_PARAMS.machineMaintenance)
+
+  // 途中保存（下書き）。draftToRestore があれば復元バナーを出し、決定するまで自動保存しない。
+  const [draftToRestore, setDraftToRestore] = useState<FormDraft | null>(null)
+  const [draftChecked, setDraftChecked] = useState(false)
+  const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null)
+
+  // 起動時に下書きを読み込む（あれば復元を提示）。
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw) as FormDraft
+        const hasContent = Boolean(parsed?.storeName?.trim() || parsed?.address?.trim() || parsed?.floorArea?.trim())
+        if (parsed && parsed.version === DRAFT_VERSION && hasContent) {
+          setDraftToRestore(parsed)
+        }
+      }
+    } catch {
+      // 破損データは無視
+    }
+    setDraftChecked(true)
+  }, [])
+
+  function clearDraft() {
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY)
+    } catch {
+      // 失敗しても致命的ではない
+    }
+    setAutoSavedAt(null)
+  }
+
+  function restoreDraft() {
+    const d = draftToRestore
+    if (!d) return
+    setStoreName(d.storeName ?? "")
+    setAddress(d.address ?? "")
+    setFloorArea(d.floorArea ?? "")
+    setRentPerTsubo(d.rentPerTsubo ?? "")
+    setRoyaltyRate(d.royaltyRate === "10" ? "10" : d.royaltyRate === "15" ? "15" : "0")
+    setCompetitorCount(d.competitorCount ?? "")
+    setLocationType(d.locationType ?? "suburban")
+    setGolfRightBayCount(d.golfRightBayCount ?? "0")
+    setGolfDualBayCount(d.golfDualBayCount ?? "0")
+    setRunningValues(d.runningValues ?? {})
+    setRunningQuantities(d.runningQuantities ?? {})
+    setInvestmentValues(d.investmentValues ?? {})
+    // 復元した費目は「手入力済み」として扱い、マスタ/ロイヤリティ再適用で上書きされないようにする。
+    setEditedRunningFields(new Set(d.editedRunningFields ?? []))
+    setEditedInvestmentFields(new Set(d.editedInvestmentFields ?? []))
+    setMachineMaintenanceCost(d.machineMaintenanceCost ?? "")
+    setIsMachineMaintenanceManual(Boolean(d.isMachineMaintenanceManual))
+    setIsFitnessMachineCostManual(Boolean(d.isFitnessMachineCostManual))
+    setAutoSavedAt(d.savedAt)
+    setDraftToRestore(null)
+  }
+
+  function discardDraft() {
+    clearDraft()
+    setDraftToRestore(null)
+  }
+
+  // 入力変更をデバウンスして localStorage に自動保存（復元待ち・空入力のときは保存しない）。
+  useEffect(() => {
+    if (!draftChecked || draftToRestore !== null) return
+    const hasContent = Boolean(storeName.trim() || address.trim() || floorArea.trim() || rentPerTsubo.trim())
+    if (!hasContent) return
+    const timer = setTimeout(() => {
+      try {
+        const draft: FormDraft = {
+          version: DRAFT_VERSION,
+          savedAt: new Date().toISOString(),
+          storeName,
+          address,
+          floorArea,
+          rentPerTsubo,
+          royaltyRate,
+          competitorCount,
+          locationType,
+          golfRightBayCount,
+          golfDualBayCount,
+          runningValues,
+          runningQuantities,
+          investmentValues,
+          editedRunningFields: [...editedRunningFields],
+          editedInvestmentFields: [...editedInvestmentFields],
+          machineMaintenanceCost,
+          isMachineMaintenanceManual,
+          isFitnessMachineCostManual,
+        }
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+        setAutoSavedAt(draft.savedAt)
+      } catch {
+        // 容量超過等は無視（自動保存はベストエフォート）
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [
+    draftChecked, draftToRestore,
+    storeName, address, floorArea, rentPerTsubo,
+    royaltyRate, competitorCount, locationType,
+    golfRightBayCount, golfDualBayCount,
+    runningValues, runningQuantities, investmentValues,
+    editedRunningFields, editedInvestmentFields,
+    machineMaintenanceCost, isMachineMaintenanceManual, isFitnessMachineCostManual,
+  ])
 
   // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する。
   // 坪連動(perTsubo)のランニングコストは坪数を掛ける前の単価ベース金額を保持する（坪数は下の合計算出で掛ける）。
@@ -647,6 +786,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       }
 
       await onSubmitWithData?.(formData)
+      // 試算実行が成功したら下書きは不要なので消す。
+      clearDraft()
       onSubmit?.()
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "送信に失敗しました。")
@@ -664,6 +805,33 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       onSubmit={(e) => e.preventDefault()}
       className="flex flex-col gap-5"
     >
+      {/* ── 途中保存（下書き）の復元バナー ── */}
+      {draftToRestore && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <span className="text-xs text-foreground">
+            入力途中の下書きがあります（保存: {formatDraftTime(draftToRestore.savedAt)}）。続きから再開しますか？
+          </span>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" className="h-7 text-xs" onClick={restoreDraft}>
+              復元する
+            </Button>
+            <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={discardDraft}>
+              破棄する
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 自動保存インジケータ ── */}
+      {!draftToRestore && autoSavedAt && (
+        <div className="flex items-center justify-end gap-2 text-[10px] text-muted-foreground">
+          <span>下書きを自動保存しました（{formatDraftTime(autoSavedAt)}）</span>
+          <button type="button" className="underline hover:text-foreground" onClick={discardDraft}>
+            下書きを破棄
+          </button>
+        </div>
+      )}
+
       {/* ── タブナビ ── */}
       <div className="flex gap-0 overflow-x-auto rounded-lg border border-border bg-muted/50">
         {TABS.map((tab, i) => {
