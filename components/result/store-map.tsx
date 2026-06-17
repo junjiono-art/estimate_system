@@ -425,6 +425,33 @@ export default function StoreMap({
           ))}
       </div>
 
+      {/* 近隣の既存店舗一覧（出店済み店舗マスタ・距離付き） */}
+      <div className="rounded-lg border border-border">
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/20 px-3 py-2">
+          <span className="text-xs font-medium text-foreground">
+            近隣の既存店舗（{NEARBY_RADIUS_KM}km圏 {nearby.length}件）
+          </span>
+        </div>
+        {nearby.length === 0 ? (
+          <p className="px-3 py-4 text-[11px] text-muted-foreground">
+            {NEARBY_RADIUS_KM}km圏内に出店済み店舗はありません。
+          </p>
+        ) : (
+          <ul className="max-h-56 divide-y divide-border/60 overflow-auto">
+            {nearby.map((s) => (
+              <li key={s.id} className="flex items-center gap-2 px-3 py-1.5">
+                <span className="size-2.5 shrink-0 rounded-full" style={{ background: "oklch(0.55 0.10 260)" }} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs text-foreground">{s.name}</div>
+                  {s.address && <div className="truncate text-[10px] text-muted-foreground">{s.address}</div>}
+                </div>
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{s.distanceKm.toFixed(2)} km</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* 近隣ジム一覧（試算に含める選択） */}
       <div className="rounded-lg border border-border">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/20 px-3 py-2">

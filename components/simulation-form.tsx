@@ -17,15 +17,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -189,8 +180,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [rcPage,    setRcPage]    = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
-  const [nearbyDialogOpen, setNearbyDialogOpen] = useState(false)
-  const [nearbyStoresSummary, setNearbyStoresSummary] = useState("")
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isMasterLoading, setIsMasterLoading] = useState(false)
   const [masterLoadError, setMasterLoadError] = useState("")
@@ -634,31 +623,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         throw new Error(getErrorMessage(geocodePayload, "住所の座標変換に失敗しました。"))
       }
 
-      try {
-        const nearbyResponse = await fetch("/api/stores/check-nearby", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            latitude: geocodePayload.latitude,
-            longitude: geocodePayload.longitude,
-            prefecture: geocodePayload.prefecture,
-            radiusKm: 1,
-          }),
-        })
-
-        const nearbyPayload = await nearbyResponse.json()
-        if (!nearbyResponse.ok) {
-          console.warn(getErrorMessage(nearbyPayload, "近隣店舗チェックに失敗しました。試算を続行します。"))
-        } else if (nearbyPayload?.hasNearbyStore) {
-          const nearest = (nearbyPayload.nearbyStores as Array<{ name: string; distanceKm: number }>).slice(0, 3)
-          const nearestText = nearest.map((s) => `${s.name}（${s.distanceKm}km）`).join("、")
-          setNearbyStoresSummary(nearestText)
-          setNearbyDialogOpen(true)
-          return
-        }
-      } catch (nearbyError) {
-        console.warn(nearbyError instanceof Error ? nearbyError.message : "近隣店舗チェックに失敗しました。試算を続行します。")
-      }
+      // 近隣店舗は「出店条件抵触エラー」での中断はせず、結果画面の地図セクションに距離付き一覧（5km圏）で表示する方針。
 
       let demographics: FormSubmitData["demographics"] | undefined
       let demographicsError: string | undefined
@@ -1352,21 +1317,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           </Button>
         )}
       </div>
-
-      <AlertDialog open={nearbyDialogOpen} onOpenChange={setNearbyDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-base">近隣店舗チェックで出店条件に抵触しました</AlertDialogTitle>
-            <AlertDialogDescription className="leading-relaxed">
-              同一都道府県内の1km圏内に既存店舗が見つかりました。
-              {nearbyStoresSummary ? ` 近隣店舗: ${nearbyStoresSummary}` : ""}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction>確認</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </form>
   )
 }
