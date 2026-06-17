@@ -119,6 +119,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [masterValues, setMasterValues] = useState<MasterValue[] | null>(null)
   const [isRecalculating, setIsRecalculating] = useState(false)
   const [mapOpen, setMapOpen] = useState(true)
+  // PDF出力時は全セクションを縦積みで描画する（タブ非表示分のグラフも正しく出力するため）。
+  const [printing, setPrinting] = useState(false)
   // 近隣ジムの選択/反映状態は StoreMap がタブ離脱でアンマウントされても保持するため親で持つ。
   const [gymApply, setGymApply] = useState(false)
   const [gymSelectedIds, setGymSelectedIds] = useState<Set<string>>(() => new Set())
@@ -421,6 +423,18 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     }
   }
 
+  // 印刷モードに入ったら、グラフ/レイアウトの確定を待って印刷ダイアログを開く。
+  useEffect(() => {
+    if (!printing) return
+    const onAfterPrint = () => setPrinting(false)
+    window.addEventListener("afterprint", onAfterPrint)
+    const timer = setTimeout(() => window.print(), 600)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener("afterprint", onAfterPrint)
+    }
+  }, [printing])
+
   return (
     <div id="result-print-area" className="flex flex-col gap-6">
       {/* ストア情報行 */}
@@ -447,9 +461,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </button>
             )}
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => window.print()}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPrinting(true)} disabled={printing}>
             <DownloadIcon className="size-3.5" />
-            PDF出力
+            {printing ? "PDF準備中..." : "PDF出力"}
           </Button>
           <Button
             variant="outline"
@@ -616,7 +630,33 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
         </details>
       )}
 
-      {/* タブ切替 */}
+      {/* PDF出力時は全セクションを縦積みで描画（タブ非表示分も含めて1本のレポートにする） */}
+      {printing ? (
+        <div className="flex flex-col gap-8">
+          <section className="break-inside-avoid">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">グラフ + 表</h3>
+            <ChartTableView data={filteredData} />
+          </section>
+          <section className="break-inside-avoid">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">ダッシュボード</h3>
+            <DashboardView data={filteredData} />
+          </section>
+          <section className="break-inside-avoid">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">事業計画</h3>
+            <BusinessPlanView data={currentData} />
+          </section>
+          <section className="break-inside-avoid">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">エリア人口統計</h3>
+            <DemographicsView
+              data={currentData}
+              demographicsData={demographicsData}
+              demographicsError={demographicsError}
+              simulationRequest={simulationRequest}
+            />
+          </section>
+        </div>
+      ) : (
+      /* タブ切替 */
       <Tabs defaultValue="chart">
         <TabsList className="rounded-md border border-border bg-muted/40 p-0.5" data-print-hide>
           <TabsTrigger value="chart" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -680,6 +720,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           </div>
         </TabsContent>
       </Tabs>
+      )}
     </div>
   )
 }
