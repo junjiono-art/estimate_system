@@ -38,6 +38,7 @@ const navMain = [
       { title: "投資コスト",    href: "/master/investment-cost", icon: DatabaseIcon },
       { title: "ランニングコスト", href: "/master/running-cost", icon: DatabaseIcon },
       { title: "ロジック可視化", href: "/master/logic-visualization", icon: DatabaseIcon },
+      { title: "レポート出力設定", href: "/master/report-export", icon: DatabaseIcon },
       { title: "出店済み店舗",  href: "/master/stores",        icon: DatabaseIcon },
     ],
   },

@@ -128,3 +128,14 @@
     display: none !important;
   }
 }
+
+/* 印刷時のみ表示する要素（表紙ヘッダー等） */
+[data-print-only] {
+  display: none;
+}
+@media print {
+  [data-print-only] {
+    display: block !important;
+    visibility: visible !important;
+  }
+}

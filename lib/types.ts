@@ -334,6 +334,44 @@ export interface CalcCompetitorImpactConfig {
   over4: number
 }
 
+/** レポート出力（PDF/PPTX）の設定。マスタ管理「レポート出力設定」で編集する。 */
+export type ReportSectionId =
+  | "summary"
+  | "investment"
+  | "monthlyPL"
+  | "breakeven"
+  | "annual"
+  | "demographics"
+
+export type ReportKpiId =
+  | "initialInvestment"
+  | "monthlyRevenue"
+  | "monthlyProfit"
+  | "paybackMonths"
+  | "breakevenMembers"
+  | "averagePrice"
+  | "contributionMargin"
+  | "maxMembers"
+
+export interface ReportExportConfig {
+  /** 出力するセクション。配列の順序がそのまま出力順になる */
+  sections: { id: ReportSectionId; enabled: boolean }[]
+  /** サマリに載せるKPI項目 */
+  kpiItems: { id: ReportKpiId; enabled: boolean }[]
+  /** 表紙設定 */
+  cover: {
+    title: string
+    companyName: string
+    /** ロゴ画像（data URL。未設定なら非表示） */
+    logoDataUrl?: string
+  }
+  /** テーマ色（アクセント色。# 無しの16進。例 "2563EB"） */
+  theme: { accentColor: string }
+  /** 用紙設定 */
+  page: { size: "A4" | "Letter"; orientation: "portrait" | "landscape" }
+  updatedAt?: string
+}
+
 export interface CalcAdCostConfig {
   year1Month1: number
   year1Month2: number

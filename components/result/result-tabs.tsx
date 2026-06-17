@@ -27,7 +27,8 @@ import { DashboardView } from "./dashboard-view"
 import { DemographicsView } from "./demographics-view"
 import { BusinessPlanView } from "./business-plan-view"
 import { StarRating } from "@/components/star-rating"
-import type { MasterValue, SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
+import type { MasterValue, ReportExportConfig, SimulationRequestInput, SimulationResult, ScenarioType } from "@/lib/types"
+import { DEFAULT_REPORT_EXPORT_CONFIG, normalizeReportExportConfig } from "@/lib/default-report-export"
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
@@ -129,6 +130,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [mapOpen, setMapOpen] = useState(true)
   // PDF出力時は全セクションを縦積みで描画する（タブ非表示分のグラフも正しく出力するため）。
   const [printing, setPrinting] = useState(false)
+  // レポート出力設定（マスタ）。PDF/PPTX の用紙・表紙・テーマ・セクション/KPI に反映。
+  const [reportConfig, setReportConfig] = useState<ReportExportConfig>(DEFAULT_REPORT_EXPORT_CONFIG)
   // 近隣ジムの選択/反映状態は StoreMap がタブ離脱でアンマウントされても保持するため親で持つ。
   const [gymApply, setGymApply] = useState(false)
   const [gymSelectedIds, setGymSelectedIds] = useState<Set<string>>(() => new Set())
@@ -431,6 +434,25 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     }
   }
 
+  // レポート出力設定をマスタから取得（失敗時は既定値のまま）。
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const res = await fetch("/api/master/report-export", { cache: "no-store" })
+        const payload = await res.json().catch(() => null)
+        if (active && res.ok && payload?.config) {
+          setReportConfig(normalizeReportExportConfig(payload.config))
+        }
+      } catch {
+        // 既定値を使用
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
+
   // 印刷モードに入ったら、グラフ/レイアウトの確定を待って印刷ダイアログを開く。
   useEffect(() => {
     if (!printing) return
@@ -445,6 +467,21 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
   return (
     <div id="result-print-area" className="flex flex-col gap-6">
+      {/* 用紙サイズ・向き（PDF印刷時に適用） */}
+      <style>{`@page { size: ${reportConfig.page.size} ${reportConfig.page.orientation}; margin: 10mm; }`}</style>
+
+      {/* 表紙ヘッダー（印刷時のみ表示） */}
+      <div data-print-only className="mb-2 border-b border-border pb-3">
+        {reportConfig.cover.logoDataUrl && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={reportConfig.cover.logoDataUrl} alt="logo" className="mb-2 h-12 w-auto object-contain" />
+        )}
+        <div className="text-xl font-bold text-foreground">{reportConfig.cover.title || "出店試算レポート"}</div>
+        <div className="text-sm text-muted-foreground">
+          {[reportConfig.cover.companyName, currentData.storeName, simulationRequest?.location].filter(Boolean).join("　/　")}
+        </div>
+      </div>
+
       {/* ストア情報行 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -485,7 +522,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-xs"
-                onClick={() => { void exportResultToPptx(currentData).catch(() => alert("PPTXの生成に失敗しました。")) }}
+                onClick={() => { void exportResultToPptx(currentData, reportConfig).catch(() => alert("PPTXの生成に失敗しました。")) }}
               >
                 PowerPoint（PPTX）
               </DropdownMenuItem>
