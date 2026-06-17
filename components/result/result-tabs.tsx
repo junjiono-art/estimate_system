@@ -23,6 +23,7 @@ import type { MasterValue, SimulationRequestInput, SimulationResult, ScenarioTyp
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
+import { exportResultToPptx } from "@/lib/export-pptx"
 import { cn, extractCity } from "@/lib/utils"
 
 // 地図(leaflet)はブラウザ専用のため SSR を無効化して読み込む。
@@ -421,7 +422,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div id="result-print-area" className="flex flex-col gap-6">
       {/* ストア情報行 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -432,7 +433,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
             {SCENARIO_LABELS[scenario]}
           </Badge>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4" data-print-hide>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">評価</span>
             <StarRating value={rating} onChange={setRating} />
@@ -446,9 +447,18 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </button>
             )}
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => alert("CSV出力は実装後に利用可能になります。")}>
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => window.print()}>
             <DownloadIcon className="size-3.5" />
-            CSV出力
+            PDF出力
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => { void exportResultToPptx(currentData).catch(() => alert("PPTXの生成に失敗しました。")) }}
+          >
+            <DownloadIcon className="size-3.5" />
+            PPTX出力
           </Button>
           <Button size="sm" className="gap-1.5 text-xs" onClick={() => setSaveDialogOpen(true)}>
             <SaveIcon className="size-3.5" />
@@ -488,7 +498,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       </Dialog>
 
       {/* フィルタバー */}
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3" data-print-hide>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">計算シナリオ</span>
           <Select value={scenario} onValueChange={(v) => setScenario(v as ScenarioType)}>
@@ -608,7 +618,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
 
       {/* タブ切替 */}
       <Tabs defaultValue="chart">
-        <TabsList className="rounded-md border border-border bg-muted/40 p-0.5">
+        <TabsList className="rounded-md border border-border bg-muted/40 p-0.5" data-print-hide>
           <TabsTrigger value="chart" className="rounded text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             グラフ + 表
           </TabsTrigger>

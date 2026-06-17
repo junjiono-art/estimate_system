@@ -104,3 +104,27 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── 印刷（PDF出力）：結果領域だけを印刷する ── */
+@media print {
+  /* 既定で全要素を不可視にし、結果領域だけ可視化する（サイドバー等を除外） */
+  body * {
+    visibility: hidden;
+  }
+  #result-print-area,
+  #result-print-area * {
+    visibility: visible;
+  }
+  #result-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0 !important;
+  }
+  /* 操作系（ボタン・フィルタ・タブ）は印刷しない */
+  [data-print-hide],
+  [data-print-hide] * {
+    display: none !important;
+  }
+}
