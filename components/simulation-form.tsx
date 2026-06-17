@@ -231,7 +231,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   ): number {
     return computeMachineMaintenanceMonthly({
       address: currentAddress,
-      floorAreaTsubo: Math.max(0, parseInt(currentFloorArea, 10) || 0),
+      floorAreaTsubo: Math.max(0, parseFloat(currentFloorArea) || 0),
       royaltyRate: (parseInt(selectedRoyaltyRate, 10) || 0) / 100,
       config,
     })
@@ -249,7 +249,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // 単価はアプリ側の都道府県別料金表から算出する（直営=半額／FC=満額。doc/計算系統・定数込み.md）。
     // J8式: =IFS(L11=1,H3*I8, L11=2,(H3-(H6*7))*I8, L11=3,(H3-(H7*9))*I8, L11=4,(H3-(H6*7)-(H7*9))*I8)
     const unitPrice = getFitnessMachineUnitPriceByAddressAndRoyalty(currentAddress, numericRoyaltyRate)
-    const floorAreaTsubo = Math.max(0, parseInt(currentFloorArea, 10) || 0)
+    const floorAreaTsubo = Math.max(0, parseFloat(currentFloorArea) || 0)
     const rightBay = Math.max(0, parseInt(currentGolfRightBay, 10) || 0)  // H6
     const dualBay  = Math.max(0, parseInt(currentGolfDualBay,  10) || 0)  // H7
     const hasRight = rightBay > 0
@@ -426,7 +426,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const costPageItems  = costDisplayItems.slice(costPage * PAGE_SIZE, (costPage + 1) * PAGE_SIZE)
 
   // 坪数依存（perTsubo）の費目は「入力値 × 坪数」で実コスト化する。それ以外は入力値そのまま。
-  const floorAreaTsubo = Math.max(0, parseInt(floorArea, 10) || 0)
+  const floorAreaTsubo = Math.max(0, parseFloat(floorArea) || 0)
   const rentValue = Math.max(0, parseInt(rentPerTsubo, 10) || 0)
   const perTsuboFieldIds = new Set(
     masterModel.running.filter((m) => m.quantityBasis === "perTsubo").map((m) => m.fieldId),
@@ -616,7 +616,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         storeInfo: {
           storeName,
           address,
-          floorArea: parseInt(floorArea) || 0,
+          floorArea: parseFloat(floorArea) || 0,
           rentPerTsubo: parseInt(rentPerTsubo) || 0,
         },
         calcParams: {
