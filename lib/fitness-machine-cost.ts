@@ -111,6 +111,23 @@ export const FITNESS_MACHINE_DEPRECIATION_YEARS = 6
 /** 住所から都道府県が取れない場合の坪あたり単価（FC満額ベース。料金表の中央水準） */
 export const FITNESS_MACHINE_FALLBACK_UNIT_PRICE = 150_000
 
+// ── ゴルフ設備費（投資コスト。元Excel 入力欄 ゴルフ右打席/両打席の単価×台数）──
+/** ゴルフ（右打席）1台あたりの設備費（元Excel ¥2,980,000） */
+export const GOLF_RIGHT_BAY_COST = 2_980_000
+/** ゴルフ（両打席）1台あたりの設備費（元Excel ¥3,480,000） */
+export const GOLF_DUAL_BAY_COST = 3_480_000
+/** ゴルフ設備の償却年（元Excel 入力欄 6年） */
+export const GOLF_DEPRECIATION_YEARS = 6
+/** 投資コスト内訳でゴルフ設備費を表すフィールドID */
+export const GOLF_EQUIPMENT_FIELD_ID = "golfEquipmentCost"
+
+/** ゴルフ設備費（投資コスト）＝ 右打席台数×単価 ＋ 両打席台数×単価 */
+export function computeGolfEquipmentCost(rightBayCount: number, dualBayCount: number): number {
+  const right = Math.max(0, Math.floor(Number(rightBayCount) || 0))
+  const dual = Math.max(0, Math.floor(Number(dualBayCount) || 0))
+  return right * GOLF_RIGHT_BAY_COST + dual * GOLF_DUAL_BAY_COST
+}
+
 /**
  * フィットネスマシン費の坪あたり単価を返す（doc/計算系統・定数込み.md「フィットネスマシン費用」）。
  *   単価 = 都道府県別料金表の参照値

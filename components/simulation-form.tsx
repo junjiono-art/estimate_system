@@ -34,6 +34,9 @@ import {
   FITNESS_MACHINE_LABEL,
   FITNESS_MACHINE_UNIT,
   FITNESS_MACHINE_DEPRECIATION_YEARS,
+  GOLF_EQUIPMENT_FIELD_ID,
+  GOLF_DEPRECIATION_YEARS,
+  computeGolfEquipmentCost,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import type { CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
@@ -172,6 +175,12 @@ function formatDraftTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return ""
   const pad = (n: number) => String(n).padStart(2, "0")
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+// 数量入力欄を出す費目か（fixed=数量×単価／perTsubo=坪数×単価×数量）。
+// この2種は「単価」と「数量」を分けて保持する。monthly は単価をそのまま月額計上。
+function hasQuantityInput(basis?: string): boolean {
+  return basis === "fixed" || basis === "perTsubo"
 }
 
 export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
@@ -403,13 +412,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     setEditedRunningFields(new Set())
     setEditedInvestmentFields(new Set())
 
-    // fixed（数量×単価）は単価と数量を分けて保持する。それ以外は従来どおり金額をそのまま保持する。
+    // fixed（数量×単価）/ perTsubo（坪数×単価×数量）は単価と数量を分けて保持する。monthly は金額そのまま。
     setRunningValues(Object.fromEntries(model.running.map((m) =>
-      [m.fieldId, String((m.quantityBasis === "fixed" ? m.unitAmount : m.amount) ?? 0)],
+      [m.fieldId, String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)],
     )))
     setRunningQuantities(Object.fromEntries(
       model.running
-        .filter((m) => m.quantityBasis === "fixed")
+        .filter((m) => hasQuantityInput(m.quantityBasis))
         .map((m) => [m.fieldId, String(m.quantity ?? 1)]),
     ))
 
@@ -483,13 +492,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       const next = { ...prev }
       model.running.forEach((m) => {
         if (editedRunningFields.has(m.fieldId)) return
-        next[m.fieldId] = String((m.quantityBasis === "fixed" ? m.unitAmount : m.amount) ?? 0)
+        next[m.fieldId] = String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)
       })
       return next
     })
     setRunningQuantities((prev) => {
       const next = { ...prev }
-      model.running.filter((m) => m.quantityBasis === "fixed").forEach((m) => {
+      model.running.filter((m) => hasQuantityInput(m.quantityBasis)).forEach((m) => {
         if (editedRunningFields.has(m.fieldId)) return
         next[m.fieldId] = String(m.quantity ?? 1)
       })
@@ -566,11 +575,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const runningEffectiveByField: Record<string, number> = Object.fromEntries(
     RC_ITEMS.map((item) => {
       const raw = Math.max(0, parseInt(item.value) || 0)
+      const qty = Math.max(0, parseInt(runningQuantities[item.id]) || 0)
       let effective = raw
       if (perTsuboFieldIds.has(item.id)) {
-        effective = raw * floorAreaTsubo
+        // 坪数×単価×数量
+        effective = raw * floorAreaTsubo * qty
       } else if (fixedFieldIds.has(item.id)) {
-        effective = raw * Math.max(0, parseInt(runningQuantities[item.id]) || 0)
+        // 単価×数量
+        effective = raw * qty
       }
       return [item.id, Math.round(effective)]
     }),
@@ -581,7 +593,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const machineMaintenanceValue = Math.max(0, parseInt(machineMaintenanceCost) || 0)
   // ランニングコストタブ右上に表示する金額（家賃 ＋ ランニング費 ＋ マシンメンテ費）
   const runningCostTotalWithRent = rentValue + runningEffectiveTotal + machineMaintenanceValue
-  const totalInitialCost = COST_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0)
+  // ゴルフ設備費（投資コスト）＝ 台数×単価（右2,980,000／両3,480,000・償却6年）。元Excel準拠で投資コストに加算する。
+  const golfEquipmentCost = computeGolfEquipmentCost(parseInt(golfRightBayCount, 10) || 0, parseInt(golfDualBayCount, 10) || 0)
+  const totalInitialCost = COST_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0) + golfEquipmentCost
 
   const currentIndex = TABS.findIndex((t) => t.id === activeTab)
   const isFirst = currentIndex === 0
@@ -682,6 +696,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           .filter((m) => m.depreciationYears && m.depreciationYears > 0)
           .map((m) => [m.fieldId, m.depreciationYears as number]),
       )
+
+      // ゴルフ設備費（投資コスト・償却6年）を内訳に加える（元Excel準拠）。台数0なら加えない。
+      if (golfEquipmentCost > 0) {
+        investmentByField[GOLF_EQUIPMENT_FIELD_ID] = golfEquipmentCost
+        depreciationYearsByField[GOLF_EQUIPMENT_FIELD_ID] = GOLF_DEPRECIATION_YEARS
+      }
 
       const selectedRoyaltyRate = parseInt(royaltyRate) as 0 | 10 | 15
       const currentResolvedByField =
@@ -919,7 +939,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
               <div>
                 <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">ゴルフ設備</p>
                 <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
-                  ゴルフ打席を設ける場合は台数を入力してください。フィットネスマシン費の計算に使用します（右打席: 7坪/台、両打席: 9坪/台を除外）。
+                  ゴルフ打席を設ける場合は台数を入力してください。①投資コストにゴルフ設備費を加算（右打席 2,980,000円/台、両打席 3,480,000円/台・償却6年）、②フィットネスマシン費は有効坪数から除外（右7坪/台、両9坪/台）します。
                 </p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
@@ -1095,11 +1115,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 {rcPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
                     <Label htmlFor={item.id} className="text-xs font-medium">{item.label}</Label>
-                    {item.quantityBasis === "fixed" ? (
+                    {hasQuantityInput(item.quantityBasis) ? (
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
                           <div className="flex flex-1 flex-col gap-0.5">
-                            <span className="text-[10px] text-muted-foreground">単価</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {item.quantityBasis === "perTsubo" ? "単価（/坪）" : "単価"}
+                            </span>
                             <AmountInput
                               id={item.id}
                               placeholder={item.placeholder}
@@ -1107,6 +1129,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                               onValueChange={(raw) => handleRunningCostChange(item.id, raw)}
                             />
                           </div>
+                          {item.quantityBasis === "perTsubo" && (
+                            <span className="self-end pb-2 text-[10px] text-muted-foreground">× 坪数</span>
+                          )}
                           <span className="self-end pb-2 text-xs text-muted-foreground">×</span>
                           <div className="flex w-20 flex-col gap-0.5">
                             <span className="text-[10px] text-muted-foreground">数量</span>
@@ -1171,6 +1196,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   開業にかかる各投資コストを入力してください。
+                  {golfEquipmentCost > 0 && (
+                    <span className="block text-[10px] text-muted-foreground/80">
+                      ※ 合計には店舗情報で入力したゴルフ設備費 {golfEquipmentCost.toLocaleString()} 円（償却6年）を含みます。
+                    </span>
+                  )}
                 </p>
                 <span className="shrink-0 rounded-md border border-border bg-muted/50 px-2.5 py-1 font-mono text-xs font-medium">
                   合計 {totalInitialCost.toLocaleString()} 円
