@@ -1,11 +1,16 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
-import { PlusIcon, PencilIcon, TrashIcon, SearchIcon, StoreIcon } from "lucide-react"
+import { PlusIcon, PencilIcon, TrashIcon, SearchIcon, StoreIcon, MapIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import { PREFECTURE_FULL_NAMES, extractPrefectureFromAddress, toPrefectureKey } from "@/lib/fitness-machine-cost"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
@@ -23,6 +28,16 @@ import {
 } from "@/components/ui/pagination"
 import type { Store } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
+
+// 地図(leaflet)はブラウザ専用のため SSR を無効化して読み込む。
+const StoresMap = dynamic(() => import("@/components/master/stores-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[480px] items-center justify-center rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground">
+      地図を読み込み中...
+    </div>
+  ),
+})
 
 const ROWS_PER_PAGE = 10
 
@@ -60,6 +75,9 @@ export default function StoresPage() {
   const [search, setSearch] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
 
+  const [mapOpen, setMapOpen] = useState(false)
+  const [mapPrefecture, setMapPrefecture] = useState<string>("all")
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add")
   const [editTarget, setEditTarget] = useState<Store | null>(null)
@@ -90,6 +108,14 @@ export default function StoresPage() {
   const filtered = data.filter((s) =>
     `${s.name} ${s.address}`.toLowerCase().includes(search.toLowerCase()),
   )
+
+  // マップ用：指定都道府県の店舗のみ（「すべて」は全件）。
+  // 保存済み prefecture フィールドはジオコーディングの既存不具合で3文字県を誤格納しうるため、
+  // 住所から堅牢に判定する（extractPrefectureFromAddress は神奈川/和歌山/鹿児島・北海道も正しく判定）。
+  const mapStores =
+    mapPrefecture === "all"
+      ? data
+      : data.filter((s) => extractPrefectureFromAddress(s.address) === toPrefectureKey(mapPrefecture))
 
   const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE)
   const paged = filtered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE)
@@ -184,11 +210,46 @@ export default function StoresPage() {
                 <p className="text-sm font-semibold text-foreground">出店済み店舗一覧</p>
                 <p className="text-xs text-muted-foreground">住所・店舗名・出店日を管理します。</p>
               </div>
-              <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={openAdd}>
-                <PlusIcon className="size-3.5" />
-                追加
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={mapOpen ? "default" : "outline"}
+                  className="h-7 gap-1.5 text-xs"
+                  onClick={() => setMapOpen((o) => !o)}
+                >
+                  <MapIcon className="size-3.5" />
+                  {mapOpen ? "マップを閉じる" : "マップで見る"}
+                </Button>
+                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={openAdd}>
+                  <PlusIcon className="size-3.5" />
+                  追加
+                </Button>
+              </div>
             </div>
+
+            {/* マップ表示（都道府県でフィルタ） */}
+            {mapOpen && (
+              <div className="flex flex-col gap-3 border-b border-border bg-muted/10 px-5 py-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-foreground">都道府県</span>
+                  <Select value={mapPrefecture} onValueChange={setMapPrefecture}>
+                    <SelectTrigger className="h-7 w-40 text-xs">
+                      <SelectValue placeholder="都道府県を選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">すべて</SelectItem>
+                      {PREFECTURE_FULL_NAMES.map((pref) => (
+                        <SelectItem key={pref} value={pref} className="text-xs">{pref}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground">
+                    {mapPrefecture === "all" ? "全店舗" : mapPrefecture} {mapStores.length} 件
+                  </span>
+                </div>
+                <StoresMap stores={mapStores} />
+              </div>
+            )}
 
             {pageError && (
               <div className="border-b border-border bg-destructive/5 px-5 py-2 text-xs text-destructive">
