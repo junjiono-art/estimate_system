@@ -42,7 +42,7 @@ export default function StoresMap({ stores }: { stores: Store[] }) {
   const center = points[0] ?? JAPAN_CENTER
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="isolate overflow-hidden rounded-lg border border-border">
       <MapContainer center={center} zoom={points.length ? 12 : 5} scrollWheelZoom={false} style={{ height: 480, width: "100%" }}>
         <TileLayer url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png" attribution={GSI_ATTRIBUTION} />
         <FitBounds points={points} />
