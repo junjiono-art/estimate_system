@@ -175,10 +175,10 @@ function formatDraftTime(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// 数量入力欄を出す費目か（fixed=数量×単価／perTsubo=坪数×単価×数量）。
-// この2種は「単価」と「数量」を分けて保持する。monthly は単価をそのまま月額計上。
+// 数量入力欄を出す費目か（fixed=数量×単価／perTsubo=床面積×単価×数量／perOccupancy=占有坪数×単価×数量）。
+// これらは「単価」と「数量」を分けて保持する。monthly は単価をそのまま月額計上。
 function hasQuantityInput(basis?: string): boolean {
-  return basis === "fixed" || basis === "perTsubo"
+  return basis === "fixed" || basis === "perTsubo" || basis === "perOccupancy"
 }
 
 export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
@@ -617,7 +617,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const investmentFixedFieldIds = new Set(
     masterModel.investment.filter((m) => m.quantityBasis === "fixed" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
   )
-  // 投資費目の実効取得額: fixed=単価×数量, perTsubo=単価×坪数×数量, それ以外=入力値そのまま。
+  const investmentPerOccupancyFieldIds = new Set(
+    masterModel.investment.filter((m) => m.quantityBasis === "perOccupancy" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+  )
+  // 投資費目の実効取得額: fixed=単価×数量, perTsubo=単価×床面積×数量, perOccupancy=単価×占有坪数×数量, それ以外=入力値そのまま。
   const investmentEffectiveByField: Record<string, number> = Object.fromEntries(
     COST_ITEMS.map((item) => {
       const raw = Math.max(0, parseInt(item.value) || 0)
@@ -625,6 +628,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       let effective = raw
       if (investmentPerTsuboFieldIds.has(item.id)) {
         effective = raw * floorAreaTsubo * qty
+      } else if (investmentPerOccupancyFieldIds.has(item.id)) {
+        effective = raw * Math.max(0, item.tsuboPerUnit || 0) * qty
       } else if (investmentFixedFieldIds.has(item.id)) {
         effective = raw * qty
       }

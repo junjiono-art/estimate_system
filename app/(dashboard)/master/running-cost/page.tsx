@@ -530,7 +530,7 @@ export default function RunningCostPage() {
                   <SelectContent>
                     <SelectItem value="monthly">月額（単価をそのまま計上）</SelectItem>
                     <SelectItem value="fixed">数量（単価 × 数量）</SelectItem>
-                    <SelectItem value="perTsubo">坪連動（単価 × 坪数 × 数量）</SelectItem>
+                    <SelectItem value="perTsubo">床面積連動（単価 × 入力坪数 × 数量）</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

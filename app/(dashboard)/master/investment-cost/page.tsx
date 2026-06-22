@@ -48,12 +48,17 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination"
-import type { MasterValue } from "@/lib/types"
+import type { MasterValue, MasterValueQuantityBasis } from "@/lib/types"
 import { toast } from "sonner"
 import { normalizeMasterCode } from "@/lib/master-value-mapping"
 
 const ROWS_PER_PAGE = 10
 type SortDir = "asc" | "desc" | null
+
+/** 入力値を正規の数量基準に丸める（未知値は monthly 扱い）。 */
+function normalizeQuantityBasis(basis?: string): MasterValueQuantityBasis {
+  return basis === "perTsubo" || basis === "perOccupancy" || basis === "fixed" ? basis : "monthly"
+}
 
 function getPageNumbers(total: number, current: number): (number | "ellipsis")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
@@ -178,7 +183,7 @@ export default function InvestmentCostPage() {
       amountWithRoyalty10: row.amountWithRoyalty10 ?? row.defaultAmount,
       amountWithRoyalty15: row.amountWithRoyalty15 ?? row.defaultAmount,
       quantity: row.quantity ?? 1,
-      quantityBasis: row.quantityBasis === "perTsubo" ? "perTsubo" : row.quantityBasis === "fixed" ? "fixed" : "monthly",
+      quantityBasis: normalizeQuantityBasis(row.quantityBasis),
       tsuboPerUnit: row.tsuboPerUnit ?? 0,
       depreciationYears: row.depreciationYears ?? 0,
       note: row.note,
@@ -230,7 +235,7 @@ export default function InvestmentCostPage() {
       amountWithRoyalty: form.royaltyRuleEnabled && form.royaltyRuleMode !== "rate" ? Number(form.amountWithRoyalty) || 0 : undefined,
       amountWithRoyalty10: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty10) || 0 : undefined,
       amountWithRoyalty15: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty15) || 0 : undefined,
-      quantityBasis: form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly",
+      quantityBasis: normalizeQuantityBasis(form.quantityBasis),
       quantity: Math.max(0, Number(form.quantity) || 0),
       tsuboPerUnit: Math.max(0, Number(form.tsuboPerUnit) || 0),
       depreciationYears: Math.max(0, Number(form.depreciationYears) || 0),
@@ -525,9 +530,9 @@ export default function InvestmentCostPage() {
               <div className="flex flex-col gap-1.5">
                 <Label className="text-xs">数量基準</Label>
                 <Select
-                  value={form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly"}
+                  value={normalizeQuantityBasis(form.quantityBasis)}
                   onValueChange={(value) =>
-                    setForm((f) => ({ ...f, quantityBasis: value === "perTsubo" ? "perTsubo" : value === "fixed" ? "fixed" : "monthly" }))
+                    setForm((f) => ({ ...f, quantityBasis: normalizeQuantityBasis(value) }))
                   }
                 >
                   <SelectTrigger className="h-8 text-xs">
@@ -536,7 +541,8 @@ export default function InvestmentCostPage() {
                   <SelectContent>
                     <SelectItem value="monthly">一括（取得額そのまま）</SelectItem>
                     <SelectItem value="fixed">数量（単価 × 数量）</SelectItem>
-                    <SelectItem value="perTsubo">坪連動（単価 × 坪数 × 数量）</SelectItem>
+                    <SelectItem value="perOccupancy">占有坪連動（単価 × 占有坪数 × 数量）</SelectItem>
+                    <SelectItem value="perTsubo">床面積連動（単価 × 入力坪数 × 数量）</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -565,8 +571,10 @@ export default function InvestmentCostPage() {
                 />
                 <p className="text-[10px] text-muted-foreground">
                   {form.quantityBasis === "perTsubo"
-                    ? "取得額 = 単価 × 床面積(坪) × 数量。"
-                    : "取得額 = 単価 × 数量。"}
+                    ? "取得額 = 単価 × 床面積(坪) × 数量。床面積は試算画面でユーザーが入力した坪数を使います。"
+                    : form.quantityBasis === "perOccupancy"
+                      ? "取得額 = 単価 × 占有坪数 × 数量。占有坪数はこのマスタの設定値を使い、ユーザー入力の床面積には依存しません。"
+                      : "取得額 = 単価 × 数量。"}
                   占有坪数が&gt;0の場合、有効坪数（フィットネスマシン費の対象坪）から「数量 × 占有坪数」を差し引きます（例: ゴルフ右打席=7坪/台）。
                 </p>
               </div>

@@ -74,7 +74,7 @@ export async function PUT(request: Request, context: Context) {
   const amountWithRoyalty10 = body?.amountWithRoyalty10 == null ? undefined : Number(body.amountWithRoyalty10)
   const amountWithRoyalty15 = body?.amountWithRoyalty15 == null ? undefined : Number(body.amountWithRoyalty15)
   const quantity = body?.quantity == null ? undefined : Number(body.quantity)
-  const quantityBasis = body?.quantityBasis === "perTsubo" ? "perTsubo" : body?.quantityBasis === "fixed" ? "fixed" : body?.quantityBasis === "monthly" ? "monthly" : undefined
+  const quantityBasis = body?.quantityBasis === "perTsubo" ? "perTsubo" : body?.quantityBasis === "perOccupancy" ? "perOccupancy" : body?.quantityBasis === "fixed" ? "fixed" : body?.quantityBasis === "monthly" ? "monthly" : undefined
   const tsuboPerUnit = body?.tsuboPerUnit == null ? undefined : Number(body.tsuboPerUnit)
   const depreciationYears = body?.depreciationYears == null ? undefined : Number(body.depreciationYears)
   const note = body?.note ?? ""

@@ -96,9 +96,9 @@ export function resolveRunningQuantity(value: MasterValue, floorAreaTsubo: numbe
  * - fixed: 数量そのもの（回数・台数等）
  * - monthly（既定）: 1
  */
-/** 数量入力欄を持つ基準か（fixed=数量×単価／perTsubo=坪数×単価×数量）。monthly/未設定は単価そのまま。 */
+/** 数量入力欄を持つ基準か（fixed=数量×単価／perTsubo=床面積×単価×数量／perOccupancy=占有坪数×単価×数量）。monthly/未設定は単価そのまま。 */
 export function hasInvestmentQuantity(basis?: MasterValueQuantityBasis): boolean {
-  return basis === "fixed" || basis === "perTsubo"
+  return basis === "fixed" || basis === "perTsubo" || basis === "perOccupancy"
 }
 
 export function resolveRunningBaseQuantity(value: MasterValue): number {
@@ -115,7 +115,7 @@ export function resolveRunningBaseQuantity(value: MasterValue): number {
  * monthly/未設定（取得額そのまま）は常に1。
  */
 export function resolveInvestmentBaseQuantity(value: MasterValue): number {
-  if (value.quantityBasis !== "fixed" && value.quantityBasis !== "perTsubo") return 1
+  if (!hasInvestmentQuantity(value.quantityBasis)) return 1
   const raw = Number(value.quantity)
   return Number.isFinite(raw) && raw >= 0 ? raw : 1
 }
@@ -186,8 +186,8 @@ export function resolveMasterFormModel(
       const depreciationYears = Number(value.depreciationYears) > 0 ? Number(value.depreciationYears) : undefined
       const tsuboPerUnit = Number(value.tsuboPerUnit) > 0 ? Number(value.tsuboPerUnit) : undefined
       const baseQuantity = resolveInvestmentBaseQuantity(value)
-      // 数量基準あり(fixed/perTsubo)は「単価ベース」を保持し、数量は試算画面側で掛ける（perTsuboの坪数も画面側）。
-      // monthly/未設定は従来どおり取得額そのもの。
+      // 数量基準あり(fixed/perTsubo/perOccupancy)は「単価ベース」を保持し、数量は試算画面側で掛ける
+      // （perTsuboの床面積・perOccupancyの占有坪数も試算画面側で掛ける）。monthly/未設定は従来どおり取得額そのもの。
       const amount = hasInvestmentQuantity(value.quantityBasis)
         ? Math.round(unitAmount * baseQuantity)
         : unitAmount
@@ -259,11 +259,14 @@ export function resolveMasterFieldValues(values: MasterValue[], royaltyRate: Roy
 
     if (value.category === "投資コスト") {
       const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID] ?? value.code
-      // 試算画面と同じ実効額に揃える: fixed=単価×数量, perTsubo=単価×坪数×数量, それ以外=取得額そのまま。
+      // 試算画面と同じ実効額に揃える:
+      //   fixed=単価×数量, perTsubo=単価×床面積×数量, perOccupancy=単価×占有坪数×数量, それ以外=取得額そのまま。
       const quantity = resolveInvestmentBaseQuantity(value)
       let effective = amount
       if (value.quantityBasis === "perTsubo") {
         effective = amount * Math.max(0, floorAreaTsubo) * quantity
+      } else if (value.quantityBasis === "perOccupancy") {
+        effective = amount * Math.max(0, Number(value.tsuboPerUnit) || 0) * quantity
       } else if (value.quantityBasis === "fixed") {
         effective = amount * quantity
       }

@@ -6,10 +6,13 @@
 export type MasterValueRoyaltyMode = "binary" | "rate"
 
 /**
- * ランニングコストの数量基準。
- * monthly=単価をそのまま月額計上（数量なし） / fixed=単価×数量（回数・台数等） / perTsubo=単価×坪数×数量（坪連動）
+ * 数量基準（ランニング/投資 共通）。
+ * - monthly=単価をそのまま計上（数量なし）
+ * - fixed=単価×数量（回数・台数等）
+ * - perTsubo=単価×床面積(坪)×数量（試算画面で入力した床面積に連動）
+ * - perOccupancy=単価×占有坪数(tsuboPerUnit)×数量（投資コスト専用。マスタ設定の占有坪数に連動）
  */
-export type MasterValueQuantityBasis = "monthly" | "fixed" | "perTsubo"
+export type MasterValueQuantityBasis = "monthly" | "fixed" | "perTsubo" | "perOccupancy"
 
 export interface MasterValue {
   id: string
@@ -29,7 +32,7 @@ export interface MasterValue {
   /**
    * 数量（回数・台数・坪数など）。
    * ランニング: 月額金額 = 単価(currentAmount) × 実効数量。
-   * 投資: 取得額 = 単価 × 数量（fixed） / 単価 × 坪数 × 数量（perTsubo）。
+   * 投資: 取得額 = 単価 × 数量（fixed） / 単価 × 床面積(坪) × 数量（perTsubo） / 単価 × 占有坪数 × 数量（perOccupancy）。
    * 未設定は1。ゴルフ等の任意設備は0を既定にできる。
    */
   quantity?: number
@@ -37,12 +40,14 @@ export interface MasterValue {
    * 数量の基準。
    * monthly/未設定: 単価をそのまま計上（投資は取得額そのまま）。
    * fixed: 単価 × 数量（回数・台数）。
-   * perTsubo: 単価 × 坪数 × 数量（坪連動。例: 水道代 150円/坪 × 坪数）。
+   * perTsubo: 単価 × 床面積(坪) × 数量（試算画面で入力した床面積に連動。例: 水道代 150円/坪 × 坪数）。
+   * perOccupancy: 単価 × 占有坪数(tsuboPerUnit) × 数量（投資コスト専用。マスタ設定の占有坪数に連動）。
    */
   quantityBasis?: MasterValueQuantityBasis
   /**
    * 投資コスト専用: 1単位（台）あたりが占有する坪数（坪/単位）。
    * >0 の費目は「有効坪数 = 床面積 − Σ(数量 × tsuboPerUnit)」を通じてフィットネスマシン費の坪数を減らす。
+   * perOccupancy の費目では取得額の算出（単価 × 占有坪数 × 数量）の単価係数にもなる。
    * 例: ゴルフ右打席=7坪/台、両打席=9坪/台。
    */
   tsuboPerUnit?: number
