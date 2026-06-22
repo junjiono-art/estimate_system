@@ -161,6 +161,8 @@ export function DashboardView({ data }: DashboardViewProps) {
                 openingPrepCost:     "開業準備費",
                 openingPackageCost:  "開業前パッケージ費",
                 securityCost:        "ALSOK/USEN導入費",
+                golfRightBayCost:    "ゴルフ（右打席）",
+                golfDualBayCost:     "ゴルフ（両打席）",
                 otherInitialCost:    "その他",
               }
               const breakdown = data.investmentBreakdown

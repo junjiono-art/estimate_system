@@ -19,6 +19,7 @@ type MasterValuePayload = {
   amountWithRoyalty15?: number
   quantity?: number
   quantityBasis?: string
+  tsuboPerUnit?: number
   depreciationYears?: number
   note?: string
 }
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
   const amountWithRoyalty15 = body?.amountWithRoyalty15 == null ? undefined : Number(body.amountWithRoyalty15)
   const quantity = body?.quantity == null ? undefined : Number(body.quantity)
   const quantityBasis = body?.quantityBasis === "perTsubo" ? "perTsubo" : body?.quantityBasis === "fixed" ? "fixed" : body?.quantityBasis === "monthly" ? "monthly" : undefined
+  const tsuboPerUnit = body?.tsuboPerUnit == null ? undefined : Number(body.tsuboPerUnit)
   const depreciationYears = body?.depreciationYears == null ? undefined : Number(body.depreciationYears)
   const note = body?.note ?? ""
 
@@ -101,6 +103,7 @@ export async function POST(request: Request) {
         amountWithRoyalty15,
         quantity,
         quantityBasis,
+        tsuboPerUnit,
         depreciationYears,
         note,
       },

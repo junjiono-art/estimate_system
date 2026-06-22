@@ -80,6 +80,9 @@ const EMPTY_FORM: Omit<MasterValue, "id"> = {
   amountWithRoyalty: 0,
   amountWithRoyalty10: 0,
   amountWithRoyalty15: 0,
+  quantity: 1,
+  quantityBasis: "monthly",
+  tsuboPerUnit: 0,
   depreciationYears: 0,
   note: "",
 }
@@ -174,6 +177,9 @@ export default function InvestmentCostPage() {
       amountWithRoyalty: row.amountWithRoyalty ?? row.defaultAmount,
       amountWithRoyalty10: row.amountWithRoyalty10 ?? row.defaultAmount,
       amountWithRoyalty15: row.amountWithRoyalty15 ?? row.defaultAmount,
+      quantity: row.quantity ?? 1,
+      quantityBasis: row.quantityBasis === "perTsubo" ? "perTsubo" : row.quantityBasis === "fixed" ? "fixed" : "monthly",
+      tsuboPerUnit: row.tsuboPerUnit ?? 0,
       depreciationYears: row.depreciationYears ?? 0,
       note: row.note,
     })
@@ -224,6 +230,9 @@ export default function InvestmentCostPage() {
       amountWithRoyalty: form.royaltyRuleEnabled && form.royaltyRuleMode !== "rate" ? Number(form.amountWithRoyalty) || 0 : undefined,
       amountWithRoyalty10: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty10) || 0 : undefined,
       amountWithRoyalty15: form.royaltyRuleEnabled && form.royaltyRuleMode === "rate" ? Number(form.amountWithRoyalty15) || 0 : undefined,
+      quantityBasis: form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly",
+      quantity: Math.max(0, Number(form.quantity) || 0),
+      tsuboPerUnit: Math.max(0, Number(form.tsuboPerUnit) || 0),
       depreciationYears: Math.max(0, Number(form.depreciationYears) || 0),
     }
     const validationError = validateForm(payload)
@@ -512,6 +521,56 @@ export default function InvestmentCostPage() {
                 onChange={(e) => setForm((f) => ({ ...f, defaultAmount: Number(e.target.value) }))}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">数量基準</Label>
+                <Select
+                  value={form.quantityBasis === "perTsubo" ? "perTsubo" : form.quantityBasis === "fixed" ? "fixed" : "monthly"}
+                  onValueChange={(value) =>
+                    setForm((f) => ({ ...f, quantityBasis: value === "perTsubo" ? "perTsubo" : value === "fixed" ? "fixed" : "monthly" }))
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="基準を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">一括（取得額そのまま）</SelectItem>
+                    <SelectItem value="fixed">数量（単価 × 数量）</SelectItem>
+                    <SelectItem value="perTsubo">坪連動（単価 × 坪数 × 数量）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.quantityBasis !== "monthly" && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs">既定数量（台数など）</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    type="number"
+                    placeholder="例: 0"
+                    value={form.quantity ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, quantity: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
+            </div>
+            {form.quantityBasis !== "monthly" && (
+              <div className="flex flex-col gap-1.5">
+                <Label className="text-xs">占有坪数（坪/単位）</Label>
+                <Input
+                  className="h-8 text-xs"
+                  type="number"
+                  placeholder="例: 7（0は坪数に影響しない）"
+                  value={form.tsuboPerUnit ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, tsuboPerUnit: Number(e.target.value) }))}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {form.quantityBasis === "perTsubo"
+                    ? "取得額 = 単価 × 床面積(坪) × 数量。"
+                    : "取得額 = 単価 × 数量。"}
+                  占有坪数が&gt;0の場合、有効坪数（フィットネスマシン費の対象坪）から「数量 × 占有坪数」を差し引きます（例: ゴルフ右打席=7坪/台）。
+                </p>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">償却年（耐用年数）</Label>
               <Input

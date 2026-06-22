@@ -677,5 +677,87 @@
         "unit":  {
                      "S":  "円"
                  }
+    },
+    {
+        "id":  {
+                   "S":  "21"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  "数量×単価。1台あたり7坪を有効坪数から除外（フィットネスマシン費に連動）"
+                 },
+        "label":  {
+                      "S":  "ゴルフ（右打席）"
+                  },
+        "defaultAmount":  {
+                              "N":  "2980000"
+                          },
+        "currentAmount":  {
+                              "N":  "2980000"
+                          },
+        "quantity":  {
+                         "N":  "0"
+                     },
+        "quantityBasis":  {
+                              "S":  "fixed"
+                          },
+        "tsuboPerUnit":  {
+                             "N":  "7"
+                         },
+        "depreciationYears":  {
+                                  "N":  "6"
+                              },
+        "updatedAt":  {
+                          "S":  "2026-06-19T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_golf_right"
+                 },
+        "unit":  {
+                     "S":  "円/台"
+                 }
+    },
+    {
+        "id":  {
+                   "S":  "22"
+               },
+        "category":  {
+                         "S":  "投資コスト"
+                     },
+        "note":  {
+                     "S":  "数量×単価。1台あたり9坪を有効坪数から除外（フィットネスマシン費に連動）"
+                 },
+        "label":  {
+                      "S":  "ゴルフ（両打席）"
+                  },
+        "defaultAmount":  {
+                              "N":  "3480000"
+                          },
+        "currentAmount":  {
+                              "N":  "3480000"
+                          },
+        "quantity":  {
+                         "N":  "0"
+                     },
+        "quantityBasis":  {
+                              "S":  "fixed"
+                          },
+        "tsuboPerUnit":  {
+                             "N":  "9"
+                         },
+        "depreciationYears":  {
+                                  "N":  "6"
+                              },
+        "updatedAt":  {
+                          "S":  "2026-06-19T00:00:00Z"
+                      },
+        "code":  {
+                     "S":  "investment_golf_dual"
+                 },
+        "unit":  {
+                     "S":  "円/台"
+                 }
     }
 ]

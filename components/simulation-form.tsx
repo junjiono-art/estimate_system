@@ -34,9 +34,6 @@ import {
   FITNESS_MACHINE_LABEL,
   FITNESS_MACHINE_UNIT,
   FITNESS_MACHINE_DEPRECIATION_YEARS,
-  GOLF_EQUIPMENT_FIELD_ID,
-  GOLF_DEPRECIATION_YEARS,
-  computeGolfEquipmentCost,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import type { CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
@@ -45,6 +42,7 @@ import { toast } from "sonner"
 import {
   resolveMasterFieldValues,
   resolveMasterFormModel,
+  resolveInvestmentTsuboReduction,
   type MasterFormItem,
   type MasterFormModel,
 } from "@/lib/master-value-mapping"
@@ -146,7 +144,8 @@ type DemographicRow = {
 
 // ── 新規試算フォームの途中保存（下書き）。localStorage に自動保存し、次回起動時に復元を提示する。──
 const DRAFT_STORAGE_KEY = "estimate-form-draft-v1"
-const DRAFT_VERSION = 1
+// v2: ゴルフ専用入力を廃止し、投資費目の数量(investmentQuantities)へ統合。旧v1下書きは復元対象外。
+const DRAFT_VERSION = 2
 
 type FormDraft = {
   version: number
@@ -158,11 +157,10 @@ type FormDraft = {
   royaltyRate: "0" | "10" | "15"
   competitorCount: string
   locationType: LocationType
-  golfRightBayCount: string
-  golfDualBayCount: string
   runningValues: Record<string, string>
   runningQuantities: Record<string, string>
   investmentValues: Record<string, string>
+  investmentQuantities: Record<string, string>
   editedRunningFields: string[]
   editedInvestmentFields: string[]
   machineMaintenanceCost: string
@@ -205,16 +203,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
 
-  // ゴルフ設備
-  const [golfRightBayCount, setGolfRightBayCount] = useState("0")
-  const [golfDualBayCount,  setGolfDualBayCount]  = useState("0")
-
   // ランニングコスト・投資コストの入力値（フィールドID → 入力文字列）。
   // 項目構成・項目名・並び順はマスタから動的に決まるため、汎用マップで保持する。
   const [runningValues,    setRunningValues]    = useState<Record<string, string>>({})
   // 数量基準が fixed（数量×単価）の費目の数量入力値（フィールドID → 入力文字列）。
   const [runningQuantities, setRunningQuantities] = useState<Record<string, string>>({})
   const [investmentValues, setInvestmentValues] = useState<Record<string, string>>({})
+  // 数量基準が fixed/perTsubo の投資費目の数量入力値（フィールドID → 入力文字列）。ゴルフ台数等。
+  const [investmentQuantities, setInvestmentQuantities] = useState<Record<string, string>>({})
   // ユーザーが手入力した費目（フィールドID）。ロイヤリティ変更時の再適用で上書きから保護するために記録する。
   const [editedRunningFields,    setEditedRunningFields]    = useState<Set<string>>(() => new Set())
   const [editedInvestmentFields, setEditedInvestmentFields] = useState<Set<string>>(() => new Set())
@@ -266,11 +262,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     setRoyaltyRate(d.royaltyRate === "10" ? "10" : d.royaltyRate === "15" ? "15" : "0")
     setCompetitorCount(d.competitorCount ?? "")
     setLocationType(d.locationType ?? "suburban")
-    setGolfRightBayCount(d.golfRightBayCount ?? "0")
-    setGolfDualBayCount(d.golfDualBayCount ?? "0")
     setRunningValues(d.runningValues ?? {})
     setRunningQuantities(d.runningQuantities ?? {})
     setInvestmentValues(d.investmentValues ?? {})
+    setInvestmentQuantities(d.investmentQuantities ?? {})
     // 復元した費目は「手入力済み」として扱い、マスタ/ロイヤリティ再適用で上書きされないようにする。
     setEditedRunningFields(new Set(d.editedRunningFields ?? []))
     setEditedInvestmentFields(new Set(d.editedInvestmentFields ?? []))
@@ -303,11 +298,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           royaltyRate,
           competitorCount,
           locationType,
-          golfRightBayCount,
-          golfDualBayCount,
           runningValues,
           runningQuantities,
           investmentValues,
+          investmentQuantities,
           editedRunningFields: [...editedRunningFields],
           editedInvestmentFields: [...editedInvestmentFields],
           machineMaintenanceCost,
@@ -325,8 +319,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     draftChecked, draftToRestore,
     storeName, address, floorArea, rentPerTsubo,
     royaltyRate, competitorCount, locationType,
-    golfRightBayCount, golfDualBayCount,
-    runningValues, runningQuantities, investmentValues,
+    runningValues, runningQuantities, investmentValues, investmentQuantities,
     editedRunningFields, editedInvestmentFields,
     machineMaintenanceCost, isMachineMaintenanceManual, isFitnessMachineCostManual,
   ])
@@ -336,6 +329,18 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const masterModel = useMemo(
     () => withFitnessMachineItem(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15)),
     [masterValues, royaltyRate],
+  )
+
+  // 投資費目が消費する有効坪数の合計減算量（= Σ 数量 × 占有坪/単位）。フィットネスマシン費の坪数を減らす。
+  // 入力中の数量(investmentQuantities)を優先し、未入力はマスタ既定数量を使う。
+  const investmentTsuboReduction = useMemo(
+    () => resolveInvestmentTsuboReduction(
+      masterValues,
+      Object.fromEntries(
+        Object.entries(investmentQuantities).map(([fieldId, raw]) => [fieldId, Math.max(0, parseFloat(raw) || 0)]),
+      ),
+    ),
+    [masterValues, investmentQuantities],
   )
 
   function handleRunningCostChange(fieldId: string, value: string) {
@@ -351,6 +356,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   function handleInvestmentCostChange(fieldId: string, value: string) {
     if (fieldId === "fitnessMachineCost") setIsFitnessMachineCostManual(true)
     setInvestmentValues((prev) => ({ ...prev, [fieldId]: value }))
+    setEditedInvestmentFields((prev) => new Set(prev).add(fieldId))
+  }
+
+  function handleInvestmentQuantityChange(fieldId: string, value: string) {
+    setInvestmentQuantities((prev) => ({ ...prev, [fieldId]: value }))
     setEditedInvestmentFields((prev) => new Set(prev).add(fieldId))
   }
 
@@ -378,31 +388,17 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     selectedRoyaltyRate: "0" | "10" | "15",
     currentAddress: string,
     currentFloorArea: string,
-    currentGolfRightBay: string,
-    currentGolfDualBay: string,
+    tsuboReduction: number,
   ): number {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
 
     // 単価はアプリ側の都道府県別料金表から算出する（直営=半額／FC=満額。doc/計算系統・定数込み.md）。
-    // J8式: =IFS(L11=1,H3*I8, L11=2,(H3-(H6*7))*I8, L11=3,(H3-(H7*9))*I8, L11=4,(H3-(H6*7)-(H7*9))*I8)
+    // 元Excel J8式（=有効坪数×単価）を一般化: 有効坪数 = 床面積 − Σ(投資費目の数量 × 占有坪/単位)。
+    // ゴルフ右打席=7坪/台・両打席=9坪/台は投資マスタの tsuboPerUnit として表現する。
     const unitPrice = getFitnessMachineUnitPriceByAddressAndRoyalty(currentAddress, numericRoyaltyRate)
     const floorAreaTsubo = Math.max(0, parseFloat(currentFloorArea) || 0)
-    const rightBay = Math.max(0, parseInt(currentGolfRightBay, 10) || 0)  // H6
-    const dualBay  = Math.max(0, parseInt(currentGolfDualBay,  10) || 0)  // H7
-    const hasRight = rightBay > 0
-    const hasDual  = dualBay  > 0
-    // L11 判定: 1=ゴルフなし, 2=右打席のみ, 3=両打席のみ, 4=両方
-    let effectiveTsubo: number
-    if (!hasRight && !hasDual) {
-      effectiveTsubo = floorAreaTsubo
-    } else if (hasRight && !hasDual) {
-      effectiveTsubo = floorAreaTsubo - rightBay * 7
-    } else if (!hasRight && hasDual) {
-      effectiveTsubo = floorAreaTsubo - dualBay * 9
-    } else {
-      effectiveTsubo = floorAreaTsubo - rightBay * 7 - dualBay * 9
-    }
-    return Math.max(0, Math.round(unitPrice * Math.max(0, effectiveTsubo)))
+    const effectiveTsubo = Math.max(0, floorAreaTsubo - Math.max(0, tsuboReduction))
+    return Math.max(0, Math.round(unitPrice * effectiveTsubo))
   }
 
   // マスタを新規取得したときの初期化（全費目をマスタ基準額へリセット）。手入力の記録もクリアする。
@@ -422,14 +418,24 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         .map((m) => [m.fieldId, String(m.quantity ?? 1)]),
     ))
 
-    const investmentDefaults = Object.fromEntries(model.investment.map((m) => [m.fieldId, String(m.amount ?? 0)]))
-    // フィットネスマシン費はアプリ側で算出した値で上書きする（都道府県別単価×有効坪数、直営は半額）
+    // fixed/perTsubo の投資費目は単価ベースを保持（数量は別欄）。それ以外は取得額そのまま。
+    const investmentDefaults = Object.fromEntries(model.investment.map((m) =>
+      [m.fieldId, String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)],
+    ))
+    const investmentQuantityDefaults = Object.fromEntries(
+      model.investment
+        .filter((m) => hasQuantityInput(m.quantityBasis))
+        .map((m) => [m.fieldId, String(m.quantity ?? 0)]),
+    )
+    // フィットネスマシン費はアプリ側で算出した値で上書きする（都道府県別単価×有効坪数、直営は半額）。
+    // 有効坪数の減算量はマスタ既定数量（ゴルフ既定0台）から算出する。
     if (model.investment.some((m) => m.fieldId === FITNESS_MACHINE_FIELD_ID)) {
       investmentDefaults.fitnessMachineCost = String(
-        getAddressBasedFitnessMachineCost(selectedRoyaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount),
+        getAddressBasedFitnessMachineCost(selectedRoyaltyRate, address, floorArea, resolveInvestmentTsuboReduction(values)),
       )
     }
     setInvestmentValues(investmentDefaults)
+    setInvestmentQuantities(investmentQuantityDefaults)
     setIsFitnessMachineCostManual(false)
     // マシンメンテナンス費（固定枠）も自動算出値へリセット
     setMachineMaintenanceCost(String(
@@ -509,7 +515,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       model.investment.forEach((m) => {
         if (m.fieldId === FITNESS_MACHINE_FIELD_ID) return
         if (editedInvestmentFields.has(m.fieldId)) return
-        next[m.fieldId] = String(m.amount ?? 0)
+        next[m.fieldId] = String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)
+      })
+      return next
+    })
+    setInvestmentQuantities((prev) => {
+      const next = { ...prev }
+      model.investment.filter((m) => hasQuantityInput(m.quantityBasis)).forEach((m) => {
+        if (editedInvestmentFields.has(m.fieldId)) return
+        next[m.fieldId] = String(m.quantity ?? 0)
       })
       return next
     })
@@ -521,9 +535,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // 手動上書き中のみ据え置く。
     if (isFitnessMachineCostManual) return
 
-    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)
+    const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, investmentTsuboReduction)
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
-  }, [address, floorArea, golfRightBayCount, golfDualBayCount, isFitnessMachineCostManual, royaltyRate])
+  }, [address, floorArea, investmentTsuboReduction, isFitnessMachineCostManual, royaltyRate])
 
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {
@@ -550,6 +564,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     label: m.unit ? `${m.label}（${m.unit}）` : m.label,
     placeholder: "例: 0",
     value: investmentValues[m.fieldId] ?? "",
+    quantityBasis: m.quantityBasis,
+    tsuboPerUnit: m.tsuboPerUnit,
   }))
 
   // フィットネスマシン費は専用の固定枠として描画するため、動的一覧（ページネーション対象）からは除外する。
@@ -593,9 +609,29 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const machineMaintenanceValue = Math.max(0, parseInt(machineMaintenanceCost) || 0)
   // ランニングコストタブ右上に表示する金額（家賃 ＋ ランニング費 ＋ マシンメンテ費）
   const runningCostTotalWithRent = rentValue + runningEffectiveTotal + machineMaintenanceValue
-  // ゴルフ設備費（投資コスト）＝ 台数×単価（右2,980,000／両3,480,000・償却6年）。元Excel準拠で投資コストに加算する。
-  const golfEquipmentCost = computeGolfEquipmentCost(parseInt(golfRightBayCount, 10) || 0, parseInt(golfDualBayCount, 10) || 0)
-  const totalInitialCost = COST_ITEMS.reduce((acc, item) => acc + (parseInt(item.value) || 0), 0) + golfEquipmentCost
+
+  // 投資費目の数量基準セット（fitnessMachineCost は専用固定枠なので除外＝常に取得額そのまま）。
+  const investmentPerTsuboFieldIds = new Set(
+    masterModel.investment.filter((m) => m.quantityBasis === "perTsubo" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+  )
+  const investmentFixedFieldIds = new Set(
+    masterModel.investment.filter((m) => m.quantityBasis === "fixed" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+  )
+  // 投資費目の実効取得額: fixed=単価×数量, perTsubo=単価×坪数×数量, それ以外=入力値そのまま。
+  const investmentEffectiveByField: Record<string, number> = Object.fromEntries(
+    COST_ITEMS.map((item) => {
+      const raw = Math.max(0, parseInt(item.value) || 0)
+      const qty = Math.max(0, parseInt(investmentQuantities[item.id]) || 0)
+      let effective = raw
+      if (investmentPerTsuboFieldIds.has(item.id)) {
+        effective = raw * floorAreaTsubo * qty
+      } else if (investmentFixedFieldIds.has(item.id)) {
+        effective = raw * qty
+      }
+      return [item.id, Math.round(effective)]
+    }),
+  )
+  const totalInitialCost = Object.values(investmentEffectiveByField).reduce((acc, v) => acc + v, 0)
 
   const currentIndex = TABS.findIndex((t) => t.id === activeTab)
   const isFirst = currentIndex === 0
@@ -686,26 +722,19 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         console.warn(meshError)
       }
 
-      const investmentByField = Object.fromEntries(
-        COST_ITEMS.map((item) => [item.id, Math.max(0, parseInt(item.value) || 0)]),
-      )
+      // 投資費目の実効取得額（fixed=単価×数量, perTsubo=単価×坪数×数量）。ゴルフ設備費もここに含まれる。
+      const investmentByField = { ...investmentEffectiveByField }
 
-      // 投資項目別の償却年（マスタ登録値）。減価償却の算出に使用する
+      // 投資項目別の償却年（マスタ登録値）。減価償却の算出に使用する。ゴルフ等もマスタの償却年が反映される。
       const depreciationYearsByField = Object.fromEntries(
         masterModel.investment
           .filter((m) => m.depreciationYears && m.depreciationYears > 0)
           .map((m) => [m.fieldId, m.depreciationYears as number]),
       )
 
-      // ゴルフ設備費（投資コスト・償却6年）を内訳に加える（元Excel準拠）。台数0なら加えない。
-      if (golfEquipmentCost > 0) {
-        investmentByField[GOLF_EQUIPMENT_FIELD_ID] = golfEquipmentCost
-        depreciationYearsByField[GOLF_EQUIPMENT_FIELD_ID] = GOLF_DEPRECIATION_YEARS
-      }
-
       const selectedRoyaltyRate = parseInt(royaltyRate) as 0 | 10 | 15
       const currentResolvedByField =
-        resolveMasterFieldValues(masterValues, selectedRoyaltyRate).investmentByField as Record<string, number | undefined>
+        resolveMasterFieldValues(masterValues, selectedRoyaltyRate, floorAreaTsubo).investmentByField as Record<string, number | undefined>
       // 各費目の「入力値 − マスタ基準額」の差分（手動上書き分）。ロイヤリティ別の再計算でこの差分を引き継ぐ。
       const fieldDeltaById = Object.fromEntries(
         Object.entries(investmentByField).map(([fieldId, enteredAmount]) => {
@@ -716,12 +745,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
       const calcTotalForRate = (rate: 0 | 10 | 15): number => {
         const targetResolvedByField =
-          resolveMasterFieldValues(masterValues, rate).investmentByField as Record<string, number | undefined>
+          resolveMasterFieldValues(masterValues, rate, floorAreaTsubo).investmentByField as Record<string, number | undefined>
         return Object.entries(investmentByField).reduce((sum, [fieldId, enteredAmount]) => {
           // フィットネスマシン費は単価がロイヤリティで変わる（直営=半額）。手動上書きが無ければレートごとに再算出する。
           if (fieldId === FITNESS_MACHINE_FIELD_ID && !isFitnessMachineCostManual) {
             return sum + getAddressBasedFitnessMachineCost(
-              String(rate) as "0" | "10" | "15", address, floorArea, golfRightBayCount, golfDualBayCount,
+              String(rate) as "0" | "10" | "15", address, floorArea, investmentTsuboReduction,
             )
           }
           const targetBaseAmount = Number(targetResolvedByField[fieldId] ?? enteredAmount)
@@ -930,43 +959,6 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                         <p className="text-[11px] text-destructive">{fieldErrors.floorArea}</p>
                       )}
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">ゴルフ設備</p>
-                <p className="mb-3 text-[11px] text-muted-foreground leading-relaxed">
-                  ゴルフ打席を設ける場合は台数を入力してください。①投資コストにゴルフ設備費を加算（右打席 2,980,000円/台、両打席 3,480,000円/台・償却6年）、②フィットネスマシン費は有効坪数から除外（右7坪/台、両9坪/台）します。
-                </p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="golfRightBayCount" className="text-xs font-medium">
-                      ゴルフ（右打席）台数
-                    </Label>
-                    <Input
-                      id="golfRightBayCount"
-                      type="number"
-                      min={0}
-                      placeholder="例: 0"
-                      value={golfRightBayCount}
-                      onChange={(e) => setGolfRightBayCount(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="golfDualBayCount" className="text-xs font-medium">
-                      ゴルフ（両打席）台数
-                    </Label>
-                    <Input
-                      id="golfDualBayCount"
-                      type="number"
-                      min={0}
-                      placeholder="例: 0"
-                      value={golfDualBayCount}
-                      onChange={(e) => setGolfDualBayCount(e.target.value)}
-                    />
                   </div>
                 </div>
               </div>
@@ -1196,9 +1188,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   開業にかかる各投資コストを入力してください。
-                  {golfEquipmentCost > 0 && (
+                  {investmentTsuboReduction > 0 && (
                     <span className="block text-[10px] text-muted-foreground/80">
-                      ※ 合計には店舗情報で入力したゴルフ設備費 {golfEquipmentCost.toLocaleString()} 円（償却6年）を含みます。
+                      ※ ゴルフ等の設備が有効坪数を {investmentTsuboReduction.toLocaleString()} 坪消費し、フィットネスマシン費に連動して反映されます。
                     </span>
                   )}
                 </p>
@@ -1244,7 +1236,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                             setIsFitnessMachineCostManual(false)
                             setInvestmentValues((prev) => ({
                               ...prev,
-                              fitnessMachineCost: String(getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, golfRightBayCount, golfDualBayCount)),
+                              fitnessMachineCost: String(getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, investmentTsuboReduction)),
                             }))
                           }}
                         >
@@ -1260,12 +1252,49 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 {costPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
                     <Label htmlFor={item.id} className="text-xs font-medium">{item.label}</Label>
-                    <AmountInput
-                      id={item.id}
-                      placeholder={item.placeholder}
-                      value={item.value}
-                      onValueChange={(raw) => handleInvestmentCostChange(item.id, raw)}
-                    />
+                    {hasQuantityInput(item.quantityBasis) ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex flex-1 flex-col gap-0.5">
+                            <span className="text-[10px] text-muted-foreground">
+                              {item.quantityBasis === "perTsubo" ? "単価（/坪）" : "単価"}
+                            </span>
+                            <AmountInput
+                              id={item.id}
+                              placeholder={item.placeholder}
+                              value={item.value}
+                              onValueChange={(raw) => handleInvestmentCostChange(item.id, raw)}
+                            />
+                          </div>
+                          {item.quantityBasis === "perTsubo" && (
+                            <span className="self-end pb-2 text-[10px] text-muted-foreground">× 坪数</span>
+                          )}
+                          <span className="self-end pb-2 text-xs text-muted-foreground">×</span>
+                          <div className="flex w-20 flex-col gap-0.5">
+                            <span className="text-[10px] text-muted-foreground">数量</span>
+                            <AmountInput
+                              id={`${item.id}-qty`}
+                              placeholder="例: 0"
+                              value={investmentQuantities[item.id] ?? ""}
+                              onValueChange={(raw) => handleInvestmentQuantityChange(item.id, raw)}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-right text-[10px] text-muted-foreground">
+                          = {(investmentEffectiveByField[item.id] ?? 0).toLocaleString()} 円
+                          {item.tsuboPerUnit && item.tsuboPerUnit > 0
+                            ? `（有効坪数 −${(Math.max(0, parseInt(investmentQuantities[item.id]) || 0) * item.tsuboPerUnit).toLocaleString()}坪）`
+                            : ""}
+                        </span>
+                      </div>
+                    ) : (
+                      <AmountInput
+                        id={item.id}
+                        placeholder={item.placeholder}
+                        value={item.value}
+                        onValueChange={(raw) => handleInvestmentCostChange(item.id, raw)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

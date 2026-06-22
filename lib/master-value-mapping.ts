@@ -24,6 +24,9 @@ export const INVESTMENT_COST_CODE_TO_FIELD_ID = {
   investment_opening_package: "openingPackageCost",
   investment_security: "securityCost",
   investment_other: "otherInitialCost",
+  // ゴルフ設備（数量×単価・有効坪数を消費する投資費目）。
+  investment_golf_right: "golfRightBayCost",
+  investment_golf_dual: "golfDualBayCost",
 } as const
 
 export type RunningCostFieldId = (typeof RUNNING_COST_CODE_TO_FIELD_ID)[keyof typeof RUNNING_COST_CODE_TO_FIELD_ID]
@@ -59,12 +62,14 @@ export type MasterFormItem = {
   amount: number
   /** 投資コストの耐用年数（償却年）。未設定/0 は非償却 */
   depreciationYears?: number
-  /** ランニングコストの数量基準。perTsubo の場合、試算画面で amount に坪数を掛けて実コスト化する */
+  /** 数量基準（ランニング/投資 共通）。perTsubo は試算画面で坪数を掛けて実コスト化する */
   quantityBasis?: MasterValueQuantityBasis
-  /** ランニングコストの単価（数量を掛ける前の1単位あたり金額）。fixed の数量入力欄の初期値算出に使う */
+  /** 単価（数量を掛ける前の1単位あたり金額）。fixed/perTsubo の数量入力欄の初期値算出に使う */
   unitAmount?: number
-  /** ランニングコストの既定数量（マスタ登録値。未設定は1）。fixed の数量入力欄の初期値に使う */
+  /** 既定数量（マスタ登録値）。fixed/perTsubo の数量入力欄の初期値に使う */
   quantity?: number
+  /** 投資コスト: 1単位あたり占有坪数（坪/単位）。>0 なら有効坪数を減らす */
+  tsuboPerUnit?: number
 }
 
 /**
@@ -91,12 +96,47 @@ export function resolveRunningQuantity(value: MasterValue, floorAreaTsubo: numbe
  * - fixed: 数量そのもの（回数・台数等）
  * - monthly（既定）: 1
  */
+/** 数量入力欄を持つ基準か（fixed=数量×単価／perTsubo=坪数×単価×数量）。monthly/未設定は単価そのまま。 */
+export function hasInvestmentQuantity(basis?: MasterValueQuantityBasis): boolean {
+  return basis === "fixed" || basis === "perTsubo"
+}
+
 export function resolveRunningBaseQuantity(value: MasterValue): number {
   const quantity = Number.isFinite(Number(value.quantity)) && Number(value.quantity) > 0 ? Number(value.quantity) : 1
   if (value.quantityBasis === "perTsubo" || value.quantityBasis === "fixed") {
     return quantity
   }
   return 1
+}
+
+/**
+ * 投資コストの既定数量を返す。
+ * ランニングと違い 0 を許容する（ゴルフ等の任意設備は既定 0 台＝未導入から始める）。
+ * monthly/未設定（取得額そのまま）は常に1。
+ */
+export function resolveInvestmentBaseQuantity(value: MasterValue): number {
+  if (value.quantityBasis !== "fixed" && value.quantityBasis !== "perTsubo") return 1
+  const raw = Number(value.quantity)
+  return Number.isFinite(raw) && raw >= 0 ? raw : 1
+}
+
+/**
+ * 投資費目群が消費する有効坪数の合計減算量を返す（= Σ 数量 × tsuboPerUnit）。
+ * quantityByFieldId が与えられればその実数量（試算画面の入力値）を優先し、無ければマスタ既定数量を使う。
+ */
+export function resolveInvestmentTsuboReduction(
+  values: MasterValue[],
+  quantityByFieldId?: Record<string, number>,
+): number {
+  return values.reduce((sum, value) => {
+    if (value.category !== "投資コスト") return sum
+    const tsuboPerUnit = Math.max(0, Number(value.tsuboPerUnit) || 0)
+    if (tsuboPerUnit <= 0) return sum
+    const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID] ?? value.code
+    const overrideQty = quantityByFieldId?.[fieldId]
+    const quantity = Number.isFinite(Number(overrideQty)) ? Math.max(0, Number(overrideQty)) : resolveInvestmentBaseQuantity(value)
+    return sum + quantity * tsuboPerUnit
+  }, 0)
 }
 
 export type MasterFormModel = {
@@ -144,7 +184,25 @@ export function resolveMasterFormModel(
     if (value.category === "投資コスト") {
       const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID] ?? value.code
       const depreciationYears = Number(value.depreciationYears) > 0 ? Number(value.depreciationYears) : undefined
-      investment.push({ fieldId, code: value.code, label: value.label, unit: value.unit, amount: unitAmount, depreciationYears })
+      const tsuboPerUnit = Number(value.tsuboPerUnit) > 0 ? Number(value.tsuboPerUnit) : undefined
+      const baseQuantity = resolveInvestmentBaseQuantity(value)
+      // 数量基準あり(fixed/perTsubo)は「単価ベース」を保持し、数量は試算画面側で掛ける（perTsuboの坪数も画面側）。
+      // monthly/未設定は従来どおり取得額そのもの。
+      const amount = hasInvestmentQuantity(value.quantityBasis)
+        ? Math.round(unitAmount * baseQuantity)
+        : unitAmount
+      investment.push({
+        fieldId,
+        code: value.code,
+        label: value.label,
+        unit: value.unit,
+        amount,
+        depreciationYears,
+        quantityBasis: value.quantityBasis,
+        unitAmount: Math.round(unitAmount),
+        quantity: baseQuantity,
+        tsuboPerUnit,
+      })
     }
   })
 
@@ -201,7 +259,15 @@ export function resolveMasterFieldValues(values: MasterValue[], royaltyRate: Roy
 
     if (value.category === "投資コスト") {
       const fieldId = INVESTMENT_COST_CODE_TO_FIELD_ID[value.code as keyof typeof INVESTMENT_COST_CODE_TO_FIELD_ID] ?? value.code
-      investmentByField[fieldId] = amount
+      // 試算画面と同じ実効額に揃える: fixed=単価×数量, perTsubo=単価×坪数×数量, それ以外=取得額そのまま。
+      const quantity = resolveInvestmentBaseQuantity(value)
+      let effective = amount
+      if (value.quantityBasis === "perTsubo") {
+        effective = amount * Math.max(0, floorAreaTsubo) * quantity
+      } else if (value.quantityBasis === "fixed") {
+        effective = amount * quantity
+      }
+      investmentByField[fieldId] = Math.round(effective)
       visibleInvestmentFieldIds.push(fieldId)
     }
   })

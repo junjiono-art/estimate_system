@@ -25,11 +25,27 @@ export interface MasterValue {
   amountWithRoyalty?: number
   amountWithRoyalty10?: number
   amountWithRoyalty15?: number
-  // ── ランニングコスト用（元Excel 入力欄 R20-R35: 金額 = 単価 × 数量）──
-  /** 数量（回数・台数・坪数など）。月額金額 = 単価(currentAmount) × 実効数量。未設定は1 */
+  // ── 数量基準（ランニング/投資 共通。元Excel 入力欄: 金額 = 単価 × 数量）──
+  /**
+   * 数量（回数・台数・坪数など）。
+   * ランニング: 月額金額 = 単価(currentAmount) × 実効数量。
+   * 投資: 取得額 = 単価 × 数量（fixed） / 単価 × 坪数 × 数量（perTsubo）。
+   * 未設定は1。ゴルフ等の任意設備は0を既定にできる。
+   */
   quantity?: number
-  /** 数量の基準。perTsubo の場合は実効数量 = 坪数 × quantity（例: 水道代 150円/坪 × 坪数） */
+  /**
+   * 数量の基準。
+   * monthly/未設定: 単価をそのまま計上（投資は取得額そのまま）。
+   * fixed: 単価 × 数量（回数・台数）。
+   * perTsubo: 単価 × 坪数 × 数量（坪連動。例: 水道代 150円/坪 × 坪数）。
+   */
   quantityBasis?: MasterValueQuantityBasis
+  /**
+   * 投資コスト専用: 1単位（台）あたりが占有する坪数（坪/単位）。
+   * >0 の費目は「有効坪数 = 床面積 − Σ(数量 × tsuboPerUnit)」を通じてフィットネスマシン費の坪数を減らす。
+   * 例: ゴルフ右打席=7坪/台、両打席=9坪/台。
+   */
+  tsuboPerUnit?: number
   // ── 投資コスト用（元Excel 入力欄 R5-R17: 減価償却月額 = 金額 / 償却年 / 12）──
   /** 耐用年数（償却年）。未設定/0 は非償却。月次減価償却 = 金額 / 償却年 / 12 */
   depreciationYears?: number
