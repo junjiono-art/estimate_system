@@ -91,8 +91,12 @@ function snsJoinersForMonth(month: number, initialJoiners: number, acq: CalcAcqu
 //   口コミ   = 口コミ率 × 前月会員 × (キャパ - 前月会員)/キャパ
 //   継続(m)  = 新規(m-1) × 初月継続率 + 継続(m-1) × 2か月目継続率（コホート、キャップ前の生値で累積）
 //
-// 注: Excelは年境界のキャリーオーバーでキャップ前会員数を自然検索の基準に使うが、
-//     会員数がキャパ到達済みの場合は MIN により売上が一致するため、確定会員数を基準にする。
+// 年境界の基準会員数（Excel忠実移植）:
+//   Excelは年ごとに別ブロックを持ち、各年1月の自然検索/口コミの基準には
+//   前年12月の「キャップ前合計 = 新規+継続」を使う（例 事業計画 C83=SUM(C125:C126)=O73+O74）。
+//   一方、年内の他の月は MIN 後の確定会員数(R31)を基準にする。
+//   会員数がキャパ到達済みだと前者は上限超（例 759.94>725）となり、自然検索/口コミが
+//   わずかに負値になる。売上は MIN で一致するが、内訳表示をExcelと一致させるため再現する。
 export function simulateMemberGrowth(params: MemberGrowthParams): MemberGrowthMonth[] {
   const { initialJoiners, maxMembers, months, retention, acquisition, signage } = params
   const cap = maxMembers
@@ -104,9 +108,13 @@ export function simulateMemberGrowth(params: MemberGrowthParams): MemberGrowthMo
   const result: MemberGrowthMonth[] = []
   const newSeries: number[] = []
   const retainSeries: number[] = []
+  const uncappedSeries: number[] = []
 
   for (let m = 1; m <= months; m += 1) {
-    const prevMembers = m === 1 ? 0 : result[m - 2].members
+    // 年境界(各年1月, m=13,25,…)のみ前月のキャップ前合計を基準にする。他の月は確定会員数。
+    const isYearBoundary = m > 1 && (m - 1) % 12 === 0
+    const prevMembers =
+      m === 1 ? 0 : isYearBoundary ? uncappedSeries[m - 2] : result[m - 2].members
 
     let organic = 0
     let referral = 0
@@ -128,6 +136,7 @@ export function simulateMemberGrowth(params: MemberGrowthParams): MemberGrowthMo
     retainSeries[m - 1] = retainedMembers
 
     const uncapped = newMembers + retainedMembers
+    uncappedSeries[m - 1] = uncapped
     const members = cap > 0 ? Math.min(uncapped, cap) : uncapped
 
     result.push({
