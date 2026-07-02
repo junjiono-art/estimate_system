@@ -103,7 +103,9 @@ function getPaymentFee(revenue: number, calcParams: CalcParameterConfig): number
 }
 
 // 広告費（コスト側）の月次スケジュール。事業計画 R42（Web広告費+SNS広告費）。
-function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig): number {
+// 年1のランプは全シナリオ共通。年2以降はベースライン（年2=18万/年3以降=12万）に対し、
+// シナリオ別・年別の手入力スポット増減（scenarioMonthlyOverride）があればそれを優先してExcelに一致させる。
+function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig, scenario: ScenarioType): number {
   const year = Math.ceil(month / 12)
   const monthInYear = ((month - 1) % 12) + 1
 
@@ -113,6 +115,9 @@ function getMonthlyAdCost(month: number, calcParams: CalcParameterConfig): numbe
     if (monthInYear === 3 || monthInYear === 4) return calcParams.adCost.year1Month3To4
     return calcParams.adCost.year1Month5To12
   }
+
+  const override = calcParams.adCost.scenarioMonthlyOverride?.[scenario]?.[year]
+  if (override != null) return override
 
   if (year === 2) return calcParams.adCost.year2Monthly
   return calcParams.adCost.year3PlusMonthly
@@ -324,7 +329,7 @@ export function buildRegressionRows(
     const members = Math.round(g.members)
     // 売上は会員数を ROUNDDOWN(,1) した値 × 平均単価（事業計画 D27 = C4 × ROUNDDOWN(D31,1)）
     const revenue = Math.round(averagePrice * roundDown1(g.members))
-    const adCost = getMonthlyAdCost(g.month, calcParams)
+    const adCost = getMonthlyAdCost(g.month, calcParams, scenario)
 
     const defaultPaymentFee = getPaymentFee(revenue, calcParams)
     const defaultRoyalty = Math.min(Math.round(revenue * royaltyRate), calcParams.royaltyCapMonthly)
@@ -618,7 +623,7 @@ export function calculateSimulation(
 
   // 損益分岐点の4パターン（事業計画 I6-I9）。
   // 広告費=年1の定常月額(O66=12ヶ月目)、減価償却=資産別月額(O72)。減価償却計上の有無に関わらず常に算出。
-  const adCostForBreakeven = getMonthlyAdCost(12, calcParams)
+  const adCostForBreakeven = getMonthlyAdCost(12, calcParams, scenario)
   const depreciationForBreakeven = Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation, input.depreciationYearsByField))
   const breakevenVariants = contributionMargin > 0
     ? {

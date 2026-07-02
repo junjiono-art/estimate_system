@@ -400,6 +400,12 @@ export interface CalcAdCostConfig {
   year1Month5To12: number
   year2Monthly: number
   year3PlusMonthly: number
+  /**
+   * シナリオ別・年別の月額広告費オーバーライド（事業計画 R42）。
+   * キー=年(2..10)。Excelは特定年だけ月18万円へスポット増額する計算根拠のない手入力があるため、
+   * その年だけ上記の年2/年3以降スケジュールを上書きしてExcelに一致させる。未指定の年はフォールバック。
+   */
+  scenarioMonthlyOverride?: Partial<Record<ScenarioType, Record<number, number>>>
 }
 
 /** 広告費のうちWeb広告費の月次スケジュール（事業計画 R43）。SNS広告費 = 広告費合計 − Web広告費 */

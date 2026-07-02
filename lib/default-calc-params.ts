@@ -15,12 +15,19 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
   },
   adCost: {
     // 事業計画 R42（Web広告費+SNS広告費の月次スケジュール）
+    // ベースライン（=アグレッシブ）: 年2=18万、年3以降=12万
     year1Month1: 520_000,
     year1Month2: 280_000,
     year1Month3To4: 240_000,
     year1Month5To12: 180_000,
     year2Monthly: 180_000,
     year3PlusMonthly: 120_000,
+    // Excel事業計画 R42 の手入力スポット増減（計算根拠なし）をシナリオ・年別に忠実再現。
+    // 標準: 10期を18万へ。保守: 2期を12万へ／3期・9期を18万へ。アグレッシブはベースラインと一致（上書き不要）。
+    scenarioMonthlyOverride: {
+      standard: { 10: 180_000 },
+      conservative: { 2: 120_000, 3: 180_000, 9: 180_000 },
+    },
   },
   adCostWeb: {
     // 事業計画 R43（Web広告費）。SNS広告費（R44）は adCost との差分で算出する
