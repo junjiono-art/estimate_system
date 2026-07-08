@@ -102,6 +102,8 @@ function applyResolvedBreakdown(
     ? Math.max(0, totalInitialInvestment - machinesCost - interiorCost - franchiseInitialCost)
     : result.otherInitialCost
 
+  // monthlyRunningCost は上書きしない: サーバ応答が（フォーム確定のランニング総額＋マシンメンテ費）を
+  // 反映した正の値であり、マスタ既定値の総額に差し替えると損益分岐（同じ固定費から算出）と食い違う（不具合一覧 #20）。
   return {
     ...result,
     totalInitialInvestment,
@@ -109,7 +111,6 @@ function applyResolvedBreakdown(
     interiorCost,
     franchiseInitialCost,
     otherInitialCost,
-    monthlyRunningCost: hasRunningValues ? resolved.totalRunningCost : result.monthlyRunningCost,
   }
 }
 
@@ -188,8 +189,23 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           )
         : simulationRequest?.initialInvestmentTotal
 
+    // ランニングコスト総額はフォーム確定値（simulationRequest.runningCostTotal）を正とする。
+    // シナリオ・減価償却・立地・競合の切替でランニング費は変わらないため、マスタ既定値からの再構築はしない
+    // （フォームの手入力・数量が破棄され、損益分岐等のKPIがシナリオ間で食い違う不具合一覧 #20）。
+    // ロイヤリティ変更時のみ、投資側と同じ差分方式でマスタ総額の増減（新レート − 基準レート）を上乗せして追随させる。
+    const baseRunningCostTotal = Number(simulationRequest?.runningCostTotal)
+    const runningRoyaltyDelta =
+      resolved?.visibleRunningFieldIds.length && baseResolved?.visibleRunningFieldIds.length
+        ? resolved.totalRunningCost - baseResolved.totalRunningCost
+        : 0
+    const runningCostTotal = Number.isFinite(baseRunningCostTotal)
+      ? Math.max(0, Math.round(baseRunningCostTotal + runningRoyaltyDelta))
+      : resolved?.visibleRunningFieldIds.length
+      ? resolved.totalRunningCost
+      : undefined
+
     return {
-      runningCostTotal: resolved?.visibleRunningFieldIds.length ? resolved.totalRunningCost : simulationRequest?.runningCostTotal,
+      runningCostTotal,
       requestInitialInvestmentTotal,
     }
   }
