@@ -136,6 +136,20 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
     directDivisor: 2,
     fallbackUnitPrice: FITNESS_MACHINE_FALLBACK_UNIT_PRICE, // 都道府県不明時（FC満額ベース）
   },
+  security: {
+    // 入力欄 B16/J16: J16=ROUNDUP(SUM(M13:M17),-4)。50坪で1,580,000円（Excel一致）。
+    // 光回線 21,000（M12）は Excel の SUM 範囲外のため既定では含めない。
+    fixedItems: [
+      { label: "Wifi", amount: 81_000 }, // M13
+      { label: "スピーカー", amount: 170_000 }, // M14
+      { label: "ALSOK", amount: 95_000 }, // M16
+    ],
+    cameraUnitPrice: 110_000, // M15（円/台）
+    cameraCountRule: { baseCount: 5, baseTsubo: 50, tsuboPerUnit: 17 }, // D26=ROUNDUP(5+(坪-50)/17,0)
+    monitorUnitPrice: 170_000, // M17（円/台）
+    monitorCountRule: { baseCount: 2, baseTsubo: 0, tsuboPerUnit: 40 }, // D28=ROUNDUP(2+坪/40,0)
+    roundUpUnit: 10_000, // ROUNDUP(M18,-4)＝万円単位切り上げ
+  },
   corporateTaxRate: 0.232, // 入力欄!C92
   cashCollectionLagMonths: 1, // 入力欄!C79
 }

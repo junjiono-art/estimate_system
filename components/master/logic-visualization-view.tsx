@@ -10,6 +10,7 @@ import {
   LayersIcon,
   MegaphoneIcon,
   SaveIcon,
+  ShieldIcon,
   SparklesIcon,
   UsersIcon,
   VariableIcon,
@@ -27,6 +28,7 @@ import type { CalcMachineMaintenanceConfig, CalcParameterConfig, CalcPricingOpti
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { resolveMaintenanceUnitPrice } from "@/lib/machine-maintenance"
 import { PREFECTURE_FULL_NAMES, toPrefectureKey } from "@/lib/fitness-machine-cost"
+import { computeDeviceCount, computeSecurityIntroCost } from "@/lib/security-cost"
 import { computeAveragePrice } from "@/lib/average-price"
 import { formatThousands, toDigits } from "@/lib/number-format"
 import { toast } from "sonner"
@@ -297,6 +299,7 @@ export function LogicVisualizationView() {
   const [isSavingStep8, setIsSavingStep8] = useState(false)
   const [isSavingStepMM, setIsSavingStepMM] = useState(false)
   const [isSavingStepFM, setIsSavingStepFM] = useState(false)
+  const [isSavingStepSec, setIsSavingStepSec] = useState(false)
   // 平均単価（会費＋オプション）
   const [memberFeeExTax, setMemberFeeExTax] = useState("")
   const [pricingOptions, setPricingOptions] = useState<Array<{ label: string; price: string; ratio: string }>>([])
@@ -379,6 +382,39 @@ export function LogicVisualizationView() {
   const [fmFallbackUnitPrice, setFmFallbackUnitPrice] = useState("")
   // 都道府県別 坪単価（FC満額）。直営単価はプレビュー列で 満額 ÷ 割り戻し係数 を表示
   const [fmPrefRows, setFmPrefRows] = useState<Array<{ key: string; unitPrice: string }>>([])
+
+  // ALSOK・USEN導入費（入力欄 B16/J16 = 固定額＋台数×単価の合算を万円切り上げ）
+  const [secFixedItems, setSecFixedItems] = useState<Array<{ label: string; amount: string }>>([])
+  const [secCameraUnitPrice, setSecCameraUnitPrice] = useState("")
+  const [secCameraBaseCount, setSecCameraBaseCount] = useState("")
+  const [secCameraBaseTsubo, setSecCameraBaseTsubo] = useState("")
+  const [secCameraTsuboPer, setSecCameraTsuboPer] = useState("")
+  const [secMonitorUnitPrice, setSecMonitorUnitPrice] = useState("")
+  const [secMonitorBaseCount, setSecMonitorBaseCount] = useState("")
+  const [secMonitorBaseTsubo, setSecMonitorBaseTsubo] = useState("")
+  const [secMonitorTsuboPer, setSecMonitorTsuboPer] = useState("")
+  const [secRoundUpUnit, setSecRoundUpUnit] = useState("")
+  // 算出プレビュー用の坪数（保存対象外。編集中の値を実エンジンに渡して台数・合計を表示）
+  const [secPreviewTsubo, setSecPreviewTsubo] = useState("50")
+  const secPreviewConfig = useMemo<CalcParameterConfig["security"]>(() => ({
+    fixedItems: secFixedItems.map((item) => ({ label: item.label, amount: Number(item.amount) || 0 })),
+    cameraUnitPrice: Number(secCameraUnitPrice) || 0,
+    cameraCountRule: {
+      baseCount: Number(secCameraBaseCount) || 0,
+      baseTsubo: Number(secCameraBaseTsubo) || 0,
+      tsuboPerUnit: Number(secCameraTsuboPer) || 0,
+    },
+    monitorUnitPrice: Number(secMonitorUnitPrice) || 0,
+    monitorCountRule: {
+      baseCount: Number(secMonitorBaseCount) || 0,
+      baseTsubo: Number(secMonitorBaseTsubo) || 0,
+      tsuboPerUnit: Number(secMonitorTsuboPer) || 0,
+    },
+    roundUpUnit: Number(secRoundUpUnit) || 1,
+  }), [
+    secFixedItems, secCameraUnitPrice, secCameraBaseCount, secCameraBaseTsubo, secCameraTsuboPer,
+    secMonitorUnitPrice, secMonitorBaseCount, secMonitorBaseTsubo, secMonitorTsuboPer, secRoundUpUnit,
+  ])
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
@@ -508,6 +544,21 @@ export function LogicVisualizationView() {
     )
   }
 
+  function syncSecurityParams(params: CalcParameterConfig) {
+    // 旧レコードに security が無い場合は既定値（Excel 入力欄 B16/J16 の内訳）で補完
+    const sec = params.security ?? DEFAULT_CALC_PARAMS.security
+    setSecFixedItems((sec.fixedItems ?? []).map((item) => ({ label: item.label, amount: String(item.amount) })))
+    setSecCameraUnitPrice(String(sec.cameraUnitPrice ?? ""))
+    setSecCameraBaseCount(String(sec.cameraCountRule?.baseCount ?? ""))
+    setSecCameraBaseTsubo(String(sec.cameraCountRule?.baseTsubo ?? ""))
+    setSecCameraTsuboPer(String(sec.cameraCountRule?.tsuboPerUnit ?? ""))
+    setSecMonitorUnitPrice(String(sec.monitorUnitPrice ?? ""))
+    setSecMonitorBaseCount(String(sec.monitorCountRule?.baseCount ?? ""))
+    setSecMonitorBaseTsubo(String(sec.monitorCountRule?.baseTsubo ?? ""))
+    setSecMonitorTsuboPer(String(sec.monitorCountRule?.tsuboPerUnit ?? ""))
+    setSecRoundUpUnit(String(sec.roundUpUnit ?? ""))
+  }
+
   function syncAllParams(params: CalcParameterConfig) {
     syncFeeParams(params)
     syncCompetitorParams(params)
@@ -519,6 +570,7 @@ export function LogicVisualizationView() {
     syncOtherParams(params)
     syncMachineMaintenanceParams(params)
     syncFitnessMachineParams(params)
+    syncSecurityParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -1115,6 +1167,68 @@ export function LogicVisualizationView() {
       setIsSavingStepFM,
       "フィットネスマシン費を保存しました。",
       syncFitnessMachineParams,
+    )
+  }
+
+  async function saveSecurityParams() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const fixedItems: Array<{ label: string; amount: number }> = []
+    for (const [index, item] of secFixedItems.entries()) {
+      const label = item.label.trim()
+      if (!label) {
+        toast.error(`固定額${index + 1}の項目名を入力してください。`)
+        return
+      }
+      const amount = parseRequiredNumber(item.amount)
+      if (amount === null || amount < 0) {
+        toast.error(`固定額「${label}」の金額は 0 以上で入力してください。`)
+        return
+      }
+      fixedItems.push({ label, amount: Math.round(amount) })
+    }
+    const numberOrError = (raw: string, name: string, min: number): number | null => {
+      const value = parseRequiredNumber(raw)
+      if (value === null || value < min) {
+        toast.error(`${name}は ${min} 以上で入力してください。`)
+        return null
+      }
+      return value
+    }
+    const cameraUnitPrice = numberOrError(secCameraUnitPrice, "カメラ導入単価", 0)
+    if (cameraUnitPrice === null) return
+    const cameraBaseCount = numberOrError(secCameraBaseCount, "カメラの基準台数", 0)
+    if (cameraBaseCount === null) return
+    const cameraBaseTsubo = numberOrError(secCameraBaseTsubo, "カメラの基準坪数", 0)
+    if (cameraBaseTsubo === null) return
+    const cameraTsuboPer = numberOrError(secCameraTsuboPer, "カメラの坪刻み", 1)
+    if (cameraTsuboPer === null) return
+    const monitorUnitPrice = numberOrError(secMonitorUnitPrice, "サイネージ導入単価", 0)
+    if (monitorUnitPrice === null) return
+    const monitorBaseCount = numberOrError(secMonitorBaseCount, "サイネージの基準台数", 0)
+    if (monitorBaseCount === null) return
+    const monitorBaseTsubo = numberOrError(secMonitorBaseTsubo, "サイネージの基準坪数", 0)
+    if (monitorBaseTsubo === null) return
+    const monitorTsuboPer = numberOrError(secMonitorTsuboPer, "サイネージの坪刻み", 1)
+    if (monitorTsuboPer === null) return
+    const roundUpUnit = numberOrError(secRoundUpUnit, "切り上げ単位", 1)
+    if (roundUpUnit === null) return
+    await persistParams(
+      {
+        security: {
+          fixedItems,
+          cameraUnitPrice: Math.round(cameraUnitPrice),
+          cameraCountRule: { baseCount: cameraBaseCount, baseTsubo: cameraBaseTsubo, tsuboPerUnit: cameraTsuboPer },
+          monitorUnitPrice: Math.round(monitorUnitPrice),
+          monitorCountRule: { baseCount: monitorBaseCount, baseTsubo: monitorBaseTsubo, tsuboPerUnit: monitorTsuboPer },
+          roundUpUnit: Math.round(roundUpUnit),
+        },
+      },
+      setIsSavingStepSec,
+      "ALSOK・USEN導入費を保存しました。",
+      syncSecurityParams,
     )
   }
 
@@ -2049,6 +2163,130 @@ export function LogicVisualizationView() {
           <Button onClick={saveFitnessMachineParams} disabled={isSavingStepFM} size="sm" className="gap-1.5">
             <SaveIcon className="size-3.5" />
             {isSavingStepFM ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* ALSOK・USEN導入費（入力欄 B16/J16） */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+        <SectionHeader
+          icon={ShieldIcon}
+          title="ALSOK・USEN導入費"
+          description="取得額 = 固定額合計 ＋ カメラ単価×台数 ＋ サイネージ単価×台数 を切り上げ単位で丸め。台数は坪数の階段式（基準台数から坪刻みごとに+1台）。ロイヤリティ非連動・非償却で投資コストに計上されます。"
+          accent="chart-2"
+        />
+
+        {/* 固定額の内訳（入力欄 M13/M14/M16） */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">固定額の内訳（入力欄 M13/M14/M16。坪数に依存しない項目）</Label>
+          <div className="overflow-hidden rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">項目名</TableHead>
+                  <TableHead className="text-xs">金額</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {secFixedItems.map((item, index) => {
+                  const updateRow = (field: "label" | "amount", value: string) =>
+                    setSecFixedItems((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
+                  return (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Input
+                          id={`secFixed-label-${index}`}
+                          value={item.label}
+                          onChange={(event) => updateRow("label", event.target.value)}
+                          disabled={isSavingStepSec}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`secFixed-amount-${index}`} value={item.amount} onChange={(v) => updateRow("amount", v)} disabled={isSavingStepSec} suffix="円" inputMode="numeric" />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        {/* カメラ・サイネージの台数式（入力欄 D26/D28） */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">坪数連動の機器（台数 = 基準台数 + (坪数 − 基準坪数) ÷ 坪刻み を切り上げ。入力欄 D26/D28）</Label>
+          <div className="overflow-hidden rounded-lg border border-border/60">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">機器</TableHead>
+                  <TableHead className="text-xs">導入単価</TableHead>
+                  <TableHead className="text-xs">基準台数</TableHead>
+                  <TableHead className="text-xs">基準坪数</TableHead>
+                  <TableHead className="text-xs">坪刻み（+1台）</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="text-xs font-medium whitespace-nowrap">カメラ</TableCell>
+                  <TableCell><SuffixedInput id="secCameraUnitPrice" value={secCameraUnitPrice} onChange={setSecCameraUnitPrice} disabled={isSavingStepSec} suffix="円/台" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secCameraBaseCount" value={secCameraBaseCount} onChange={setSecCameraBaseCount} disabled={isSavingStepSec} suffix="台" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secCameraBaseTsubo" value={secCameraBaseTsubo} onChange={setSecCameraBaseTsubo} disabled={isSavingStepSec} suffix="坪" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secCameraTsuboPer" value={secCameraTsuboPer} onChange={setSecCameraTsuboPer} disabled={isSavingStepSec} suffix="坪ごと" inputMode="decimal" /></TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="text-xs font-medium whitespace-nowrap">サイネージ（モニター）</TableCell>
+                  <TableCell><SuffixedInput id="secMonitorUnitPrice" value={secMonitorUnitPrice} onChange={setSecMonitorUnitPrice} disabled={isSavingStepSec} suffix="円/台" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secMonitorBaseCount" value={secMonitorBaseCount} onChange={setSecMonitorBaseCount} disabled={isSavingStepSec} suffix="台" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secMonitorBaseTsubo" value={secMonitorBaseTsubo} onChange={setSecMonitorBaseTsubo} disabled={isSavingStepSec} suffix="坪" inputMode="numeric" /></TableCell>
+                  <TableCell><SuffixedInput id="secMonitorTsuboPer" value={secMonitorTsuboPer} onChange={setSecMonitorTsuboPer} disabled={isSavingStepSec} suffix="坪ごと" inputMode="decimal" /></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">合計の切り上げ単位（Excel ROUNDUP(M18,-4)＝10,000円）</Label>
+            <SuffixedInput id="secRoundUpUnit" value={secRoundUpUnit} onChange={setSecRoundUpUnit} disabled={isSavingStepSec} suffix="円単位" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">算出プレビュー用の坪数（保存されません）</Label>
+            <SuffixedInput id="secPreviewTsubo" value={secPreviewTsubo} onChange={setSecPreviewTsubo} disabled={isSavingStepSec} suffix="坪" inputMode="decimal" />
+          </div>
+        </div>
+
+        {/* 編集中の値を実エンジン（computeDeviceCount / computeSecurityIntroCost）に渡した算出プレビュー */}
+        {(() => {
+          const previewTsubo = Math.max(0, Number(secPreviewTsubo) || 0)
+          const cameraCount = computeDeviceCount(previewTsubo, secPreviewConfig.cameraCountRule)
+          const monitorCount = computeDeviceCount(previewTsubo, secPreviewConfig.monitorCountRule)
+          const total = computeSecurityIntroCost(previewTsubo, secPreviewConfig)
+          return (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <InfoTile label={`カメラ台数（${previewTsubo}坪）`} accent="chart-2">
+                {cameraCount}台 × ¥{formatThousands(secCameraUnitPrice || "0")}
+              </InfoTile>
+              <InfoTile label={`サイネージ台数（${previewTsubo}坪）`} accent="chart-2">
+                {monitorCount}台 × ¥{formatThousands(secMonitorUnitPrice || "0")}
+              </InfoTile>
+              <InfoTile label="ALSOK・USEN導入費（切り上げ後）" accent="chart-2">
+                ¥{formatThousands(String(total))}
+              </InfoTile>
+            </div>
+          )
+        })()}
+
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 元Excel検算: 50坪 → 固定346,000 ＋ カメラ5台×110,000 ＋ サイネージ4台×170,000 ＝ 1,576,000 → 万円切り上げ ¥1,580,000。<br />
+          ※ この台数（入力欄 D26/D28）は、ランニングコストの「防犯カメラ(USEN)」「モニター(USEN)」の月額台数と共有です。ランニング側マスタの数量は自動連動しないため、上のプレビュー台数を参考に合わせて更新してください。<br />
+          ※ Excel の光回線 21,000（M12）は SUM 範囲外のため既定では含めていません。含める場合は固定額の内訳に加算してください。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveSecurityParams} disabled={isSavingStepSec} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStepSec ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>

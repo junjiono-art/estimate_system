@@ -36,7 +36,8 @@ import {
   FITNESS_MACHINE_DEPRECIATION_YEARS,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
-import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
+import { computeSecurityIntroCost, SECURITY_FIELD_ID } from "@/lib/security-cost"
+import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import {
@@ -223,6 +224,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // フィットネスマシン費の単価表（都道府県別坪単価・直営割り戻し）。マスタ管理＞ロジック可視化で編集可能
   const [fitnessMachineConfig, setFitnessMachineConfig] =
     useState<CalcFitnessMachineConfig>(DEFAULT_CALC_PARAMS.fitnessMachine)
+  // ALSOK・USEN導入費のパラメータ（固定額内訳＋カメラ/サイネージの台数式）。マスタ管理＞ロジック可視化で編集可能
+  const [securityConfig, setSecurityConfig] =
+    useState<CalcSecurityConfig>(DEFAULT_CALC_PARAMS.security)
 
   // 途中保存（下書き）。draftToRestore があれば復元バナーを出し、決定するまで自動保存しない。
   const [draftToRestore, setDraftToRestore] = useState<FormDraft | null>(null)
@@ -437,6 +441,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         getAddressBasedFitnessMachineCost(selectedRoyaltyRate, address, floorArea, resolveInvestmentTsuboReduction(values)),
       )
     }
+    // ALSOK・USEN導入費もアプリ側で算出した値で上書きする（固定額＋坪数連動の台数×単価、万円切り上げ）
+    if (model.investment.some((m) => m.fieldId === SECURITY_FIELD_ID)) {
+      investmentDefaults[SECURITY_FIELD_ID] = String(
+        computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig),
+      )
+    }
     setInvestmentValues(investmentDefaults)
     setInvestmentQuantities(investmentQuantityDefaults)
     setIsFitnessMachineCostManual(false)
@@ -487,6 +497,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         if (!disposed && config) setMachineMaintenanceConfig(config)
         const fmConfig = payload?.params?.fitnessMachine as CalcFitnessMachineConfig | undefined
         if (!disposed && fmConfig) setFitnessMachineConfig(fmConfig)
+        const secConfig = payload?.params?.security as CalcSecurityConfig | undefined
+        if (!disposed && secConfig) setSecurityConfig(secConfig)
       } catch {
         // 取得失敗時は既定パラメータ（DEFAULT_CALC_PARAMS）で算出する
       }
@@ -519,6 +531,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       const next = { ...prev }
       model.investment.forEach((m) => {
         if (m.fieldId === FITNESS_MACHINE_FIELD_ID) return
+        // ALSOK・USEN導入費はロイヤリティ非連動のアプリ側算出値のため、マスタ基準額で戻さない
+        if (m.fieldId === SECURITY_FIELD_ID) return
         if (editedInvestmentFields.has(m.fieldId)) return
         next[m.fieldId] = String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)
       })
@@ -544,6 +558,18 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, floorArea, investmentTsuboReduction, isFitnessMachineCostManual, royaltyRate, fitnessMachineConfig])
+
+  // ALSOK・USEN導入費（投資）の自動算出値を坪数・パラメータから更新（手動編集時は据え置き）。
+  // ロイヤリティ・住所には依存しない（Excel B16 はロイヤリティ非連動）。
+  useEffect(() => {
+    if (editedInvestmentFields.has(SECURITY_FIELD_ID)) return
+    if (!masterModel.investment.some((m) => m.fieldId === SECURITY_FIELD_ID)) return
+    setInvestmentValues((prev) => ({
+      ...prev,
+      [SECURITY_FIELD_ID]: String(computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig)),
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floorArea, securityConfig, editedInvestmentFields, masterModel])
 
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {

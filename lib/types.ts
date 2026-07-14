@@ -577,6 +577,39 @@ export interface CalcFitnessMachineConfig {
   fallbackUnitPrice: number
 }
 
+/** 機器台数の階段式（Excel ROUNDUP(基準台数 + (坪数 − 基準坪数) ÷ 坪刻み, 0)） */
+export interface CalcDeviceCountRule {
+  /** 基準坪数のときの台数 */
+  baseCount: number
+  /** 基準坪数 */
+  baseTsubo: number
+  /** 何坪ごとに1台追加するか（切り上げのため1坪でも超えると+1台） */
+  tsuboPerUnit: number
+}
+
+/**
+ * ALSOK・USEN導入費（投資コスト。入力欄 B16/J16）。
+ *   取得額 = ROUNDUP( 固定額合計 + カメラ単価×カメラ台数 + サイネージ単価×サイネージ台数, 丸め単位 )
+ *   カメラ台数     = ROUNDUP(5 + (坪数−50)÷17, 0)（入力欄 D26）
+ *   サイネージ台数 = ROUNDUP(2 + 坪数÷40, 0)（入力欄 D28）
+ * D26/D28 はランニングコスト行（防犯カメラ(USEN)・モニター(USEN) の月額台数）と共有のセル。
+ * ロイヤリティ非連動・非償却。光回線 21,000（M12）は Excel の SUM 範囲外のため既定では含めない。
+ */
+export interface CalcSecurityConfig {
+  /** 固定額の内訳（Wifi・スピーカー・ALSOK 等。入力欄 M13/M14/M16） */
+  fixedItems: Array<{ label: string; amount: number }>
+  /** カメラの導入単価（入力欄 M15 の 110,000円/台） */
+  cameraUnitPrice: number
+  /** カメラ台数式（入力欄 D26） */
+  cameraCountRule: CalcDeviceCountRule
+  /** サイネージ（モニター）の導入単価（入力欄 M17 の 170,000円/台） */
+  monitorUnitPrice: number
+  /** サイネージ台数式（入力欄 D28） */
+  monitorCountRule: CalcDeviceCountRule
+  /** 合計の切り上げ単位（Excel ROUNDUP(M18,-4) → 10,000円） */
+  roundUpUnit: number
+}
+
 export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
@@ -598,6 +631,8 @@ export interface CalcParameterConfig {
   machineMaintenance: CalcMachineMaintenanceConfig
   /** フィットネスマシン費（投資コスト。入力欄 J8） */
   fitnessMachine: CalcFitnessMachineConfig
+  /** ALSOK・USEN導入費（投資コスト。入力欄 B16/J16） */
+  security: CalcSecurityConfig
   /** 法人税率 入力欄!C92 */
   corporateTaxRate: number
   /** 入金サイクル(月) 入力欄!C79 */
