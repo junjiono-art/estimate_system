@@ -72,7 +72,8 @@ export async function PUT(request: Request) {
     invalidateActiveFormulaSetCache()
     invalidateSimulationCache()
 
-    return NextResponse.json(result.data)
+    // GETと同様に既定値で補完して返す（Lambdaが未対応フィールドを返さなくてもUIが既定値へ巻き戻らないように）
+    return NextResponse.json({ params: normalizeCalcParams(result.data.params) })
   } catch (error) {
     const message = error instanceof Error ? error.message : "計算パラメータの更新に失敗しました。"
     return errorResponse(ErrorCode.INTERNAL_ERROR, message, 500)

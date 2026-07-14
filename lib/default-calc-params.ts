@@ -1,4 +1,5 @@
 import type { CalcParameterConfig } from "@/lib/types"
+import { PREFECTURE_MACHINE_UNIT_PRICE, FITNESS_MACHINE_FALLBACK_UNIT_PRICE } from "@/lib/fitness-machine-cost"
 
 // Lambda/DynamoDB から計算パラメータを取得できない場合のフォールバック値
 // ロジック可視化画面のデモ値と同じ値を採用。
@@ -127,6 +128,13 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
       佐賀: 70_000, 長崎: 70_000, 熊本: 80_000, 大分: 70_000, 宮崎: 90_000,
       鹿児島: 90_000, 沖縄: 90_000,
     },
+  },
+  fitnessMachine: {
+    // 入力欄 J8: 取得額 = 坪単価 × 有効坪数（床面積 − ゴルフ打席の占有坪）。
+    // 坪単価は都道府県別料金表（入力欄 料金表の最右列）。直営（ロイヤリティ0）は半額（÷2）、FCは満額。
+    unitPriceByPrefecture: { ...PREFECTURE_MACHINE_UNIT_PRICE },
+    directDivisor: 2,
+    fallbackUnitPrice: FITNESS_MACHINE_FALLBACK_UNIT_PRICE, // 都道府県不明時（FC満額ベース）
   },
   corporateTaxRate: 0.232, // 入力欄!C92
   cashCollectionLagMonths: 1, // 入力欄!C79

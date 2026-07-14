@@ -1,6 +1,9 @@
+import type { CalcFitnessMachineConfig } from "@/lib/types"
+
 const FITNESS_MACHINE_BASE_COST = 3_750_000
 
-const PREFECTURE_MACHINE_UNIT_PRICE: Record<string, number> = {
+/** 都道府県別の坪あたり単価（FC満額。元Excel 入力欄 料金表の最右列） */
+export const PREFECTURE_MACHINE_UNIT_PRICE: Record<string, number> = {
   北海道: 220_000,
   青森: 200_000,
   岩手: 200_000,
@@ -131,19 +134,25 @@ export function computeGolfEquipmentCost(rightBayCount: number, dualBayCount: nu
 /**
  * フィットネスマシン費の坪あたり単価を返す（doc/計算系統・定数込み.md「フィットネスマシン費用」）。
  *   単価 = 都道府県別料金表の参照値
- *     ・直営（ロイヤリティ無し）：参照値を半額にする
+ *     ・直営（ロイヤリティ無し）：参照値を割り戻す（既定: 半額）
  *     ・FC（ロイヤリティ有り）  ：参照値そのまま
  * royaltyRatePercent は 0 / 10 / 15（%）を想定し、>0 を FC とみなす。
+ * config（マスタ管理＞ロジック可視化で編集した CalcFitnessMachineConfig）を渡すと
+ * 単価表・割り戻し係数・フォールバックをその値で上書きする。未指定時はアプリ内蔵の既定表。
  */
 export function getFitnessMachineUnitPriceByAddressAndRoyalty(
   address: string | undefined,
   royaltyRatePercent: number,
-  fallbackUnitPrice: number = FITNESS_MACHINE_FALLBACK_UNIT_PRICE,
+  config?: CalcFitnessMachineConfig,
 ): number {
-  const referenceUnitPrice = getFitnessMachineUnitPriceByAddress(address, fallbackUnitPrice)
+  const table = config?.unitPriceByPrefecture ?? PREFECTURE_MACHINE_UNIT_PRICE
+  const fallback = Math.max(0, Number(config?.fallbackUnitPrice ?? FITNESS_MACHINE_FALLBACK_UNIT_PRICE) || 0)
+  const prefecture = extractPrefectureFromAddress(address)
+  const referenceUnitPrice = prefecture != null && table[prefecture] != null ? Number(table[prefecture]) : fallback
   const isFranchise = Number(royaltyRatePercent) > 0
-  // 直営は半額（元Excel 50坪の表示値 ¥3,750,000 ＝ 愛知150,000 ÷2 ×50 と一致）
-  return Math.round(isFranchise ? referenceUnitPrice : referenceUnitPrice / 2)
+  // 直営は割り戻し（元Excel 50坪の表示値 ¥3,750,000 ＝ 愛知150,000 ÷2 ×50 と一致）
+  const divisor = Math.max(1, Number(config?.directDivisor) || 2)
+  return Math.round(isFranchise ? referenceUnitPrice : referenceUnitPrice / divisor)
 }
 
 export { FITNESS_MACHINE_BASE_COST }

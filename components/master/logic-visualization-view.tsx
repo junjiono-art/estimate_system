@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon,
   ChevronRightIcon,
   CreditCardIcon,
+  DumbbellIcon,
   GitBranchIcon,
   LayersIcon,
   MegaphoneIcon,
@@ -25,6 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { CalcMachineMaintenanceConfig, CalcParameterConfig, CalcPricingOption } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { resolveMaintenanceUnitPrice } from "@/lib/machine-maintenance"
+import { PREFECTURE_FULL_NAMES, toPrefectureKey } from "@/lib/fitness-machine-cost"
 import { computeAveragePrice } from "@/lib/average-price"
 import { formatThousands, toDigits } from "@/lib/number-format"
 import { toast } from "sonner"
@@ -294,6 +296,7 @@ export function LogicVisualizationView() {
   const [isSavingStep7, setIsSavingStep7] = useState(false)
   const [isSavingStep8, setIsSavingStep8] = useState(false)
   const [isSavingStepMM, setIsSavingStepMM] = useState(false)
+  const [isSavingStepFM, setIsSavingStepFM] = useState(false)
   // 平均単価（会費＋オプション）
   const [memberFeeExTax, setMemberFeeExTax] = useState("")
   const [pricingOptions, setPricingOptions] = useState<Array<{ label: string; price: string; ratio: string }>>([])
@@ -370,6 +373,12 @@ export function LogicVisualizationView() {
       unitPriceByPrefecture,
     }
   }, [mmPrefRows, mmBaseUnitPrice, mmDistanceStepKm, mmDistanceStepCost, mmUnitPriceDivisor, mmFallbackUnitPrice])
+
+  // フィットネスマシン費（入力欄 J8 = 坪単価 × 有効坪数。単価は都道府県別、直営は割り戻し）
+  const [fmDirectDivisor, setFmDirectDivisor] = useState("")
+  const [fmFallbackUnitPrice, setFmFallbackUnitPrice] = useState("")
+  // 都道府県別 坪単価（FC満額）。直営単価はプレビュー列で 満額 ÷ 割り戻し係数 を表示
+  const [fmPrefRows, setFmPrefRows] = useState<Array<{ key: string; unitPrice: string }>>([])
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
@@ -482,6 +491,23 @@ export function LogicVisualizationView() {
     )
   }
 
+  function syncFitnessMachineParams(params: CalcParameterConfig) {
+    // 旧レコードに fitnessMachine が無い場合は既定値（アプリ内蔵の都道府県別料金表）で補完
+    const fm = params.fitnessMachine ?? DEFAULT_CALC_PARAMS.fitnessMachine
+    setFmDirectDivisor(String(fm.directDivisor ?? ""))
+    setFmFallbackUnitPrice(String(fm.fallbackUnitPrice ?? ""))
+    const priceMap = fm.unitPriceByPrefecture ?? {}
+    // 47都道府県の並び（北→南）で列挙し、料金表に独自キーがあれば末尾へ併合
+    const orderedKeys = PREFECTURE_FULL_NAMES.map(toPrefectureKey)
+    const extraKeys = Object.keys(priceMap).filter((key) => !orderedKeys.includes(key))
+    setFmPrefRows(
+      [...orderedKeys, ...extraKeys].map((key) => ({
+        key,
+        unitPrice: priceMap[key] != null ? String(priceMap[key]) : "",
+      })),
+    )
+  }
+
   function syncAllParams(params: CalcParameterConfig) {
     syncFeeParams(params)
     syncCompetitorParams(params)
@@ -492,6 +518,7 @@ export function LogicVisualizationView() {
     syncScenarioParams(params)
     syncOtherParams(params)
     syncMachineMaintenanceParams(params)
+    syncFitnessMachineParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -1043,6 +1070,51 @@ export function LogicVisualizationView() {
       setIsSavingStepMM,
       "マシンメンテナンス費を保存しました。",
       syncMachineMaintenanceParams,
+    )
+  }
+
+  async function saveFitnessMachineParams() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const divisor = parseRequiredNumber(fmDirectDivisor)
+    if (divisor === null || divisor < 1) {
+      toast.error("直営の割り戻し係数は 1 以上で入力してください。")
+      return
+    }
+    const fallback = parseRequiredNumber(fmFallbackUnitPrice)
+    if (fallback === null || fallback < 0) {
+      toast.error("都道府県不明時の坪単価は 0 以上で入力してください。")
+      return
+    }
+    const unitPriceByPrefecture: Record<string, number> = {}
+    for (const row of fmPrefRows) {
+      const raw = row.unitPrice.trim()
+      if (raw === "") continue // 空欄の県はフォールバック単価を使う
+      const price = Number(raw)
+      if (!Number.isFinite(price) || price < 0) {
+        toast.error(`${row.key} の坪単価は 0 以上の数値で入力してください。`)
+        return
+      }
+      unitPriceByPrefecture[row.key] = Math.round(price)
+    }
+    if (Object.keys(unitPriceByPrefecture).length === 0) {
+      toast.error("坪単価を 1 県以上設定してください。")
+      return
+    }
+    await persistParams(
+      {
+        fitnessMachine: {
+          ...(calcParams.fitnessMachine ?? DEFAULT_CALC_PARAMS.fitnessMachine),
+          directDivisor: divisor,
+          fallbackUnitPrice: Math.round(fallback),
+          unitPriceByPrefecture,
+        },
+      },
+      setIsSavingStepFM,
+      "フィットネスマシン費を保存しました。",
+      syncFitnessMachineParams,
     )
   }
 
@@ -1902,6 +1974,81 @@ export function LogicVisualizationView() {
           <Button onClick={saveMachineMaintenanceParams} disabled={isSavingStepMM} size="sm" className="gap-1.5">
             <SaveIcon className="size-3.5" />
             {isSavingStepMM ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* フィットネスマシン費（入力欄 J8 = 坪単価 × 有効坪数） */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+        <SectionHeader
+          icon={DumbbellIcon}
+          title="フィットネスマシン費"
+          description="取得額 = 都道府県別の坪単価 × 有効坪数（床面積 − ゴルフ打席の占有坪）。直営（ロイヤリティ0）は坪単価を割り戻し（既定: 半額）、FC（10/15%）は満額。投資コストに計上されます。"
+          accent="chart-1"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">直営の割り戻し係数（直営単価 = 満額 ÷ 係数）</Label>
+            <SuffixedInput id="fmDirectDivisor" value={fmDirectDivisor} onChange={setFmDirectDivisor} disabled={isSavingStepFM} suffix="で割る" inputMode="decimal" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">都道府県不明時の坪単価（FC満額ベース）</Label>
+            <SuffixedInput id="fmFallbackUnitPrice" value={fmFallbackUnitPrice} onChange={setFmFallbackUnitPrice} disabled={isSavingStepFM} suffix="円/坪" inputMode="numeric" />
+          </div>
+        </div>
+
+        {/* 都道府県別 坪単価表（入力欄 料金表の最右列） */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium">都道府県別 坪単価表（入力欄 料金表の最右列＝FC満額）</Label>
+          <div className="max-h-96 overflow-y-auto rounded-lg border border-border/60">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="text-xs">都道府県</TableHead>
+                  <TableHead className="text-xs">坪単価（FC満額）</TableHead>
+                  <TableHead className="text-right text-xs">直営単価（÷係数）</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {fmPrefRows.map((row, index) => {
+                  const updateRow = (value: string) =>
+                    setFmPrefRows((prev) => prev.map((r, i) => (i === index ? { ...r, unitPrice: value } : r)))
+                  const divisorValue = Math.max(1, Number(fmDirectDivisor) || 2)
+                  const raw = row.unitPrice.trim()
+                  const fullPrice = raw !== "" && Number.isFinite(Number(raw))
+                    ? Number(raw)
+                    : Math.max(0, Number(fmFallbackUnitPrice) || 0)
+                  const isFallback = raw === ""
+                  return (
+                    <TableRow key={row.key}>
+                      <TableCell className="text-xs font-medium whitespace-nowrap">{row.key}</TableCell>
+                      <TableCell>
+                        <SuffixedInput id={`fmPref-price-${row.key}`} value={row.unitPrice} onChange={updateRow} disabled={isSavingStepFM} suffix="円/坪" inputMode="numeric" placeholder="（不明時単価）" />
+                      </TableCell>
+                      <TableCell className="text-right text-xs tabular-nums whitespace-nowrap">
+                        ¥{formatThousands(String(Math.round(fullPrice / divisorValue)))}
+                        <span className={`ml-1.5 text-[10px] ${isFallback ? "text-chart-1" : "text-muted-foreground"}`}>
+                          {isFallback ? "不明時" : "直営"}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 都道府県は試算画面の住所（都道府県名の前方一致）から判定します。空欄の県は「不明時の坪単価」を使用します。<br />
+          ※ 有効坪数 = 床面積 − ゴルフ打席の占有坪（右打席7坪/台・両打席9坪/台。投資マスタの「占有坪」設定に連動）。<br />
+          ※ 元Excel検算: 愛知150,000円/坪 ÷2（直営）× 50坪 = ¥3,750,000（入力欄 表示値と一致）。<br />
+          ※ 償却年は「減価償却・税・入金サイクル」セクションのフィットネスマシン（既定6年）で管理します。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveFitnessMachineParams} disabled={isSavingStepFM} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStepFM ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>

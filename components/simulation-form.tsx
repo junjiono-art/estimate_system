@@ -36,7 +36,7 @@ import {
   FITNESS_MACHINE_DEPRECIATION_YEARS,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
-import type { CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
+import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, LocationType, MasterValue } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import {
@@ -220,6 +220,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const [isMachineMaintenanceManual, setIsMachineMaintenanceManual] = useState(false)
   const [machineMaintenanceConfig, setMachineMaintenanceConfig] =
     useState<CalcMachineMaintenanceConfig>(DEFAULT_CALC_PARAMS.machineMaintenance)
+  // フィットネスマシン費の単価表（都道府県別坪単価・直営割り戻し）。マスタ管理＞ロジック可視化で編集可能
+  const [fitnessMachineConfig, setFitnessMachineConfig] =
+    useState<CalcFitnessMachineConfig>(DEFAULT_CALC_PARAMS.fitnessMachine)
 
   // 途中保存（下書き）。draftToRestore があれば復元バナーを出し、決定するまで自動保存しない。
   const [draftToRestore, setDraftToRestore] = useState<FormDraft | null>(null)
@@ -395,7 +398,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // 単価はアプリ側の都道府県別料金表から算出する（直営=半額／FC=満額。doc/計算系統・定数込み.md）。
     // 元Excel J8式（=有効坪数×単価）を一般化: 有効坪数 = 床面積 − Σ(投資費目の数量 × 占有坪/単位)。
     // ゴルフ右打席=7坪/台・両打席=9坪/台は投資マスタの tsuboPerUnit として表現する。
-    const unitPrice = getFitnessMachineUnitPriceByAddressAndRoyalty(currentAddress, numericRoyaltyRate)
+    const unitPrice = getFitnessMachineUnitPriceByAddressAndRoyalty(currentAddress, numericRoyaltyRate, fitnessMachineConfig)
     const floorAreaTsubo = Math.max(0, parseFloat(currentFloorArea) || 0)
     const effectiveTsubo = Math.max(0, floorAreaTsubo - Math.max(0, tsuboReduction))
     return Math.max(0, Math.round(unitPrice * effectiveTsubo))
@@ -473,7 +476,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     void loadMasterDefaults()
   }, [])
 
-  // マシンメンテナンス費の自動算出に使うパラメータ（実施間隔・単価表等）を取得
+  // マシンメンテナンス費・フィットネスマシン費の自動算出に使うパラメータ（実施間隔・単価表等）を取得
   useEffect(() => {
     let disposed = false
     void (async () => {
@@ -482,6 +485,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         const payload = await response.json().catch(() => null)
         const config = payload?.params?.machineMaintenance as CalcMachineMaintenanceConfig | undefined
         if (!disposed && config) setMachineMaintenanceConfig(config)
+        const fmConfig = payload?.params?.fitnessMachine as CalcFitnessMachineConfig | undefined
+        if (!disposed && fmConfig) setFitnessMachineConfig(fmConfig)
       } catch {
         // 取得失敗時は既定パラメータ（DEFAULT_CALC_PARAMS）で算出する
       }
@@ -537,7 +542,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
     const fitnessMachineCostByAddress = getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, investmentTsuboReduction)
     setInvestmentValues((prev) => ({ ...prev, fitnessMachineCost: String(fitnessMachineCostByAddress) }))
-  }, [address, floorArea, investmentTsuboReduction, isFitnessMachineCostManual, royaltyRate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, floorArea, investmentTsuboReduction, isFitnessMachineCostManual, royaltyRate, fitnessMachineConfig])
 
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {

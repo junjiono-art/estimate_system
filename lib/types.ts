@@ -562,6 +562,21 @@ export interface CalcMachineMaintenanceConfig {
   tsuboTiers: CalcMachineMaintenanceTsuboTier[]
 }
 
+/**
+ * フィットネスマシン費（投資コスト。入力欄 J8 = 坪単価 × 有効坪数）。
+ * 坪単価は都道府県別料金表（入力欄 料金表の最右列）を参照し、
+ * 直営（ロイヤリティ=0）は参照値を directDivisor で割り戻す（既定: 半額）。FCは満額。
+ * 有効坪数 = 床面積 − ゴルフ打席の占有坪（右7坪/台・両9坪/台。投資マスタ tsuboPerUnit）。
+ */
+export interface CalcFitnessMachineConfig {
+  /** 都道府県別の坪あたり単価（FC満額。円/坪） */
+  unitPriceByPrefecture: Record<string, number>
+  /** 直営（ロイヤリティ=0）時の割り戻し係数。直営単価 = 満額 ÷ この値（半額=2） */
+  directDivisor: number
+  /** 住所から都道府県が特定できない場合の坪単価（FC満額ベース） */
+  fallbackUnitPrice: number
+}
+
 export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
@@ -581,6 +596,8 @@ export interface CalcParameterConfig {
   depreciation: CalcDepreciationConfig
   /** マシンメンテナンス費（入力欄 B34） */
   machineMaintenance: CalcMachineMaintenanceConfig
+  /** フィットネスマシン費（投資コスト。入力欄 J8） */
+  fitnessMachine: CalcFitnessMachineConfig
   /** 法人税率 入力欄!C92 */
   corporateTaxRate: number
   /** 入金サイクル(月) 入力欄!C79 */
