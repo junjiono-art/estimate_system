@@ -9,6 +9,13 @@ import type { CalcDeviceCountRule, CalcSecurityConfig } from "@/lib/types"
 /** 投資コスト内訳でALSOK・USEN導入費を表すフィールドID（マスタ investment_security） */
 export const SECURITY_FIELD_ID = "securityCost"
 
+// ── ALSOK・USEN導入費（投資コスト）の費目メタ情報 ──
+// 投資コストはマスタ(DB)駆動だが、マスタに費目が無くてもアプリ側で常に項目を供給するための定数。
+// 実額は坪数×計算パラメータ（CalcSecurityConfig）から算出するため、マスタの登録金額には依存しない。
+export const SECURITY_CODE = "investment_security"
+export const SECURITY_LABEL = "ALSOK/USEN導入費"
+export const SECURITY_UNIT = "円"
+
 /**
  * 機器台数の階段式（入力欄 D26/D28 の ROUNDUP を移植）。
  *   台数 = ROUNDUP(基準台数 + (坪数 − 基準坪数) ÷ 坪刻み, 0)

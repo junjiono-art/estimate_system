@@ -36,7 +36,13 @@ import {
   FITNESS_MACHINE_DEPRECIATION_YEARS,
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
-import { computeSecurityIntroCost, SECURITY_FIELD_ID } from "@/lib/security-cost"
+import {
+  computeSecurityIntroCost,
+  SECURITY_CODE,
+  SECURITY_FIELD_ID,
+  SECURITY_LABEL,
+  SECURITY_UNIT,
+} from "@/lib/security-cost"
 import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
@@ -64,6 +70,32 @@ function withFitnessMachineItem(model: MasterFormModel): MasterFormModel {
     depreciationYears: FITNESS_MACHINE_DEPRECIATION_YEARS,
   }
   return { running: model.running, investment: [synthetic, ...model.investment] }
+}
+
+/**
+ * ALSOK・USEN導入費の費目をモデルに必ず含める。
+ * フィットネスマシン費と同様、マスタ(DB)の投資コストに費目が無くてもアプリ側で常に項目を供給する。
+ * 実額は坪数×計算パラメータから別途算出して投入するため、ここでは amount=0 のひな型を足す（非償却）。
+ * 表示位置はマスタ由来の並び（その他の直前）に合わせる。
+ */
+function withSecurityItem(model: MasterFormModel): MasterFormModel {
+  if (model.investment.some((m) => m.fieldId === SECURITY_FIELD_ID)) return model
+  const synthetic: MasterFormItem = {
+    fieldId: SECURITY_FIELD_ID,
+    code: SECURITY_CODE,
+    label: SECURITY_LABEL,
+    unit: SECURITY_UNIT,
+    amount: 0,
+  }
+  const investment = [...model.investment]
+  const otherIndex = investment.findIndex((m) => m.fieldId === "otherInitialCost")
+  investment.splice(otherIndex === -1 ? investment.length : otherIndex, 0, synthetic)
+  return { running: model.running, investment }
+}
+
+/** アプリ側で常時供給する投資費目（フィットネスマシン費・ALSOK・USEN導入費）をモデルへ補完する */
+function withAppManagedInvestmentItems(model: MasterFormModel): MasterFormModel {
+  return withSecurityItem(withFitnessMachineItem(model))
 }
 
 interface SimulationFormProps {
@@ -334,7 +366,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する。
   // 坪連動(perTsubo)のランニングコストは坪数を掛ける前の単価ベース金額を保持する（坪数は下の合計算出で掛ける）。
   const masterModel = useMemo(
-    () => withFitnessMachineItem(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15)),
+    () => withAppManagedInvestmentItems(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15)),
     [masterValues, royaltyRate],
   )
 
@@ -411,7 +443,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // マスタを新規取得したときの初期化（全費目をマスタ基準額へリセット）。手入力の記録もクリアする。
   function applyMasterDefaults(values: MasterValue[], selectedRoyaltyRate: "0" | "10" | "15") {
     const numericRoyaltyRate = parseInt(selectedRoyaltyRate, 10) as 0 | 10 | 15
-    const model = withFitnessMachineItem(resolveMasterFormModel(values, numericRoyaltyRate))
+    const model = withAppManagedInvestmentItems(resolveMasterFormModel(values, numericRoyaltyRate))
     setEditedRunningFields(new Set())
     setEditedInvestmentFields(new Set())
 
@@ -441,12 +473,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         getAddressBasedFitnessMachineCost(selectedRoyaltyRate, address, floorArea, resolveInvestmentTsuboReduction(values)),
       )
     }
-    // ALSOK・USEN導入費もアプリ側で算出した値で上書きする（固定額＋坪数連動の台数×単価、万円切り上げ）
-    if (model.investment.some((m) => m.fieldId === SECURITY_FIELD_ID)) {
-      investmentDefaults[SECURITY_FIELD_ID] = String(
-        computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig),
-      )
-    }
+    // ALSOK・USEN導入費もアプリ側で算出した値で上書きする（固定額＋坪数連動の台数×単価、万円切り上げ）。
+    // 費目枠は withAppManagedInvestmentItems で常時供給されるため、マスタの有無に依存しない。
+    investmentDefaults[SECURITY_FIELD_ID] = String(
+      computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig),
+    )
     setInvestmentValues(investmentDefaults)
     setInvestmentQuantities(investmentQuantityDefaults)
     setIsFitnessMachineCostManual(false)
@@ -510,7 +541,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // 手入力済みの費目・手動上書きフラグは保持する（フィットネスマシン費・マシンメンテナンス費は専用effectでロイヤリティ連動）。
   useEffect(() => {
     if (masterValues.length === 0) return
-    const model = withFitnessMachineItem(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15))
+    const model = withAppManagedInvestmentItems(resolveMasterFormModel(masterValues, parseInt(royaltyRate, 10) as 0 | 10 | 15))
     setRunningValues((prev) => {
       const next = { ...prev }
       model.running.forEach((m) => {
@@ -561,15 +592,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
 
   // ALSOK・USEN導入費（投資）の自動算出値を坪数・パラメータから更新（手動編集時は据え置き）。
   // ロイヤリティ・住所には依存しない（Excel B16 はロイヤリティ非連動）。
+  // 費目枠はアプリ側で常時供給されるため、マスタ(DB)の投資コストに費目が無くても算出・表示される。
   useEffect(() => {
     if (editedInvestmentFields.has(SECURITY_FIELD_ID)) return
-    if (!masterModel.investment.some((m) => m.fieldId === SECURITY_FIELD_ID)) return
     setInvestmentValues((prev) => ({
       ...prev,
       [SECURITY_FIELD_ID]: String(computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig)),
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [floorArea, securityConfig, editedInvestmentFields, masterModel])
+  }, [floorArea, securityConfig, editedInvestmentFields])
 
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {
@@ -789,6 +820,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
             return sum + getAddressBasedFitnessMachineCost(
               String(rate) as "0" | "10" | "15", address, floorArea, investmentTsuboReduction,
             )
+          }
+          // ALSOK・USEN導入費はアプリ側算出（ロイヤリティ非連動）。マスタ基準額との差分方式を使わず入力値をそのまま採用する。
+          if (fieldId === SECURITY_FIELD_ID) {
+            return sum + enteredAmount
           }
           const targetBaseAmount = Number(targetResolvedByField[fieldId] ?? enteredAmount)
           const adjustedAmount = Math.max(0, Math.round(targetBaseAmount + (fieldDeltaById[fieldId] ?? 0)))
