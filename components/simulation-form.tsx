@@ -631,10 +631,11 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     tsuboPerUnit: m.tsuboPerUnit,
   }))
 
-  // フィットネスマシン費は専用の固定枠として描画するため、動的一覧（ページネーション対象）からは除外する。
+  // フィットネスマシン費・ALSOK・USEN導入費は専用の固定枠として描画するため、動的一覧（ページネーション対象）からは除外する。
   // ※ 合計・investmentByField の算出には引き続き COST_ITEMS（全件）を使うため、値は試算に反映される。
   const fitnessMachineItem = masterModel.investment.find((m) => m.fieldId === "fitnessMachineCost")
-  const costDisplayItems = COST_ITEMS.filter((item) => item.id !== "fitnessMachineCost")
+  const securityItem = masterModel.investment.find((m) => m.fieldId === SECURITY_FIELD_ID)
+  const costDisplayItems = COST_ITEMS.filter((item) => item.id !== "fitnessMachineCost" && item.id !== SECURITY_FIELD_ID)
 
   const rcTotalPages   = Math.ceil(RC_ITEMS.length   / PAGE_SIZE)
   const costTotalPages = Math.ceil(costDisplayItems.length / PAGE_SIZE)
@@ -673,15 +674,16 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // ランニングコストタブ右上に表示する金額（家賃 ＋ ランニング費 ＋ マシンメンテ費）
   const runningCostTotalWithRent = rentValue + runningEffectiveTotal + machineMaintenanceValue
 
-  // 投資費目の数量基準セット（fitnessMachineCost は専用固定枠なので除外＝常に取得額そのまま）。
+  // 投資費目の数量基準セット（fitnessMachineCost / securityCost は専用固定枠なので除外＝常に取得額そのまま）。
+  const isAppFixedInvestmentField = (fieldId: string) => fieldId === "fitnessMachineCost" || fieldId === SECURITY_FIELD_ID
   const investmentPerTsuboFieldIds = new Set(
-    masterModel.investment.filter((m) => m.quantityBasis === "perTsubo" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+    masterModel.investment.filter((m) => m.quantityBasis === "perTsubo" && !isAppFixedInvestmentField(m.fieldId)).map((m) => m.fieldId),
   )
   const investmentFixedFieldIds = new Set(
-    masterModel.investment.filter((m) => m.quantityBasis === "fixed" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+    masterModel.investment.filter((m) => m.quantityBasis === "fixed" && !isAppFixedInvestmentField(m.fieldId)).map((m) => m.fieldId),
   )
   const investmentPerOccupancyFieldIds = new Set(
-    masterModel.investment.filter((m) => m.quantityBasis === "perOccupancy" && m.fieldId !== "fitnessMachineCost").map((m) => m.fieldId),
+    masterModel.investment.filter((m) => m.quantityBasis === "perOccupancy" && !isAppFixedInvestmentField(m.fieldId)).map((m) => m.fieldId),
   )
   // 投資費目の実効取得額: fixed=単価×数量, perTsubo=単価×床面積×数量, perOccupancy=単価×占有坪数×数量, それ以外=入力値そのまま。
   const investmentEffectiveByField: Record<string, number> = Object.fromEntries(
@@ -1309,6 +1311,51 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                             setInvestmentValues((prev) => ({
                               ...prev,
                               fitnessMachineCost: String(getAddressBasedFitnessMachineCost(royaltyRate, address, floorArea, investmentTsuboReduction)),
+                            }))
+                          }}
+                        >
+                          自動に戻す
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 固定枠：ALSOK・USEN導入費（投資コスト） */}
+              {securityItem && (
+                <div className="rounded-lg border border-chart-4/40 bg-chart-4/5 p-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <Label htmlFor={SECURITY_FIELD_ID} className="text-xs font-semibold">
+                        {`${securityItem.label}（${securityItem.unit || "円"}）`}
+                      </Label>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">
+                        固定額（Wifi・スピーカー・ALSOK等）＋坪数連動の機器台数×単価から自動算出（万円切り上げ）。手動で変更できます。
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AmountInput
+                        id={SECURITY_FIELD_ID}
+                        className="w-40"
+                        value={investmentValues[SECURITY_FIELD_ID] ?? ""}
+                        onValueChange={(raw) => handleInvestmentCostChange(SECURITY_FIELD_ID, raw)}
+                      />
+                      {editedInvestmentFields.has(SECURITY_FIELD_ID) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-[10px]"
+                          onClick={() => {
+                            setEditedInvestmentFields((prev) => {
+                              const next = new Set(prev)
+                              next.delete(SECURITY_FIELD_ID)
+                              return next
+                            })
+                            setInvestmentValues((prev) => ({
+                              ...prev,
+                              [SECURITY_FIELD_ID]: String(computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig)),
                             }))
                           }}
                         >
