@@ -16,6 +16,18 @@ export const SECURITY_CODE = "investment_security"
 export const SECURITY_LABEL = "ALSOK/USEN導入費"
 export const SECURITY_UNIT = "円"
 
+// ── 防犯カメラ(USEN)・モニター(USEN)（ランニングコスト。元Excel R26/R28）──
+// 月額 = 単価 × 台数。台数（D26/D28）は投資側ALSOK・USEN導入費のカメラ/サイネージ台数式と共有のため、
+// マスタの数量×単価ではカバーできず、アプリ側の固定枠として坪数から自動算出する。
+export const SECURITY_CAMERA_RUNNING_FIELD_ID = "rcSecurityCamera"
+export const SECURITY_CAMERA_RUNNING_LABEL = "防犯カメラ(USEN)"
+export const SECURITY_MONITOR_RUNNING_FIELD_ID = "rcSecurityMonitor"
+export const SECURITY_MONITOR_RUNNING_LABEL = "モニター(USEN)"
+export const SECURITY_RUNNING_UNIT = "円/月"
+/** 月額単価の既定値（元Excel R26/R28: 2,500円/台/月） */
+export const SECURITY_CAMERA_MONTHLY_UNIT_PRICE = 2_500
+export const SECURITY_MONITOR_MONTHLY_UNIT_PRICE = 2_500
+
 /**
  * 機器台数の階段式（入力欄 D26/D28 の ROUNDUP を移植）。
  *   台数 = ROUNDUP(基準台数 + (坪数 − 基準坪数) ÷ 坪刻み, 0)

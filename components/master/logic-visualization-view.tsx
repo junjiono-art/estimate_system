@@ -2280,7 +2280,7 @@ export function LogicVisualizationView() {
 
         <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
           ※ 元Excel検算: 50坪 → 固定346,000 ＋ カメラ5台×110,000 ＋ サイネージ4台×170,000 ＝ 1,576,000 → 万円切り上げ ¥1,580,000。<br />
-          ※ この台数（入力欄 D26/D28）は、ランニングコストの「防犯カメラ(USEN)」「モニター(USEN)」の月額台数と共有です。ランニング側マスタの数量は自動連動しないため、上のプレビュー台数を参考に合わせて更新してください。<br />
+          ※ この台数（入力欄 D26/D28）は、ランニングコストの「防犯カメラ(USEN)」「モニター(USEN)」の月額台数と共有です。新規試算のランニングコストタブでは、この台数式から坪数連動で自動算出されます（単価は試算画面で変更可）。<br />
           ※ Excel の光回線 21,000（M12）は SUM 範囲外のため既定では含めていません。含める場合は固定額の内訳に加算してください。
         </div>
         <div className="flex justify-end border-t border-border/50 pt-4">

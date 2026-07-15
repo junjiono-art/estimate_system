@@ -37,10 +37,18 @@ import {
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import {
+  computeDeviceCount,
   computeSecurityIntroCost,
+  SECURITY_CAMERA_MONTHLY_UNIT_PRICE,
+  SECURITY_CAMERA_RUNNING_FIELD_ID,
+  SECURITY_CAMERA_RUNNING_LABEL,
   SECURITY_CODE,
   SECURITY_FIELD_ID,
   SECURITY_LABEL,
+  SECURITY_MONITOR_MONTHLY_UNIT_PRICE,
+  SECURITY_MONITOR_RUNNING_FIELD_ID,
+  SECURITY_MONITOR_RUNNING_LABEL,
+  SECURITY_RUNNING_UNIT,
   SECURITY_UNIT,
 } from "@/lib/security-cost"
 import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue } from "@/lib/types"
@@ -199,6 +207,9 @@ type FormDraft = {
   machineMaintenanceCost: string
   isMachineMaintenanceManual: boolean
   isFitnessMachineCostManual: boolean
+  /** 防犯カメラ(USEN)・モニター(USEN)（固定枠）の月額単価。旧下書きには無いため省略可 */
+  securityCameraUnitPrice?: string
+  securityMonitorUnitPrice?: string
 }
 
 function formatDraftTime(iso: string): string {
@@ -259,6 +270,10 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // ALSOK・USEN導入費のパラメータ（固定額内訳＋カメラ/サイネージの台数式）。マスタ管理＞ロジック可視化で編集可能
   const [securityConfig, setSecurityConfig] =
     useState<CalcSecurityConfig>(DEFAULT_CALC_PARAMS.security)
+  // 防犯カメラ(USEN)・モニター(USEN)（ランニングコスト固定枠）の月額単価。
+  // 台数は坪数から自動算出（投資側ALSOK・USEN導入費のカメラ/サイネージ台数式と共有）のため、単価のみ入力を持つ。
+  const [securityCameraUnitPrice, setSecurityCameraUnitPrice] = useState(String(SECURITY_CAMERA_MONTHLY_UNIT_PRICE))
+  const [securityMonitorUnitPrice, setSecurityMonitorUnitPrice] = useState(String(SECURITY_MONITOR_MONTHLY_UNIT_PRICE))
 
   // 途中保存（下書き）。draftToRestore があれば復元バナーを出し、決定するまで自動保存しない。
   const [draftToRestore, setDraftToRestore] = useState<FormDraft | null>(null)
@@ -311,6 +326,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     setMachineMaintenanceCost(d.machineMaintenanceCost ?? "")
     setIsMachineMaintenanceManual(Boolean(d.isMachineMaintenanceManual))
     setIsFitnessMachineCostManual(Boolean(d.isFitnessMachineCostManual))
+    setSecurityCameraUnitPrice(d.securityCameraUnitPrice ?? String(SECURITY_CAMERA_MONTHLY_UNIT_PRICE))
+    setSecurityMonitorUnitPrice(d.securityMonitorUnitPrice ?? String(SECURITY_MONITOR_MONTHLY_UNIT_PRICE))
     setAutoSavedAt(d.savedAt)
     setDraftToRestore(null)
   }
@@ -346,6 +363,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           machineMaintenanceCost,
           isMachineMaintenanceManual,
           isFitnessMachineCostManual,
+          securityCameraUnitPrice,
+          securityMonitorUnitPrice,
         }
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
         setAutoSavedAt(draft.savedAt)
@@ -361,6 +380,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     runningValues, runningQuantities, investmentValues, investmentQuantities,
     editedRunningFields, editedInvestmentFields,
     machineMaintenanceCost, isMachineMaintenanceManual, isFitnessMachineCostManual,
+    securityCameraUnitPrice, securityMonitorUnitPrice,
   ])
 
   // マスタ値＋ロイヤリティ率から、試算画面に表示する費目モデルを生成する。
@@ -486,6 +506,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
       getAutoMachineMaintenanceCost(address, floorArea, selectedRoyaltyRate, machineMaintenanceConfig),
     ))
     setIsMachineMaintenanceManual(false)
+    // 防犯カメラ(USEN)・モニター(USEN)（固定枠）の単価も既定値へリセット（台数は坪数から常時自動算出）
+    setSecurityCameraUnitPrice(String(SECURITY_CAMERA_MONTHLY_UNIT_PRICE))
+    setSecurityMonitorUnitPrice(String(SECURITY_MONITOR_MONTHLY_UNIT_PRICE))
   }
 
   async function loadMasterDefaults() {
@@ -652,21 +675,32 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const fixedFieldIds = new Set(
     masterModel.running.filter((m) => m.quantityBasis === "fixed").map((m) => m.fieldId),
   )
-  const runningEffectiveByField: Record<string, number> = Object.fromEntries(
-    RC_ITEMS.map((item) => {
-      const raw = Math.max(0, parseInt(item.value) || 0)
-      const qty = Math.max(0, parseInt(runningQuantities[item.id]) || 0)
-      let effective = raw
-      if (perTsuboFieldIds.has(item.id)) {
-        // 坪数×単価×数量
-        effective = raw * floorAreaTsubo * qty
-      } else if (fixedFieldIds.has(item.id)) {
-        // 単価×数量
-        effective = raw * qty
-      }
-      return [item.id, Math.round(effective)]
-    }),
-  )
+  // 防犯カメラ(USEN)・モニター(USEN)（固定枠）: 台数は投資側ALSOK・USEN導入費のカメラ/サイネージ台数式（坪数連動）と共有。
+  // 月額 = 単価（入力値） × 台数（自動算出）。
+  const securityCameraCount = computeDeviceCount(floorAreaTsubo, securityConfig.cameraCountRule)
+  const securityMonitorCount = computeDeviceCount(floorAreaTsubo, securityConfig.monitorCountRule)
+  const securityCameraMonthly = Math.round(Math.max(0, parseInt(securityCameraUnitPrice) || 0) * securityCameraCount)
+  const securityMonitorMonthly = Math.round(Math.max(0, parseInt(securityMonitorUnitPrice) || 0) * securityMonitorCount)
+  const runningEffectiveByField: Record<string, number> = {
+    ...Object.fromEntries(
+      RC_ITEMS.map((item) => {
+        const raw = Math.max(0, parseInt(item.value) || 0)
+        const qty = Math.max(0, parseInt(runningQuantities[item.id]) || 0)
+        let effective = raw
+        if (perTsuboFieldIds.has(item.id)) {
+          // 坪数×単価×数量
+          effective = raw * floorAreaTsubo * qty
+        } else if (fixedFieldIds.has(item.id)) {
+          // 単価×数量
+          effective = raw * qty
+        }
+        return [item.id, Math.round(effective)]
+      }),
+    ),
+    // 固定枠の防犯カメラ/モニターも費目別内訳・合計に含める（マスタ非依存）
+    [SECURITY_CAMERA_RUNNING_FIELD_ID]: securityCameraMonthly,
+    [SECURITY_MONITOR_RUNNING_FIELD_ID]: securityMonitorMonthly,
+  }
   // 試算に渡すランニングコスト総額（坪数換算後・家賃/マシンメンテ費は含めない）
   const runningEffectiveTotal = Object.values(runningEffectiveByField).reduce((acc, v) => acc + v, 0)
   // マシンメンテナンス費（固定枠）の月額。total には含めず別枠で渡す（calc-engine 側で加算）。
@@ -854,11 +888,24 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         runningCosts: {
           // 坪数依存の費目は坪数換算後の実コストを渡す（試算側は坪数を掛けた後を使用）
           byField: runningEffectiveByField,
-          items: RC_ITEMS.map((item) => ({
-            id: item.id,
-            label: item.label,
-            monthlyAmount: runningEffectiveByField[item.id] ?? 0,
-          })),
+          items: [
+            ...RC_ITEMS.map((item) => ({
+              id: item.id,
+              label: item.label,
+              monthlyAmount: runningEffectiveByField[item.id] ?? 0,
+            })),
+            // 固定枠の防犯カメラ(USEN)・モニター(USEN)（台数は坪数から自動算出）
+            {
+              id: SECURITY_CAMERA_RUNNING_FIELD_ID,
+              label: `${SECURITY_CAMERA_RUNNING_LABEL}（${SECURITY_RUNNING_UNIT}）`,
+              monthlyAmount: securityCameraMonthly,
+            },
+            {
+              id: SECURITY_MONITOR_RUNNING_FIELD_ID,
+              label: `${SECURITY_MONITOR_RUNNING_LABEL}（${SECURITY_RUNNING_UNIT}）`,
+              monthlyAmount: securityMonitorMonthly,
+            },
+          ],
           total: runningEffectiveTotal,
           machineMaintenance: machineMaintenanceValue,
         },
@@ -1175,6 +1222,53 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                     </Button>
                   </div>
                 </div>
+              </div>
+
+              {/* 固定枠：防犯カメラ(USEN)・モニター(USEN)（ランニングコスト）。台数は投資側ALSOK・USEN導入費の台数式（坪数連動）と共有 */}
+              <div className="flex flex-col gap-3 rounded-lg border border-chart-4/40 bg-chart-4/5 p-3">
+                {[
+                  {
+                    id: SECURITY_CAMERA_RUNNING_FIELD_ID,
+                    label: SECURITY_CAMERA_RUNNING_LABEL,
+                    note: "台数はALSOK・USEN導入費のカメラ台数式（坪数連動）と共通です。",
+                    unitPrice: securityCameraUnitPrice,
+                    setUnitPrice: setSecurityCameraUnitPrice,
+                    count: securityCameraCount,
+                    monthly: securityCameraMonthly,
+                  },
+                  {
+                    id: SECURITY_MONITOR_RUNNING_FIELD_ID,
+                    label: SECURITY_MONITOR_RUNNING_LABEL,
+                    note: "台数はALSOK・USEN導入費のサイネージ台数式（坪数連動）と共通です。",
+                    unitPrice: securityMonitorUnitPrice,
+                    setUnitPrice: setSecurityMonitorUnitPrice,
+                    count: securityMonitorCount,
+                    monthly: securityMonitorMonthly,
+                  },
+                ].map((row) => (
+                  <div key={row.id} className="flex items-end justify-between gap-3">
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <Label htmlFor={row.id} className="text-xs font-semibold">
+                        {`${row.label}（${SECURITY_RUNNING_UNIT}）`}
+                      </Label>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">{row.note}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex w-28 flex-col gap-0.5">
+                        <span className="text-[10px] text-muted-foreground">単価（円/台）</span>
+                        <AmountInput
+                          id={row.id}
+                          value={row.unitPrice}
+                          onValueChange={(raw) => row.setUnitPrice(raw)}
+                        />
+                      </div>
+                      <span className="self-end pb-2 text-xs text-muted-foreground">× {row.count}台</span>
+                      <span className="self-end pb-2 font-mono text-xs">
+                        = {row.monthly.toLocaleString()} 円/月
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
