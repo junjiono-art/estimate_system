@@ -38,6 +38,7 @@ import {
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import {
   computeDeviceCount,
+  computeSecurityIntroBreakdown,
   computeSecurityIntroCost,
   SECURITY_CAMERA_MONTHLY_UNIT_PRICE,
   SECURITY_CAMERA_RUNNING_FIELD_ID,
@@ -51,7 +52,7 @@ import {
   SECURITY_RUNNING_UNIT,
   SECURITY_UNIT,
 } from "@/lib/security-cost"
-import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue } from "@/lib/types"
+import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue, SecurityIntroBreakdown } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import {
@@ -138,6 +139,8 @@ export type FormSubmitData = {
     byRoyaltyRate: Record<"0" | "10" | "15", number>
     /** 投資項目別の償却年（フィールドID → 償却年）。マスタ登録値。減価償却の算出に使用 */
     depreciationYearsByField: Record<string, number>
+    /** ALSOK・USEN導入費の内訳（結果画面の初期投資明細で表示。坪数×パラメータから算出） */
+    securityIntroBreakdown?: SecurityIntroBreakdown
   }
   demographics?: {
     municipality: {
@@ -914,6 +917,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           total: totalInitialCost,
           byRoyaltyRate: investmentByRoyaltyRate,
           depreciationYearsByField,
+          // 結果画面の初期投資明細に表示する内訳。手動修正時は total と入力値が一致しない（表示側で注記）
+          securityIntroBreakdown: computeSecurityIntroBreakdown(floorAreaTsubo, securityConfig) ?? undefined,
         },
         demographics,
         demographicsError,

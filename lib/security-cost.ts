@@ -1,4 +1,4 @@
-import type { CalcDeviceCountRule, CalcSecurityConfig } from "@/lib/types"
+import type { CalcDeviceCountRule, CalcSecurityConfig, SecurityIntroBreakdown } from "@/lib/types"
 
 // ── ALSOK・USEN導入費（投資コスト。元Excel 入力欄 B16/J16）──
 // J16 = ROUNDUP(SUM(M13:M17), -4)
@@ -44,22 +44,33 @@ export function computeDeviceCount(floorAreaTsubo: number, rule: CalcDeviceCount
 }
 
 /**
- * ALSOK・USEN導入費（投資コスト）を算出する（入力欄 J16 を移植）。
+ * ALSOK・USEN導入費の内訳を算出する（入力欄 L13:M17/J16 を移植）。
  *   取得額 = ROUNDUP( 固定額合計 + カメラ単価×台数 + サイネージ単価×台数, 丸め単位 )
  * 検算: 50坪 → 346,000 + 110,000×5 + 170,000×4 = 1,576,000 → 万円切り上げ 1,580,000（Excel一致）
  */
-export function computeSecurityIntroCost(floorAreaTsubo: number, config: CalcSecurityConfig | undefined): number {
-  if (!config) return 0
-  const fixedTotal = (config.fixedItems ?? []).reduce(
-    (sum, item) => sum + Math.max(0, Number(item?.amount) || 0),
-    0,
-  )
+export function computeSecurityIntroBreakdown(
+  floorAreaTsubo: number,
+  config: CalcSecurityConfig | undefined,
+): SecurityIntroBreakdown | null {
+  if (!config) return null
+  const fixedItems = (config.fixedItems ?? []).map((item) => ({
+    label: String(item?.label ?? ""),
+    amount: Math.max(0, Number(item?.amount) || 0),
+  }))
+  const fixedTotal = fixedItems.reduce((sum, item) => sum + item.amount, 0)
   const cameraCount = computeDeviceCount(floorAreaTsubo, config.cameraCountRule)
   const monitorCount = computeDeviceCount(floorAreaTsubo, config.monitorCountRule)
-  const total =
-    fixedTotal +
-    cameraCount * Math.max(0, Number(config.cameraUnitPrice) || 0) +
-    monitorCount * Math.max(0, Number(config.monitorUnitPrice) || 0)
-  const unit = Math.max(1, Math.round(Number(config.roundUpUnit) || 1))
-  return Math.ceil(total / unit) * unit
+  const cameraUnitPrice = Math.max(0, Number(config.cameraUnitPrice) || 0)
+  const monitorUnitPrice = Math.max(0, Number(config.monitorUnitPrice) || 0)
+  const camera = { count: cameraCount, unitPrice: cameraUnitPrice, amount: cameraCount * cameraUnitPrice }
+  const monitor = { count: monitorCount, unitPrice: monitorUnitPrice, amount: monitorCount * monitorUnitPrice }
+  const subtotal = fixedTotal + camera.amount + monitor.amount
+  const roundUpUnit = Math.max(1, Math.round(Number(config.roundUpUnit) || 1))
+  const total = Math.ceil(subtotal / roundUpUnit) * roundUpUnit
+  return { fixedItems, camera, monitor, subtotal, roundUpUnit, total }
+}
+
+/** ALSOK・USEN導入費（投資コスト）の取得額（切り上げ後合計）を算出する（入力欄 J16） */
+export function computeSecurityIntroCost(floorAreaTsubo: number, config: CalcSecurityConfig | undefined): number {
+  return computeSecurityIntroBreakdown(floorAreaTsubo, config)?.total ?? 0
 }

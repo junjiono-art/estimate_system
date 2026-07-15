@@ -381,6 +381,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     ...activeBaseData,
     scenario,
     franchiseRate: parseInt(franchiseRate) || 0,
+    // ALSOK・USEN導入費の内訳（初期投資明細の表示用）。シナリオ再計算のサーバ応答には含まれないため、
+    // リクエスト側（試算実行時に算出した内訳）から補完する。
+    securityIntroBreakdown: activeBaseData.securityIntroBreakdown ?? simulationRequest?.securityIntroBreakdown,
   }
 
   const filteredData: SimulationResult = {
@@ -421,6 +424,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           initialInvestmentTotal: simulationRequest?.initialInvestmentTotal,
           initialInvestmentByRoyaltyRate: simulationRequest?.initialInvestmentByRoyaltyRate,
           investmentBreakdown: simulationRequest?.investmentBreakdown ?? currentData.investmentBreakdown,
+          securityIntroBreakdown: simulationRequest?.securityIntroBreakdown ?? currentData.securityIntroBreakdown,
           populationByRadius: simulationRequest?.populationByRadius,
           includeDepreciation,
         },

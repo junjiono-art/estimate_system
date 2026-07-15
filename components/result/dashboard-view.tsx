@@ -169,17 +169,51 @@ export function DashboardView({ data }: DashboardViewProps) {
               const items = breakdown
                 ? Object.entries(breakdown)
                     .filter(([, v]) => v > 0)
-                    .map(([k, v]) => ({ label: INVESTMENT_LABELS[k] ?? k, value: v }))
+                    .map(([k, v]) => ({ key: k, label: INVESTMENT_LABELS[k] ?? k, value: v }))
                 : [
-                    { label: "マシン購入費",   value: data.machinesCost },
-                    { label: "内装工事費",     value: data.interiorCost },
-                    { label: "FC初期費用",     value: data.franchiseInitialCost },
-                    { label: "その他初期費用", value: data.otherInitialCost },
+                    { key: "machinesCost",      label: "マシン購入費",   value: data.machinesCost },
+                    { key: "interiorCost",      label: "内装工事費",     value: data.interiorCost },
+                    { key: "franchiseInitial",  label: "FC初期費用",     value: data.franchiseInitialCost },
+                    { key: "otherInitialCost",  label: "その他初期費用", value: data.otherInitialCost },
                   ]
+              // ALSOK・USEN導入費の内訳（試算実行時の坪数×パラメータから算出）。円単位で表示する。
+              const sec = data.securityIntroBreakdown
+              const yen = (n: number) => `¥${n.toLocaleString()}`
               return items.map((item) => (
-                <div key={item.label} className="flex items-center justify-between border-b border-border/50 px-5 py-2.5 last:border-0">
-                  <span className="text-xs text-foreground">{item.label}</span>
-                  <span className="font-mono text-xs text-muted-foreground">{fmt(item.value)}</span>
+                <div key={item.key} className="border-b border-border/50 last:border-0">
+                  <div className="flex items-center justify-between px-5 py-2.5">
+                    <span className="text-xs text-foreground">{item.label}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{fmt(item.value)}</span>
+                  </div>
+                  {item.key === "securityCost" && sec && (
+                    <div className="flex flex-col gap-1 px-5 pb-2.5 pl-9">
+                      {sec.fixedItems.map((f) => (
+                        <div key={f.label} className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted-foreground">{f.label}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">{yen(f.amount)}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">カメラ {sec.camera.count}台 × {yen(sec.camera.unitPrice)}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{yen(sec.camera.amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">サイネージ {sec.monitor.count}台 × {yen(sec.monitor.unitPrice)}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">{yen(sec.monitor.amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-t border-border/40 pt-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          小計 {yen(sec.subtotal)} → 切り上げ（{sec.roundUpUnit.toLocaleString()}円単位）
+                        </span>
+                        <span className="font-mono text-[10px] font-medium text-foreground">{yen(sec.total)}</span>
+                      </div>
+                      {sec.total !== item.value && (
+                        <span className="text-[10px] text-chart-4">
+                          ※ 金額は試算画面で手動修正されています（上記は自動算出の内訳）
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))
             })()}

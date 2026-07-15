@@ -149,6 +149,8 @@ export interface SimulationRequestInput {
   investmentBreakdown?: Record<string, number>
   /** 投資項目別の耐用年数（フィールドID → 償却年）。マスタ登録値。減価償却の算出に使用 */
   depreciationYearsByField?: Record<string, number>
+  /** ALSOK・USEN導入費の内訳（結果画面の初期投資明細で表示。計算には使用しない） */
+  securityIntroBreakdown?: SecurityIntroBreakdown
 }
 
 export interface AreaDemographics {
@@ -271,6 +273,8 @@ export interface SimulationResult {
   otherInitialCost: number
     /** 投資コスト内訳（フィールドID → 金額）。入力時の値をそのまま保持 */
     investmentBreakdown?: Record<string, number>
+  /** ALSOK・USEN導入費の内訳（初期投資明細の表示用。入力時の坪数×パラメータから算出） */
+  securityIntroBreakdown?: SecurityIntroBreakdown
   // 月間
   monthlyRevenue: number
   monthlyRent: number
@@ -608,6 +612,25 @@ export interface CalcSecurityConfig {
   monitorCountRule: CalcDeviceCountRule
   /** 合計の切り上げ単位（Excel ROUNDUP(M18,-4) → 10,000円） */
   roundUpUnit: number
+}
+
+/**
+ * ALSOK・USEN導入費の内訳（試算結果画面の初期投資明細で表示する。入力欄 L13:M17 相当）。
+ * 試算実行時点の坪数×計算パラメータから算出した明細を保持する。
+ */
+export interface SecurityIntroBreakdown {
+  /** 固定額の内訳（Wifi・スピーカー・ALSOK 等） */
+  fixedItems: Array<{ label: string; amount: number }>
+  /** カメラ（台数×導入単価） */
+  camera: { count: number; unitPrice: number; amount: number }
+  /** サイネージ/モニター（台数×導入単価） */
+  monitor: { count: number; unitPrice: number; amount: number }
+  /** 切り上げ前の合算額（入力欄 M18） */
+  subtotal: number
+  /** 切り上げ単位（10,000円 = 万円切り上げ） */
+  roundUpUnit: number
+  /** 切り上げ後の取得額（入力欄 J16） */
+  total: number
 }
 
 export interface CalcParameterConfig {
