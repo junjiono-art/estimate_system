@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeftIcon, ArrowRightIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, PencilIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { SimulationForm } from "@/components/simulation-form"
-import type { FormSubmitData } from "@/components/simulation-form"
+import { SimulationForm, SIMULATION_TABS } from "@/components/simulation-form"
+import type { FormSubmitData, SimulationTabId } from "@/components/simulation-form"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -102,6 +102,14 @@ export default function NewSimulationPage() {
   const [submittedData, setSubmittedData] = useState<FormSubmitData | null>(null)
   const [resultData, setResultData] = useState<SimulationResult | null>(null)
   const [simulationRequest, setSimulationRequest] = useState<SimulationRequestInput | null>(null)
+  // 入力フォームの表示タブ。結果画面の「編集」ボタンから特定タブへ直接戻すため、ここで保持する（ユーザーfb③）。
+  const [formTab, setFormTab] = useState<SimulationTabId>("store")
+
+  /** 結果画面から入力フォームの指定タブへ戻る */
+  function editInputTab(tab: SimulationTabId) {
+    setFormTab(tab)
+    setShowResult(false)
+  }
 
   // 回帰検証ステータス（開発用）
   const [regressionStatus, setRegressionStatus] = useState<RegressionStatus>("idle")
@@ -257,7 +265,7 @@ export default function NewSimulationPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowResult(false)}
+              onClick={() => editInputTab(formTab)}
               className="gap-1.5 text-xs"
             >
               <ArrowLeftIcon className="size-3.5" />
@@ -280,12 +288,16 @@ export default function NewSimulationPage() {
             <div className="mb-6 flex items-start gap-3 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3">
               <SparklesIcon className="mt-0.5 size-4 shrink-0 text-accent" />
               <p className="text-xs leading-relaxed text-foreground/70">
-                各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。
+                {hasSimulated
+                  ? "条件を修正したら「この条件で再試算する」を押してください。どのタブからでも再試算できます。修正せずに結果へ戻る場合は右上の「試算結果に戻る」から。"
+                  : "各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。"}
               </p>
             </div>
             <SimulationForm
               onSubmitWithData={handleSubmitWithData}
               submitLabel={hasSimulated ? "この条件で再試算する" : undefined}
+              activeTab={formTab}
+              onActiveTabChange={setFormTab}
             />
             {regressionScenarioSummary.length > 0 && (
               <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
@@ -308,6 +320,36 @@ export default function NewSimulationPage() {
 
         {showResult && (
           <div className="mx-auto max-w-6xl px-8 py-7">
+            {/*
+              結果画面から入力画面（特にコスト画面）へ直接戻るための導線（ユーザーfb③）。
+              ヘッダーの「入力条件を編集する」だけでは見落とされやすく、戻り先タブも選べないため、
+              結果本体の直前に各タブへのジャンプボタンを常設する。入力値は保持されたままなので、
+              金額を直して「この条件で再試算する」を押せばそのまま再計算できる。
+            */}
+            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+              <PencilIcon className="size-4 shrink-0 text-primary" />
+              <span className="text-xs text-foreground/80">
+                条件を変えて試算し直せます。入力内容はそのまま残っています。
+              </span>
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {SIMULATION_TABS.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <Button
+                      key={tab.id}
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 bg-background text-xs"
+                      onClick={() => editInputTab(tab.id)}
+                    >
+                      <Icon className="size-3.5" />
+                      {tab.label}を編集
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+
             <ResultTabs
               data={displayResult}
               demographicsData={submittedData?.demographics}

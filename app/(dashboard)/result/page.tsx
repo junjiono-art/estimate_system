@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ClockIcon } from "lucide-react"
+import { ClockIcon, PencilIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { ResultTabs } from "@/components/result/result-tabs"
 import { Button } from "@/components/ui/button"
@@ -62,6 +62,16 @@ export default function ResultPage() {
       <PageHeader
         title="試算結果"
         description="入力情報をもとにした収益シミュレーション結果です"
+        actions={
+          // この画面は履歴の最新1件を表示するだけでフォームstateを持たないため、
+          // 条件を変えて試算し直す場合は新規試算へ誘導する（ユーザーfb③）。
+          <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs">
+            <Link href="/">
+              <PencilIcon className="size-3.5" />
+              条件を変えて試算する
+            </Link>
+          </Button>
+        }
       />
       <div className="overflow-auto">
         <div className="mx-auto max-w-screen-2xl px-8 py-7">

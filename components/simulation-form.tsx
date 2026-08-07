@@ -148,6 +148,13 @@ interface SimulationFormProps {
   onSubmitWithData?: (data: FormSubmitData) => void | Promise<void>
   /** 実行ボタンの文言。結果画面から戻って条件を編集した場合に「再試算」表記へ切り替えるために使う */
   submitLabel?: string
+  /**
+   * 表示中のタブ。指定すると制御コンポーネントとして振る舞う。
+   * 結果画面から「投資コストを編集」等で特定タブへ直接戻すために使う（ユーザーfb③）。
+   */
+  activeTab?: SimulationTabId
+  /** タブ切替時の通知（制御時は呼び出し側で activeTab を更新すること） */
+  onActiveTabChange?: (tab: SimulationTabId) => void
 }
 
 export type FormSubmitData = {
@@ -209,13 +216,17 @@ export type FormSubmitData = {
 // タブ構成: 店舗基本情報 → 投資コスト → ランニングコスト（ユーザーfb②）。
 // 計算パラメータ（ロイヤリティ率・競合ジム件数・立地タイプ）は独立タブを廃止し、
 // 店舗基本情報タブ内の「試算条件」セクションへ統合した（ユーザーfb①）。
-const TABS = [
+// 結果画面から特定タブへ直接戻れるよう、タブ定義は外部にも公開する（ユーザーfb③）。
+export const SIMULATION_TABS = [
   { id: "store",        label: "店舗基本情報",     icon: BuildingIcon },
   { id: "initial-cost", label: "投資コスト",       icon: BanknoteIcon },
   { id: "running-cost", label: "ランニングコスト", icon: WalletIcon   },
 ] as const
 
-type TabId = (typeof TABS)[number]["id"]
+const TABS = SIMULATION_TABS
+
+export type SimulationTabId = (typeof SIMULATION_TABS)[number]["id"]
+type TabId = SimulationTabId
 
 const PAGE_SIZE = 10
 
@@ -268,8 +279,20 @@ function hasQuantityInput(basis?: string): boolean {
   return basis === "fixed" || basis === "perTsubo" || basis === "perOccupancy"
 }
 
-export function SimulationForm({ onSubmit, onSubmitWithData, submitLabel }: SimulationFormProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("store")
+export function SimulationForm({
+  onSubmit,
+  onSubmitWithData,
+  submitLabel,
+  activeTab: controlledActiveTab,
+  onActiveTabChange,
+}: SimulationFormProps) {
+  // activeTab は非制御が既定。呼び出し側が activeTab を渡した場合だけ制御コンポーネントになる。
+  const [uncontrolledActiveTab, setUncontrolledActiveTab] = useState<TabId>("store")
+  const activeTab = controlledActiveTab ?? uncontrolledActiveTab
+  function setActiveTab(tab: TabId) {
+    if (controlledActiveTab === undefined) setUncontrolledActiveTab(tab)
+    onActiveTabChange?.(tab)
+  }
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -1732,17 +1755,30 @@ export function SimulationForm({ onSubmit, onSubmitWithData, submitLabel }: Simu
           ))}
         </div>
 
-        {isLast ? (
-          <Button type="button" onClick={() => { void handleSimulate() }} disabled={isSubmitting} className="gap-1.5 text-xs">
-            <CalculatorIcon className="size-3.5" />
-            {isSubmitting ? "試算中..." : (submitLabel ?? "試算を実行する")}
-          </Button>
-        ) : (
-          <Button type="button" onClick={() => setActiveTab(TABS[currentIndex + 1].id)} className="gap-1.5 text-xs">
-            次へ
-            <ChevronRightIcon className="size-3.5" />
-          </Button>
-        )}
+        {/*
+          実行ボタンは通常「最終タブのみ」だが、一度試算済み（submitLabel あり）の場合は
+          どのタブからでも押せるようにする。結果画面から「投資コストを編集」で戻ったとき、
+          金額を直しても最終タブまで「次へ」を押さないと再試算できないのを避けるため（ユーザーfb③）。
+        */}
+        <div className="flex items-center gap-2">
+          {!isLast && (
+            <Button
+              type="button"
+              variant={submitLabel ? "outline" : "default"}
+              onClick={() => setActiveTab(TABS[currentIndex + 1].id)}
+              className="gap-1.5 text-xs"
+            >
+              次へ
+              <ChevronRightIcon className="size-3.5" />
+            </Button>
+          )}
+          {(isLast || submitLabel) && (
+            <Button type="button" onClick={() => { void handleSimulate() }} disabled={isSubmitting} className="gap-1.5 text-xs">
+              <CalculatorIcon className="size-3.5" />
+              {isSubmitting ? "試算中..." : (submitLabel ?? "試算を実行する")}
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   )
