@@ -13,6 +13,7 @@ import {
 } from "@/lib/fitness-machine-cost"
 import { computeMachineMaintenanceMonthly } from "@/lib/machine-maintenance"
 import { FormulaEvaluationEngine } from "@/lib/server/formula-evaluation-engine"
+import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 
 export type SimulateInput = SimulationRequestInput
 
@@ -75,12 +76,24 @@ function roundDown1(value: number): number {
   return Math.floor(value * 10) / 10
 }
 
+/**
+ * 競合ジム件数 → 見込み客の減少率（入力欄 E78）。
+ * Excel: 1件=5% / 2件=10% / 3件=15% / 4件=20% / 5件=25%（0件は該当分岐が無く0%）。
+ *
+ * 旧実装は `competitorCount <= 2` を一律 upTo2(10%) にしていたため、
+ * 1件のときだけ Excel（5%）の倍の減少率になっていた。
+ * 6件以上は Excel の選択肢外（Excelでは0%に落ちる）だが、競合が増えて影響が消えるのは
+ * 明らかに不合理なため 5件と同じ over4 を据え置く。
+ */
 function getCompetitorImpactRate(competitorCount: number, calcParams: CalcParameterConfig): number {
-  if (competitorCount <= 0) return 0
-  if (competitorCount <= 2) return calcParams.competitorImpact.upTo2
-  if (competitorCount === 3) return calcParams.competitorImpact.for3
-  if (competitorCount === 4) return calcParams.competitorImpact.for4
-  return calcParams.competitorImpact.over4
+  const impact = calcParams.competitorImpact
+  if (competitorCount <= 0) return impact.none ?? 0
+  // for1 は後から追加したフィールド。旧レコードで欠落している場合は従来どおり upTo2 にフォールバックする。
+  if (competitorCount === 1) return impact.for1 ?? impact.upTo2
+  if (competitorCount === 2) return impact.upTo2
+  if (competitorCount === 3) return impact.for3
+  if (competitorCount === 4) return impact.for4
+  return impact.over4
 }
 
 function getDemandMultiplier(locationType: SimulateInput["locationType"], competitorCount: number, calcParams: CalcParameterConfig): number {
@@ -218,9 +231,15 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
 
   const { km1Ring, km3Ring, km5Ring } = pop
 
-  const e60 = km1Ring * 0.012 // 1km圏: 1.20%
-  const f60 = km3Ring * 0.008 // 3km圏リング: 0.80%
-  const g60 = km5Ring * 0.001 // 5km圏リング: 0.10%
+  // 商圏獲得率 E59/F59/G59 は立地タイプで変わる（入力欄）。
+  // 旧実装は郊外型の値（1.2%/0.8%/0.1%）をハードコードしていたため、
+  // 都市型（1km 1.5%）・田舎型（3.0%/1.5%/1.0%）で会員数が Excel と乖離していた。
+  const catchment = calcParams.catchment ?? DEFAULT_CALC_PARAMS.catchment!
+  const rates = catchment[locationType] ?? catchment.suburban
+
+  const e60 = km1Ring * rates.km1 // E60 = E56 × E59（1km圏）
+  const f60 = km3Ring * rates.km3 // F60 = F56 × F59（1km超3km以内）
+  const g60 = km5Ring * rates.km5 // G60 = G56 × G59（3km超5km以内）
 
   const lookupPop =
     locationType === "urban"

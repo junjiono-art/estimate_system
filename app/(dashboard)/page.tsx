@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeftIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { SimulationForm } from "@/components/simulation-form"
 import type { FormSubmitData } from "@/components/simulation-form"
@@ -198,41 +198,23 @@ export default function NewSimulationPage() {
   }
 
   const displayResult = resultData ?? buildPreviewResult(submittedData)
-
-  if (showResult) {
-    return (
-      <>
-        <PageHeader
-          title="試算結果"
-          description="入力情報をもとにした収益シミュレーション結果です"
-          actions={
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResult(false)}
-              className="gap-1.5 text-xs"
-            >
-              <ArrowLeftIcon className="size-3.5" />
-              入力に戻る
-            </Button>
-          }
-        />
-        <div className="overflow-auto">
-          <div className="mx-auto max-w-6xl px-8 py-7">
-            <ResultTabs
-              data={displayResult}
-              demographicsData={submittedData?.demographics}
-              demographicsError={submittedData?.demographicsError}
-              simulationRequest={simulationRequest}
-            />
-          </div>
-        </div>
-      </>
-    )
-  }
+  // 一度試算済みか（＝結果画面から入力へ戻ってきた状態か）。実行ボタンの文言切替に使う。
+  const hasSimulated = submittedData !== null
 
   const regressionActions = (
     <div className="flex items-center gap-2">
+      {/* 試算済みなら、再実行せずに結果へ戻れるようにする（ユーザーfb③） */}
+      {hasSimulated && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs"
+          onClick={() => setShowResult(true)}
+        >
+          <ArrowRightIcon className="size-3.5" />
+          試算結果に戻る
+        </Button>
+      )}
       {regressionStatus === "pass" && (
         <Badge className="border border-chart-2/30 bg-chart-2/10 text-chart-2 text-[10px] font-semibold">
           PASS
@@ -264,39 +246,76 @@ export default function NewSimulationPage() {
   return (
     <>
       <PageHeader
-        title="新規試算"
-        description="店舗情報を入力して、初期投資・月間収益・回収期間を試算します"
-        actions={regressionActions}
+        title={showResult ? "試算結果" : "新規試算"}
+        description={
+          showResult
+            ? "入力情報をもとにした収益シミュレーション結果です"
+            : "店舗情報を入力して、初期投資・月間収益・回収期間を試算します"
+        }
+        actions={
+          showResult ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResult(false)}
+              className="gap-1.5 text-xs"
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              入力条件を編集する
+            </Button>
+          ) : (
+            regressionActions
+          )
+        }
       />
       <div className="overflow-auto">
-        <div className="mx-auto max-w-3xl px-8 py-7">
-          {/* Intro banner */}
-          <div className="mb-6 flex items-start gap-3 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3">
-            <SparklesIcon className="mt-0.5 size-4 shrink-0 text-accent" />
-            <p className="text-xs leading-relaxed text-foreground/70">
-              各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。
-            </p>
-          </div>
-          <SimulationForm
-            onSubmitWithData={handleSubmitWithData}
-          />
-          {regressionScenarioSummary.length > 0 && (
-            <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">回帰検証詳細</p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {regressionScenarioSummary.map((row) => (
-                  <div key={row.scenario} className="rounded-md border border-border bg-background px-2.5 py-2">
-                    <p className="text-[11px] font-medium text-foreground">{row.scenario}</p>
-                    <p className={`text-[11px] ${row.pass ? "text-chart-2" : "text-destructive"}`}>
-                      {row.pass ? "PASS" : "FAIL"}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">差分 {row.diffCount} 件</p>
-                  </div>
-                ))}
-              </div>
+        {/*
+          入力フォームは結果表示中もアンマウントせず CSS で隠す。
+          アンマウントすると SimulationForm 内の入力state（費目ごとの金額・数量・手入力フラグ等）が
+          すべて失われ、「入力に戻る」で条件を再編集できなくなるため（ユーザーfb③）。
+        */}
+        <div className={showResult ? "hidden" : undefined}>
+          <div className="mx-auto max-w-3xl px-8 py-7">
+            {/* Intro banner */}
+            <div className="mb-6 flex items-start gap-3 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3">
+              <SparklesIcon className="mt-0.5 size-4 shrink-0 text-accent" />
+              <p className="text-xs leading-relaxed text-foreground/70">
+                各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。
+              </p>
             </div>
-          )}
+            <SimulationForm
+              onSubmitWithData={handleSubmitWithData}
+              submitLabel={hasSimulated ? "この条件で再試算する" : undefined}
+            />
+            {regressionScenarioSummary.length > 0 && (
+              <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">回帰検証詳細</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {regressionScenarioSummary.map((row) => (
+                    <div key={row.scenario} className="rounded-md border border-border bg-background px-2.5 py-2">
+                      <p className="text-[11px] font-medium text-foreground">{row.scenario}</p>
+                      <p className={`text-[11px] ${row.pass ? "text-chart-2" : "text-destructive"}`}>
+                        {row.pass ? "PASS" : "FAIL"}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">差分 {row.diffCount} 件</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {showResult && (
+          <div className="mx-auto max-w-6xl px-8 py-7">
+            <ResultTabs
+              data={displayResult}
+              demographicsData={submittedData?.demographics}
+              demographicsError={submittedData?.demographicsError}
+              simulationRequest={simulationRequest}
+            />
+          </div>
+        )}
       </div>
     </>
   )

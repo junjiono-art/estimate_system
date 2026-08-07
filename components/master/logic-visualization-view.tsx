@@ -10,6 +10,7 @@ import {
   LayersIcon,
   MegaphoneIcon,
   SaveIcon,
+  PackageIcon,
   ShieldIcon,
   SparklesIcon,
   UsersIcon,
@@ -24,11 +25,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import type { CalcMachineMaintenanceConfig, CalcParameterConfig, CalcPricingOption } from "@/lib/types"
+import type {
+  CalcCatchmentConfig,
+  CalcMachineMaintenanceConfig,
+  CalcOpeningPackageConfig,
+  CalcParameterConfig,
+  CalcPricingOption,
+} from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { resolveMaintenanceUnitPrice } from "@/lib/machine-maintenance"
 import { PREFECTURE_FULL_NAMES, toPrefectureKey } from "@/lib/fitness-machine-cost"
 import { computeDeviceCount, computeSecurityIntroCost } from "@/lib/security-cost"
+import { computeOpeningPackageBreakdown } from "@/lib/opening-package-cost"
 import { computeAveragePrice } from "@/lib/average-price"
 import { formatThousands, toDigits } from "@/lib/number-format"
 import { toast } from "sonner"
@@ -281,6 +289,8 @@ export function LogicVisualizationView() {
   const [paymentFeeRatePercent, setPaymentFeeRatePercent] = useState("")
   const [royaltyCapMonthly, setRoyaltyCapMonthly] = useState("")
   const [appFeeMonthly, setAppFeeMonthly] = useState("")
+  const [competitorNonePercent, setCompetitorNonePercent] = useState("")
+  const [competitorFor1Percent, setCompetitorFor1Percent] = useState("")
   const [competitorUpTo2Percent, setCompetitorUpTo2Percent] = useState("")
   const [competitorFor3Percent, setCompetitorFor3Percent] = useState("")
   const [competitorFor4Percent, setCompetitorFor4Percent] = useState("")
@@ -300,6 +310,8 @@ export function LogicVisualizationView() {
   const [isSavingStepMM, setIsSavingStepMM] = useState(false)
   const [isSavingStepFM, setIsSavingStepFM] = useState(false)
   const [isSavingStepSec, setIsSavingStepSec] = useState(false)
+  const [isSavingStepOp, setIsSavingStepOp] = useState(false)
+  const [isSavingStepCat, setIsSavingStepCat] = useState(false)
   // 平均単価（会費＋オプション）
   const [memberFeeExTax, setMemberFeeExTax] = useState("")
   const [pricingOptions, setPricingOptions] = useState<Array<{ label: string; price: string; ratio: string }>>([])
@@ -416,6 +428,29 @@ export function LogicVisualizationView() {
     secMonitorUnitPrice, secMonitorBaseCount, secMonitorBaseTsubo, secMonitorTsuboPer, secRoundUpUnit,
   ])
 
+  // 開業前パッケージ費（入力欄 I15 = ROUND(基準額+(坪数-基準坪)*坪単価, 丸め単位) / J15 = 直営は ×係数+加算）
+  const [opBaseAmount, setOpBaseAmount] = useState("")
+  const [opBaseTsubo, setOpBaseTsubo] = useState("")
+  const [opAmountPerTsubo, setOpAmountPerTsubo] = useState("")
+  const [opRoundUnit, setOpRoundUnit] = useState("")
+  const [opDirectRateFactor, setOpDirectRateFactor] = useState("")
+  const [opDirectRateAddition, setOpDirectRateAddition] = useState("")
+  // 算出プレビュー用の坪数（保存対象外）
+  const [opPreviewTsubo, setOpPreviewTsubo] = useState("50")
+  const opPreviewConfig = useMemo<CalcOpeningPackageConfig>(() => ({
+    baseAmount: Number(opBaseAmount) || 0,
+    baseTsubo: Number(opBaseTsubo) || 0,
+    amountPerTsubo: Number(opAmountPerTsubo) || 0,
+    roundUnit: Number(opRoundUnit) || 1,
+    directRateFactor: Number(opDirectRateFactor) || 0,
+    directRateAddition: Number(opDirectRateAddition) || 0,
+  }), [opBaseAmount, opBaseTsubo, opAmountPerTsubo, opRoundUnit, opDirectRateFactor, opDirectRateAddition])
+
+  // 立地タイプ別の商圏獲得率（入力欄 E59/F59/G59）。各リング人口に掛けて見込み客数を出す。
+  const [catchmentRows, setCatchmentRows] = useState<
+    Array<{ key: keyof CalcCatchmentConfig; label: string; km1: string; km3: string; km5: string }>
+  >([])
+
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
     setRoyaltyCapMonthly(String(params.royaltyCapMonthly))
@@ -423,6 +458,11 @@ export function LogicVisualizationView() {
   }
 
   function syncCompetitorParams(params: CalcParameterConfig) {
+    // none/for1 は後から追加したフィールド。旧レコードでは欠落しうるため既定値で補完する。
+    setCompetitorNonePercent(formatRatePercent(params.competitorImpact.none ?? DEFAULT_CALC_PARAMS.competitorImpact.none ?? 0))
+    setCompetitorFor1Percent(
+      formatRatePercent(params.competitorImpact.for1 ?? DEFAULT_CALC_PARAMS.competitorImpact.for1 ?? params.competitorImpact.upTo2),
+    )
     setCompetitorUpTo2Percent(formatRatePercent(params.competitorImpact.upTo2))
     setCompetitorFor3Percent(formatRatePercent(params.competitorImpact.for3))
     setCompetitorFor4Percent(formatRatePercent(params.competitorImpact.for4))
@@ -559,6 +599,35 @@ export function LogicVisualizationView() {
     setSecRoundUpUnit(String(sec.roundUpUnit ?? ""))
   }
 
+  function syncOpeningPackageParams(params: CalcParameterConfig) {
+    // 旧レコードに openingPackage が無い場合は既定値（Excel 入力欄 I15/J15）で補完
+    const op = params.openingPackage ?? DEFAULT_CALC_PARAMS.openingPackage
+    setOpBaseAmount(String(op.baseAmount ?? ""))
+    setOpBaseTsubo(String(op.baseTsubo ?? ""))
+    setOpAmountPerTsubo(String(op.amountPerTsubo ?? ""))
+    setOpRoundUnit(String(op.roundUnit ?? ""))
+    setOpDirectRateFactor(String(op.directRateFactor ?? ""))
+    setOpDirectRateAddition(String(op.directRateAddition ?? ""))
+  }
+
+  function syncCatchmentParams(params: CalcParameterConfig) {
+    // 旧レコードに catchment が無い場合は既定値（Excel 入力欄 E59/F59/G59）で補完
+    const catchment = params.catchment ?? DEFAULT_CALC_PARAMS.catchment!
+    setCatchmentRows(
+      ([
+        { key: "urban", label: "都市型" },
+        { key: "suburban", label: "郊外型" },
+        { key: "rural", label: "田舎型" },
+      ] as const).map(({ key, label }) => ({
+        key,
+        label,
+        km1: formatRatePercent(catchment[key]?.km1 ?? 0),
+        km3: formatRatePercent(catchment[key]?.km3 ?? 0),
+        km5: formatRatePercent(catchment[key]?.km5 ?? 0),
+      })),
+    )
+  }
+
   function syncAllParams(params: CalcParameterConfig) {
     syncFeeParams(params)
     syncCompetitorParams(params)
@@ -571,6 +640,8 @@ export function LogicVisualizationView() {
     syncMachineMaintenanceParams(params)
     syncFitnessMachineParams(params)
     syncSecurityParams(params)
+    syncOpeningPackageParams(params)
+    syncCatchmentParams(params)
   }
 
   async function fetchLatestCalcParams(): Promise<CalcParameterConfig | null> {
@@ -650,12 +721,14 @@ export function LogicVisualizationView() {
       return
     }
 
+    const noneRaw = parseRequiredNumber(competitorNonePercent)
+    const for1Raw = parseRequiredNumber(competitorFor1Percent)
     const upTo2Raw = parseRequiredNumber(competitorUpTo2Percent)
     const for3Raw = parseRequiredNumber(competitorFor3Percent)
     const for4Raw = parseRequiredNumber(competitorFor4Percent)
     const over4Raw = parseRequiredNumber(competitorOver4Percent)
 
-    const rates = [upTo2Raw, for3Raw, for4Raw, over4Raw]
+    const rates = [noneRaw, for1Raw, upTo2Raw, for3Raw, for4Raw, over4Raw]
     if (rates.some((value) => value === null || value < 0 || value > 100)) {
       toast.error("競合影響率はすべて 0〜100 の範囲で入力してください。")
       return
@@ -670,6 +743,8 @@ export function LogicVisualizationView() {
         ...latestParams,
         competitorImpact: {
           ...latestParams.competitorImpact,
+          none: (noneRaw as number) / 100,
+          for1: (for1Raw as number) / 100,
           upTo2: (upTo2Raw as number) / 100,
           for3: (for3Raw as number) / 100,
           for4: (for4Raw as number) / 100,
@@ -1232,6 +1307,85 @@ export function LogicVisualizationView() {
     )
   }
 
+  async function saveOpeningPackageParams() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const numberOrError = (raw: string, name: string, min: number): number | null => {
+      const value = parseRequiredNumber(raw)
+      if (value === null || value < min) {
+        toast.error(`${name}は ${min} 以上で入力してください。`)
+        return null
+      }
+      return value
+    }
+    const baseAmount = numberOrError(opBaseAmount, "基準額", 0)
+    if (baseAmount === null) return
+    const baseTsubo = numberOrError(opBaseTsubo, "基準坪数", 0)
+    if (baseTsubo === null) return
+    // 坪単価はマイナス（坪が増えるほど安くなる）も理論上ありうるため下限を設けない
+    const amountPerTsubo = parseRequiredNumber(opAmountPerTsubo)
+    if (amountPerTsubo === null) {
+      toast.error("坪単価を数値で入力してください。")
+      return
+    }
+    const roundUnit = numberOrError(opRoundUnit, "丸め単位", 1)
+    if (roundUnit === null) return
+    const directRateFactor = numberOrError(opDirectRateFactor, "直営時の係数", 0)
+    if (directRateFactor === null) return
+    const directRateAddition = numberOrError(opDirectRateAddition, "直営時の加算額", 0)
+    if (directRateAddition === null) return
+
+    await persistParams(
+      {
+        openingPackage: {
+          baseAmount: Math.round(baseAmount),
+          baseTsubo,
+          amountPerTsubo: Math.round(amountPerTsubo),
+          roundUnit: Math.round(roundUnit),
+          directRateFactor,
+          directRateAddition: Math.round(directRateAddition),
+        },
+      },
+      setIsSavingStepOp,
+      "開業前パッケージ費を保存しました。",
+      syncOpeningPackageParams,
+    )
+  }
+
+  async function saveCatchmentParams() {
+    if (!calcParams) {
+      toast.error("計算パラメータが取得できていません。")
+      return
+    }
+    const next = {} as CalcCatchmentConfig
+    for (const row of catchmentRows) {
+      const values = [
+        { field: "km1" as const, raw: row.km1, name: "1km圏" },
+        { field: "km3" as const, raw: row.km3, name: "1km超3km以内" },
+        { field: "km5" as const, raw: row.km5, name: "3km超5km以内" },
+      ]
+      const parsed: { km1?: number; km3?: number; km5?: number } = {}
+      for (const { field, raw, name } of values) {
+        const value = parseRequiredNumber(raw)
+        if (value === null || value < 0 || value > 100) {
+          toast.error(`${row.label}の「${name}」は 0〜100 の範囲で入力してください。`)
+          return
+        }
+        parsed[field] = value / 100
+      }
+      next[row.key] = { km1: parsed.km1!, km3: parsed.km3!, km5: parsed.km5! }
+    }
+
+    await persistParams(
+      { catchment: next },
+      setIsSavingStepCat,
+      "商圏獲得率を保存しました。",
+      syncCatchmentParams,
+    )
+  }
+
   useEffect(() => {
     let disposed = false
 
@@ -1494,13 +1648,38 @@ export function LogicVisualizationView() {
             ))}
           </InfoTile>
           <InfoTile label="影響範囲">需要予測、売上予測、損益シミュレーション全体に影響</InfoTile>
-          <InfoTile label="インプット">競合影響率（1〜2店舗 / 3店舗 / 4店舗 / 5店舗以上）</InfoTile>
+          <InfoTile label="インプット">競合影響率（0 / 1 / 2 / 3 / 4 / 5店舗以上）</InfoTile>
           <InfoTile label="アウトプット">需要乗数 / 売上予測 / 月次損益 など</InfoTile>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          元Excel「入力欄」E78 は店舗数ごとに個別の率（1件=5% / 2件=10% / 3件=15% / 4件=20% / 5件=25%）で、0件は該当分岐が無く 0% です。
+          旧実装は 1〜2店舗を一律 10% としていたため、競合1店舗のときだけ Excel の倍の減衰率になっていました。
+        </p>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
           <div className="space-y-1.5">
-            <Label htmlFor="competitorUpTo2Step2" className="text-xs font-medium">競合1〜2店舗</Label>
+            <Label htmlFor="competitorNoneStep2" className="text-xs font-medium">競合0店舗</Label>
+            <SuffixedInput
+              id="competitorNoneStep2"
+              value={competitorNonePercent}
+              onChange={setCompetitorNonePercent}
+              disabled={isSavingStep2}
+              suffix="%"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="competitorFor1Step2" className="text-xs font-medium">競合1店舗</Label>
+            <SuffixedInput
+              id="competitorFor1Step2"
+              value={competitorFor1Percent}
+              onChange={setCompetitorFor1Percent}
+              disabled={isSavingStep2}
+              suffix="%"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="competitorUpTo2Step2" className="text-xs font-medium">競合2店舗</Label>
             <SuffixedInput
               id="competitorUpTo2Step2"
               value={competitorUpTo2Percent}
@@ -2287,6 +2466,161 @@ export function LogicVisualizationView() {
           <Button onClick={saveSecurityParams} disabled={isSavingStepSec} size="sm" className="gap-1.5">
             <SaveIcon className="size-3.5" />
             {isSavingStepSec ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* 開業前パッケージ費（入力欄 B15/I15/J15）。坪数連動＋直営ルール */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+        <SectionHeader
+          icon={PackageIcon}
+          title="開業前パッケージ費"
+          description="投資コストの開業前パッケージ費を坪数から算出します（入力欄 B15 / I15 / J15）。"
+          accent="chart-2"
+        />
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <InfoTile label="式" accent="chart-2">
+            <p>I15 = ROUND(基準額 +（坪数 − 基準坪数）× 坪単価, 丸め単位)</p>
+            <p>J15 = IF(直営, I15 × 係数 + 加算額, I15)</p>
+          </InfoTile>
+          <InfoTile label="影響範囲">初期投資額 / 回収期間 / 資金繰り</InfoTile>
+          <InfoTile label="インプット">床面積（坪）・ロイヤリティ率</InfoTile>
+          <InfoTile label="アウトプット">開業前パッケージ費（投資コスト）</InfoTile>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="opBaseAmount" className="text-xs font-medium">基準額（基準坪数のときの金額）</Label>
+            <SuffixedInput id="opBaseAmount" value={opBaseAmount} onChange={setOpBaseAmount} disabled={isSavingStepOp} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opBaseTsubo" className="text-xs font-medium">基準坪数</Label>
+            <SuffixedInput id="opBaseTsubo" value={opBaseTsubo} onChange={setOpBaseTsubo} disabled={isSavingStepOp} suffix="坪" inputMode="decimal" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opAmountPerTsubo" className="text-xs font-medium">坪単価（基準坪からの増減分）</Label>
+            <SuffixedInput id="opAmountPerTsubo" value={opAmountPerTsubo} onChange={setOpAmountPerTsubo} disabled={isSavingStepOp} suffix="円/坪" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opRoundUnit" className="text-xs font-medium">丸め単位（四捨五入）</Label>
+            <SuffixedInput id="opRoundUnit" value={opRoundUnit} onChange={setOpRoundUnit} disabled={isSavingStepOp} suffix="円単位" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opDirectRateFactor" className="text-xs font-medium">直営時の係数（Excel 0.5）</Label>
+            <SuffixedInput id="opDirectRateFactor" value={opDirectRateFactor} onChange={setOpDirectRateFactor} disabled={isSavingStepOp} suffix="倍" inputMode="decimal" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opDirectRateAddition" className="text-xs font-medium">直営時の加算額（Excel 200,000）</Label>
+            <SuffixedInput id="opDirectRateAddition" value={opDirectRateAddition} onChange={setOpDirectRateAddition} disabled={isSavingStepOp} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="opPreviewTsubo" className="text-xs font-medium">算出プレビュー用の坪数（保存されません）</Label>
+            <SuffixedInput id="opPreviewTsubo" value={opPreviewTsubo} onChange={setOpPreviewTsubo} disabled={isSavingStepOp} suffix="坪" inputMode="decimal" />
+          </div>
+        </div>
+
+        {/* 編集中の値を実エンジン（computeOpeningPackageBreakdown）に渡した算出プレビュー */}
+        {(() => {
+          const previewTsubo = Math.max(0, Number(opPreviewTsubo) || 0)
+          const fc = computeOpeningPackageBreakdown(previewTsubo, 10, opPreviewConfig)
+          const direct = computeOpeningPackageBreakdown(previewTsubo, 0, opPreviewConfig)
+          return (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <InfoTile label={`丸め前（${previewTsubo}坪）`} accent="chart-2">
+                ¥{formatThousands(String(Math.round(fc?.rawAmount ?? 0)))}
+              </InfoTile>
+              <InfoTile label="FC（10% / 15%）" accent="chart-2">
+                ¥{formatThousands(String(fc?.total ?? 0))}
+              </InfoTile>
+              <InfoTile label="直営（0%）" accent="chart-2">
+                ¥{formatThousands(String(direct?.total ?? 0))}
+              </InfoTile>
+            </div>
+          )
+        })()}
+
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 元Excel検算: 50坪 → ROUND(1,400,000+(50−50)×10,000, −5) = ¥1,400,000（FC）／直営は ×0.5 + 200,000 = ¥900,000。<br />
+          ※ 従来はマスタ登録の固定額（FC 1,100,000 / 直営 550,000）で坪数に連動していませんでした。<br />
+          ※ 新規試算の投資コストタブでは坪数・ロイヤリティ率から自動算出されます（手動で上書きも可）。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveOpeningPackageParams} disabled={isSavingStepOp} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStepOp ? "保存中..." : "保存"}
+          </Button>
+        </div>
+      </section>
+
+      {/* 商圏獲得率（入力欄 E59/F59/G59）。会員数の起点になる初月見込み客数を決める */}
+      <section className="space-y-5 rounded-xl border border-border bg-card p-6 shadow-sm transition-shadow hover:shadow-md">
+        <SectionHeader
+          icon={UsersIcon}
+          title="商圏獲得率（立地タイプ別）"
+          description="各商圏リングの20〜59歳人口から見込み客数を出す係数です（入力欄 E59 / F59 / G59）。"
+          accent="chart-1"
+        />
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <InfoTile label="式" accent="chart-1">
+            <p>E60 = 1km圏人口 × E59</p>
+            <p>F60 = 1km超3km以内人口 × F59</p>
+            <p>G60 = 3km超5km以内人口 × G59</p>
+          </InfoTile>
+          <InfoTile label="影響範囲">初月入会人数 → 会員数推移 → 売上・損益すべて</InfoTile>
+          <InfoTile label="インプット">立地タイプ・商圏別20〜59歳人口（e-Statメッシュ）</InfoTile>
+          <InfoTile label="アウトプット">初月見込み入会人数（G38）</InfoTile>
+        </div>
+
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          旧実装はこの率を郊外型の値（1.2% / 0.8% / 0.1%）でハードコードしていたため、都市型・田舎型を選んでも会員数が郊外型と同じ係数で算出され、Excel と乖離していました。
+        </p>
+
+        <div className="overflow-hidden rounded-lg border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">立地タイプ</TableHead>
+                <TableHead className="text-xs">1km圏（E59）</TableHead>
+                <TableHead className="text-xs">1km超3km以内（F59）</TableHead>
+                <TableHead className="text-xs">3km超5km以内（G59）</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {catchmentRows.map((row, index) => (
+                <TableRow key={row.key}>
+                  <TableCell className="text-xs font-medium whitespace-nowrap">{row.label}</TableCell>
+                  {(["km1", "km3", "km5"] as const).map((field) => (
+                    <TableCell key={field}>
+                      <SuffixedInput
+                        id={`catchment-${row.key}-${field}`}
+                        value={row[field]}
+                        onChange={(value) =>
+                          setCatchmentRows((prev) =>
+                            prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
+                          )
+                        }
+                        disabled={isSavingStepCat}
+                        suffix="%"
+                        inputMode="decimal"
+                      />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          ※ 元Excel: 都市型 1.5% / 0.8% / 0.1%、郊外型 1.2% / 0.8% / 0.1%、田舎型 3.0% / 1.5% / 1.0%。<br />
+          ※ 初月見込み入会人数 G38 は立地タイプで合算範囲も変わります（都市型 = E60のみ、郊外型 = E60+F60、田舎型 = E60+F60+G60）。
+        </div>
+        <div className="flex justify-end border-t border-border/50 pt-4">
+          <Button onClick={saveCatchmentParams} disabled={isSavingStepCat} size="sm" className="gap-1.5">
+            <SaveIcon className="size-3.5" />
+            {isSavingStepCat ? "保存中..." : "保存"}
           </Button>
         </div>
       </section>

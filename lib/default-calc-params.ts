@@ -8,11 +8,20 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
   paymentFeeRate: 0.035,
   royaltyCapMonthly: 300_000,
   appFeeMonthly: 10_000,
+  // 入力欄 E78。Excel は件数ごとに個別の率（0件は該当分岐が無く 0%）。
   competitorImpact: {
+    none: 0,
+    for1: 0.05,
     upTo2: 0.1,
     for3: 0.15,
     for4: 0.2,
     over4: 0.25,
+  },
+  // 入力欄 E59/F59/G59。立地タイプ別の商圏獲得率（各リング人口に掛ける）。
+  catchment: {
+    urban: { km1: 0.015, km3: 0.008, km5: 0.001 },
+    suburban: { km1: 0.012, km3: 0.008, km5: 0.001 },
+    rural: { km1: 0.03, km3: 0.015, km5: 0.01 },
   },
   adCost: {
     // 事業計画 R42（Web広告費+SNS広告費の月次スケジュール）
@@ -149,6 +158,18 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
     monitorUnitPrice: 170_000, // M17（円/台）
     monitorCountRule: { baseCount: 2, baseTsubo: 0, tsuboPerUnit: 40 }, // D28=ROUNDUP(2+坪/40,0)
     roundUpUnit: 10_000, // ROUNDUP(M18,-4)＝万円単位切り上げ
+  },
+  openingPackage: {
+    // 入力欄 B15/I15/J15:
+    //   I15 = ROUND(1400000+(坪数-50)*10000, -5)
+    //   J15 = IF(直営, I15*0.5+200000, I15)
+    // 50坪 FC = 1,400,000／50坪 直営 = 900,000（Excel一致）
+    baseAmount: 1_400_000,
+    baseTsubo: 50,
+    amountPerTsubo: 10_000,
+    roundUnit: 100_000, // ROUND(...,-5)
+    directRateFactor: 0.5,
+    directRateAddition: 200_000,
   },
   corporateTaxRate: 0.232, // 入力欄!C92
   cashCollectionLagMonths: 1, // 入力欄!C79

@@ -352,11 +352,50 @@ export interface SimulationResult {
   businessPlan?: BusinessPlanData
 }
 
+/**
+ * 競合ジム件数による見込み客の減少率（入力欄 E78）。
+ * Excel: =IF(C78="1件",0.05,IF(C78="2件",0.1,IF(C78="3件",0.15,IF(C78="4件",0.2,IF(C78="5件",0.25,)))))
+ *
+ * `none`/`for1` は後から追加したフィールド（旧レコードには存在しない）。
+ * 未設定時は `normalizeCalcParams` が Excel 準拠の既定値（0件=0%、1件=5%）で補完する。
+ * `upTo2` は Excel の「2件」に対応する（後方互換のためキー名は据え置き）。
+ */
 export interface CalcCompetitorImpactConfig {
+  /** 0件（競合なし）。Excel は該当分岐が無く 0%。旧レコード互換のため任意 */
+  none?: number
+  /** 1件。Excel 5%。旧レコード互換のため任意 */
+  for1?: number
+  /** 2件。Excel 10% */
   upTo2: number
+  /** 3件。Excel 15% */
   for3: number
+  /** 4件。Excel 20% */
   for4: number
+  /** 5件以上。Excel は「5件」で 25%（6件以上は選択肢外） */
   over4: number
+}
+
+/**
+ * 立地タイプ別の商圏獲得率（入力欄 E59/F59/G59）。
+ * 各リング人口（20〜59歳）に掛けて見込み客数 E60/F60/G60 を出す。
+ * Excel:
+ *   E59 = IF(都市型,0.015, IF(郊外型,0.012, IF(田舎型,0.03)))   ← 1km圏
+ *   F59 = IF(都市型,0.008, IF(郊外型,0.008, IF(田舎型,0.015)))  ← 1km超3km以内
+ *   G59 = IF(都市型,0.001, IF(郊外型,0.001, IF(田舎型,0.01)))   ← 3km超5km以内
+ */
+export interface CalcCatchmentRateSet {
+  /** 1km圏（E59） */
+  km1: number
+  /** 1km超3km以内（F59） */
+  km3: number
+  /** 3km超5km以内（G59） */
+  km5: number
+}
+
+export interface CalcCatchmentConfig {
+  urban: CalcCatchmentRateSet
+  suburban: CalcCatchmentRateSet
+  rural: CalcCatchmentRateSet
 }
 
 /** レポート出力（PDF/PPTX）の設定。マスタ管理「レポート出力設定」で編集する。 */
@@ -633,6 +672,49 @@ export interface SecurityIntroBreakdown {
   total: number
 }
 
+/**
+ * 開業前パッケージ費（投資コスト。入力欄 B15/I15/J15）。
+ * I15 = ROUND(baseAmount + (坪数 − baseTsubo) × amountPerTsubo, 丸め単位)
+ * J15 = IF(直営, I15 × directRateFactor + directRateAddition, I15)
+ * マスタ管理＞ロジック可視化から編集できる。
+ */
+export interface CalcOpeningPackageConfig {
+  /** 基準坪数（baseTsubo）時の金額。入力欄 I15 の 1,400,000 */
+  baseAmount: number
+  /** 基準坪数。入力欄 I15 の 50 */
+  baseTsubo: number
+  /** 基準坪からの増減1坪あたりの金額。入力欄 I15 の 10,000 */
+  amountPerTsubo: number
+  /** 丸め単位（円）。入力欄 I15 の ROUND(...,-5) = 100,000円単位 */
+  roundUnit: number
+  /** 直営（ロイヤリティ0%）時の係数。入力欄 J15 の 0.5 */
+  directRateFactor: number
+  /** 直営時の加算額。入力欄 J15 の 200,000 */
+  directRateAddition: number
+}
+
+/**
+ * 開業前パッケージ費の算出内訳（試算結果画面の初期投資明細・ロジック可視化のプレビューで表示）。
+ */
+export interface OpeningPackageBreakdown {
+  baseAmount: number
+  baseTsubo: number
+  amountPerTsubo: number
+  /** 算出に使った坪数 */
+  floorAreaTsubo: number
+  /** 丸め前の金額 */
+  rawAmount: number
+  roundUnit: number
+  /** 丸め後の金額（入力欄 I15） */
+  roundedAmount: number
+  /** 直営（ロイヤリティ0%）か */
+  isDirect: boolean
+  directRateFactor: number
+  directRateAddition: number
+  /** 最終取得額（入力欄 J15） */
+  total: number
+}
+
 export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
@@ -640,6 +722,8 @@ export interface CalcParameterConfig {
   royaltyCapMonthly: number
   appFeeMonthly: number
   competitorImpact: CalcCompetitorImpactConfig
+  /** 立地タイプ別の商圏獲得率（入力欄 E59/F59/G59）。未設定時は既定値で補完 */
+  catchment?: CalcCatchmentConfig
   adCost: CalcAdCostConfig
   /** Web広告費スケジュール（事業計画 R43）。未設定時は既定値（80,000/80,000/120,000） */
   adCostWeb?: CalcAdCostWebConfig
@@ -656,6 +740,8 @@ export interface CalcParameterConfig {
   fitnessMachine: CalcFitnessMachineConfig
   /** ALSOK・USEN導入費（投資コスト。入力欄 B16/J16） */
   security: CalcSecurityConfig
+  /** 開業前パッケージ費（投資コスト。入力欄 B15/I15/J15） */
+  openingPackage: CalcOpeningPackageConfig
   /** 法人税率 入力欄!C92 */
   corporateTaxRate: number
   /** 入金サイクル(月) 入力欄!C79 */

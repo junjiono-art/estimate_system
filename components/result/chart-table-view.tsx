@@ -26,6 +26,8 @@ interface ChartTableViewProps {
 }
 
 const fmt = (n: number) => `${(n / 10000).toFixed(0)}万`
+/** 会員数軸の目盛（人）。金額と単位が違うため専用フォーマッタを使う。 */
+const fmtMembers = (n: number) => Math.round(n).toLocaleString()
 
 const tooltipStyle = {
   backgroundColor: "var(--color-card)",
@@ -48,10 +50,12 @@ export function ChartTableView({ data }: ChartTableViewProps) {
     コスト: m.cost,
     利益: m.profit,
     累積利益: m.cumulativeProfit,
+    会員数: m.members,
   }))
 
   // 年次データ（12ヶ月ごとに合算）
-  const yearlyChartData: { name: string; 売上: number; コスト: number; 利益: number; 累積利益: number; 累積キャッシュ: number }[] = []
+  // 会員数はストック値のため合算せず、その年の最終月（期末）の会員数を採用する。
+  const yearlyChartData: { name: string; 売上: number; コスト: number; 利益: number; 累積利益: number; 累積キャッシュ: number; 会員数: number }[] = []
   const totalMonths = data.monthlyProjection.length
   const years = Math.ceil(totalMonths / 12)
   for (let y = 0; y < years; y++) {
@@ -69,6 +73,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
       利益: yearProfit,
       累積利益: lastInSlice?.cumulativeProfit ?? 0,
       累積キャッシュ: lastInSlice?.cumulativeCash ?? 0,
+      会員数: lastInSlice?.members ?? 0,
     })
   }
 
@@ -78,6 +83,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
     : yearlyChartData.map((y, i) => ({
         label: y.name,
         month: i + 1,
+        members: y.会員数,
         revenue: y.売上,
         cost: y.コスト,
         profit: y.利益,
@@ -147,6 +153,28 @@ export function ChartTableView({ data }: ChartTableViewProps) {
         </div>
       </div>
 
+      {/*
+        会員数の推移。
+        金額（万円）とは尺度が違うため売上グラフに第2軸で重ねず、単独グラフとして分離する。
+        年次は期末（その年の最終月）の会員数。単一系列のため凡例は置かず見出しで系列名を示す。
+      */}
+      <div className="rounded-lg border border-border bg-card p-5">
+        <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {viewMode === "monthly" ? "月次 会員数" : "年次 会員数（期末）"}
+        </p>
+        <div className="h-56">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={fmtMembers} tick={{ fill: "var(--color-muted-foreground)", fontSize: 10 }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v: number) => `${Math.round(v).toLocaleString()}人`} contentStyle={tooltipStyle} />
+              <Line type="monotone" dataKey="会員数" stroke="var(--color-chart-5)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* 折れ線グラフ */}
       <div className="rounded-lg border border-border bg-card p-5">
         <p className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">累積利益推移（投資回収曲線）</p>
@@ -180,6 +208,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
             <TableHeader>
               <TableRow className="border-b border-border hover:bg-transparent">
                 <TableHead className="w-14 text-xs">{viewMode === "monthly" ? "月" : "年"}</TableHead>
+                <TableHead className="text-right text-xs">{viewMode === "monthly" ? "会員数" : "会員数(期末)"}</TableHead>
                 <TableHead className="text-right text-xs">売上</TableHead>
                 <TableHead className="text-right text-xs">コスト</TableHead>
                 <TableHead className="text-right text-xs">利益</TableHead>
@@ -191,6 +220,7 @@ export function ChartTableView({ data }: ChartTableViewProps) {
               {pagedTableData.map((row) => (
                 <TableRow key={row.label} className="border-b border-border/50">
                   <TableCell className="font-mono text-xs text-muted-foreground">{row.label}</TableCell>
+                  <TableCell className="text-right font-mono text-xs">{Math.round(row.members ?? 0).toLocaleString()}人</TableCell>
                   <TableCell className="text-right font-mono text-xs">{(row.revenue / 10000).toLocaleString()}万</TableCell>
                   <TableCell className="text-right font-mono text-xs">{(row.cost / 10000).toLocaleString()}万</TableCell>
                   <TableCell className={`text-right font-mono text-xs font-medium ${row.profit >= 0 ? "text-chart-2" : "text-destructive"}`}>

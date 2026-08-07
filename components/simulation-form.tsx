@@ -52,7 +52,23 @@ import {
   SECURITY_RUNNING_UNIT,
   SECURITY_UNIT,
 } from "@/lib/security-cost"
-import type { CalcFitnessMachineConfig, CalcMachineMaintenanceConfig, CalcSecurityConfig, LocationType, MasterValue, SecurityIntroBreakdown } from "@/lib/types"
+import {
+  computeOpeningPackageBreakdown,
+  computeOpeningPackageCost,
+  OPENING_PACKAGE_CODE,
+  OPENING_PACKAGE_FIELD_ID,
+  OPENING_PACKAGE_LABEL,
+  OPENING_PACKAGE_UNIT,
+} from "@/lib/opening-package-cost"
+import type {
+  CalcFitnessMachineConfig,
+  CalcMachineMaintenanceConfig,
+  CalcOpeningPackageConfig,
+  CalcSecurityConfig,
+  LocationType,
+  MasterValue,
+  SecurityIntroBreakdown,
+} from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
 import {
@@ -102,14 +118,36 @@ function withSecurityItem(model: MasterFormModel): MasterFormModel {
   return { running: model.running, investment }
 }
 
-/** アプリ側で常時供給する投資費目（フィットネスマシン費・ALSOK・USEN導入費）をモデルへ補完する */
+/**
+ * 開業前パッケージ費の費目をモデルに必ず含める。
+ * 実額は坪数×ロイヤリティ×計算パラメータ（元Excel I15/J15）から算出して投入するため、
+ * ここでは amount=0 のひな型を足す（非償却）。表示位置はマスタ由来の並び（その他の直前）に合わせる。
+ */
+function withOpeningPackageItem(model: MasterFormModel): MasterFormModel {
+  if (model.investment.some((m) => m.fieldId === OPENING_PACKAGE_FIELD_ID)) return model
+  const synthetic: MasterFormItem = {
+    fieldId: OPENING_PACKAGE_FIELD_ID,
+    code: OPENING_PACKAGE_CODE,
+    label: OPENING_PACKAGE_LABEL,
+    unit: OPENING_PACKAGE_UNIT,
+    amount: 0,
+  }
+  const investment = [...model.investment]
+  const otherIndex = investment.findIndex((m) => m.fieldId === "otherInitialCost")
+  investment.splice(otherIndex === -1 ? investment.length : otherIndex, 0, synthetic)
+  return { running: model.running, investment }
+}
+
+/** アプリ側で常時供給する投資費目（フィットネスマシン費・ALSOK・USEN導入費・開業前パッケージ費）をモデルへ補完する */
 function withAppManagedInvestmentItems(model: MasterFormModel): MasterFormModel {
-  return withSecurityItem(withFitnessMachineItem(model))
+  return withOpeningPackageItem(withSecurityItem(withFitnessMachineItem(model)))
 }
 
 interface SimulationFormProps {
   onSubmit?: () => void
   onSubmitWithData?: (data: FormSubmitData) => void | Promise<void>
+  /** 実行ボタンの文言。結果画面から戻って条件を編集した場合に「再試算」表記へ切り替えるために使う */
+  submitLabel?: string
 }
 
 export type FormSubmitData = {
@@ -168,11 +206,13 @@ export type FormSubmitData = {
   }
 }
 
+// タブ構成: 店舗基本情報 → 投資コスト → ランニングコスト（ユーザーfb②）。
+// 計算パラメータ（ロイヤリティ率・競合ジム件数・立地タイプ）は独立タブを廃止し、
+// 店舗基本情報タブ内の「試算条件」セクションへ統合した（ユーザーfb①）。
 const TABS = [
-  { id: "store",        label: "店舗基本情報",     icon: BuildingIcon         },
-  { id: "running-cost", label: "ランニングコスト", icon: WalletIcon           },
-  { id: "initial-cost", label: "投資コスト",       icon: BanknoteIcon         },
-  { id: "calc-params",  label: "計算パラメータ",   icon: SlidersHorizontalIcon },
+  { id: "store",        label: "店舗基本情報",     icon: BuildingIcon },
+  { id: "initial-cost", label: "投資コスト",       icon: BanknoteIcon },
+  { id: "running-cost", label: "ランニングコスト", icon: WalletIcon   },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -228,7 +268,7 @@ function hasQuantityInput(basis?: string): boolean {
   return basis === "fixed" || basis === "perTsubo" || basis === "perOccupancy"
 }
 
-export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormProps) {
+export function SimulationForm({ onSubmit, onSubmitWithData, submitLabel }: SimulationFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>("store")
   const [costPage,  setCostPage]  = useState(0)
   const [rcPage,    setRcPage]    = useState(0)
@@ -273,6 +313,9 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // ALSOK・USEN導入費のパラメータ（固定額内訳＋カメラ/サイネージの台数式）。マスタ管理＞ロジック可視化で編集可能
   const [securityConfig, setSecurityConfig] =
     useState<CalcSecurityConfig>(DEFAULT_CALC_PARAMS.security)
+  // 開業前パッケージ費のパラメータ（基準額・坪単価・丸め単位・直営ルール）。マスタ管理＞ロジック可視化で編集可能
+  const [openingPackageConfig, setOpeningPackageConfig] =
+    useState<CalcOpeningPackageConfig>(DEFAULT_CALC_PARAMS.openingPackage)
   // 防犯カメラ(USEN)・モニター(USEN)（ランニングコスト固定枠）の月額単価。
   // 台数は坪数から自動算出（投資側ALSOK・USEN導入費のカメラ/サイネージ台数式と共有）のため、単価のみ入力を持つ。
   const [securityCameraUnitPrice, setSecurityCameraUnitPrice] = useState(String(SECURITY_CAMERA_MONTHLY_UNIT_PRICE))
@@ -501,6 +544,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     investmentDefaults[SECURITY_FIELD_ID] = String(
       computeSecurityIntroCost(Math.max(0, parseFloat(floorArea) || 0), securityConfig),
     )
+    // 開業前パッケージ費もアプリ側で算出した値で上書きする（坪数連動＋ロイヤリティ連動。元Excel I15/J15）。
+    investmentDefaults[OPENING_PACKAGE_FIELD_ID] = String(
+      computeOpeningPackageCost(
+        Math.max(0, parseFloat(floorArea) || 0),
+        numericRoyaltyRate,
+        openingPackageConfig,
+      ),
+    )
     setInvestmentValues(investmentDefaults)
     setInvestmentQuantities(investmentQuantityDefaults)
     setIsFitnessMachineCostManual(false)
@@ -556,6 +607,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         if (!disposed && fmConfig) setFitnessMachineConfig(fmConfig)
         const secConfig = payload?.params?.security as CalcSecurityConfig | undefined
         if (!disposed && secConfig) setSecurityConfig(secConfig)
+        const opConfig = payload?.params?.openingPackage as CalcOpeningPackageConfig | undefined
+        if (!disposed && opConfig) setOpeningPackageConfig(opConfig)
       } catch {
         // 取得失敗時は既定パラメータ（DEFAULT_CALC_PARAMS）で算出する
       }
@@ -590,6 +643,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         if (m.fieldId === FITNESS_MACHINE_FIELD_ID) return
         // ALSOK・USEN導入費はロイヤリティ非連動のアプリ側算出値のため、マスタ基準額で戻さない
         if (m.fieldId === SECURITY_FIELD_ID) return
+        // 開業前パッケージ費は専用effectでロイヤリティ連動して再算出するため、マスタ基準額で戻さない
+        if (m.fieldId === OPENING_PACKAGE_FIELD_ID) return
         if (editedInvestmentFields.has(m.fieldId)) return
         next[m.fieldId] = String((hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount) ?? 0)
       })
@@ -628,6 +683,23 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [floorArea, securityConfig, editedInvestmentFields])
 
+  // 開業前パッケージ費（投資）の自動算出値を坪数・ロイヤリティ・パラメータから更新（手動編集時は据え置き）。
+  // 元Excel I15=ROUND(基準額+(坪数-基準坪)*坪単価, 丸め単位) / J15=IF(直営, I15*係数+加算, I15)。
+  useEffect(() => {
+    if (editedInvestmentFields.has(OPENING_PACKAGE_FIELD_ID)) return
+    setInvestmentValues((prev) => ({
+      ...prev,
+      [OPENING_PACKAGE_FIELD_ID]: String(
+        computeOpeningPackageCost(
+          Math.max(0, parseFloat(floorArea) || 0),
+          parseInt(royaltyRate, 10) as 0 | 10 | 15,
+          openingPackageConfig,
+        ),
+      ),
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [floorArea, royaltyRate, openingPackageConfig, editedInvestmentFields])
+
   // マシンメンテナンス費（固定枠）の自動算出値を住所・坪数・ロイヤリティ・パラメータから更新（手動上書き時は据え置き）
   useEffect(() => {
     if (isMachineMaintenanceManual) return
@@ -661,7 +733,13 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   // ※ 合計・investmentByField の算出には引き続き COST_ITEMS（全件）を使うため、値は試算に反映される。
   const fitnessMachineItem = masterModel.investment.find((m) => m.fieldId === "fitnessMachineCost")
   const securityItem = masterModel.investment.find((m) => m.fieldId === SECURITY_FIELD_ID)
-  const costDisplayItems = COST_ITEMS.filter((item) => item.id !== "fitnessMachineCost" && item.id !== SECURITY_FIELD_ID)
+  const openingPackageItem = masterModel.investment.find((m) => m.fieldId === OPENING_PACKAGE_FIELD_ID)
+  const costDisplayItems = COST_ITEMS.filter(
+    (item) =>
+      item.id !== "fitnessMachineCost" &&
+      item.id !== SECURITY_FIELD_ID &&
+      item.id !== OPENING_PACKAGE_FIELD_ID,
+  )
 
   const rcTotalPages   = Math.ceil(RC_ITEMS.length   / PAGE_SIZE)
   const costTotalPages = Math.ceil(costDisplayItems.length / PAGE_SIZE)
@@ -680,6 +758,12 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   )
   // 防犯カメラ(USEN)・モニター(USEN)（固定枠）: 台数は投資側ALSOK・USEN導入費のカメラ/サイネージ台数式（坪数連動）と共有。
   // 月額 = 単価（入力値） × 台数（自動算出）。
+  // 開業前パッケージ費の算出内訳（入力欄の説明文とマスタ再現用）。坪数・ロイヤリティに連動する。
+  const openingPackageBreakdown = computeOpeningPackageBreakdown(
+    floorAreaTsubo,
+    parseInt(royaltyRate, 10) as 0 | 10 | 15,
+    openingPackageConfig,
+  )
   const securityCameraCount = computeDeviceCount(floorAreaTsubo, securityConfig.cameraCountRule)
   const securityMonitorCount = computeDeviceCount(floorAreaTsubo, securityConfig.monitorCountRule)
   const securityCameraMonthly = Math.round(Math.max(0, parseInt(securityCameraUnitPrice) || 0) * securityCameraCount)
@@ -712,7 +796,8 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
   const runningCostTotalWithRent = rentValue + runningEffectiveTotal + machineMaintenanceValue
 
   // 投資費目の数量基準セット（fitnessMachineCost / securityCost は専用固定枠なので除外＝常に取得額そのまま）。
-  const isAppFixedInvestmentField = (fieldId: string) => fieldId === "fitnessMachineCost" || fieldId === SECURITY_FIELD_ID
+  const isAppFixedInvestmentField = (fieldId: string) =>
+    fieldId === "fitnessMachineCost" || fieldId === SECURITY_FIELD_ID || fieldId === OPENING_PACKAGE_FIELD_ID
   const investmentPerTsuboFieldIds = new Set(
     masterModel.investment.filter((m) => m.quantityBasis === "perTsubo" && !isAppFixedInvestmentField(m.fieldId)).map((m) => m.fieldId),
   )
@@ -862,6 +947,14 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
           }
           // ALSOK・USEN導入費はアプリ側算出（ロイヤリティ非連動）。マスタ基準額との差分方式を使わず入力値をそのまま採用する。
           if (fieldId === SECURITY_FIELD_ID) {
+            return sum + enteredAmount
+          }
+          // 開業前パッケージ費はアプリ側算出でロイヤリティ連動（直営のみ半額＋定額）。
+          // 手動編集が無ければレートごとに Excel 式で再算出する。
+          if (fieldId === OPENING_PACKAGE_FIELD_ID && !editedInvestmentFields.has(OPENING_PACKAGE_FIELD_ID)) {
+            return sum + computeOpeningPackageCost(floorAreaTsubo, rate, openingPackageConfig)
+          }
+          if (fieldId === OPENING_PACKAGE_FIELD_ID) {
             return sum + enteredAmount
           }
           const targetBaseAmount = Number(targetResolvedByField[fieldId] ?? enteredAmount)
@@ -1088,15 +1181,15 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                   </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* 計算パラメータ */}
-          {activeTab === "calc-params" && (
-            <div className="flex flex-col gap-6">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                計算に使用するパラメータを確認・調整してください。配線は後続対応予定です。
-              </p>
+              <Separator />
+
+              {/* 試算条件（旧「計算パラメータ」タブ）。ユーザーfb① により店舗基本情報へ統合 */}
+              <div className="flex flex-col gap-5">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontalIcon className="size-3.5 text-muted-foreground" />
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">試算条件</p>
+                </div>
 
               {/* ロイヤリティ率 */}
               <div className="flex flex-col gap-2">
@@ -1171,6 +1264,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                     </button>
                   ))}
                 </div>
+              </div>
               </div>
             </div>
           )}
@@ -1466,6 +1560,62 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
                 </div>
               )}
 
+              {/* 固定枠：開業前パッケージ費（投資コスト）。元Excel I15/J15 の坪数連動＋直営ルール */}
+              {openingPackageItem && (
+                <div className="rounded-lg border border-chart-4/40 bg-chart-4/5 p-3">
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="flex flex-1 flex-col gap-0.5">
+                      <Label htmlFor={OPENING_PACKAGE_FIELD_ID} className="text-xs font-semibold">
+                        {`${openingPackageItem.label}（${openingPackageItem.unit || "円"}）`}
+                      </Label>
+                      <span className="text-[10px] leading-relaxed text-muted-foreground">
+                        {openingPackageBreakdown
+                          ? `基準額 ${openingPackageBreakdown.baseAmount.toLocaleString()}円 ＋（${openingPackageBreakdown.floorAreaTsubo.toLocaleString()}坪 − ${openingPackageBreakdown.baseTsubo}坪）× ${openingPackageBreakdown.amountPerTsubo.toLocaleString()}円 → ${(openingPackageBreakdown.roundUnit / 10000).toLocaleString()}万円単位で四捨五入 ${openingPackageBreakdown.roundedAmount.toLocaleString()}円`
+                          : "坪数から自動算出します。"}
+                        {openingPackageBreakdown?.isDirect
+                          ? `／直営のため ×${openingPackageBreakdown.directRateFactor} ＋ ${openingPackageBreakdown.directRateAddition.toLocaleString()}円`
+                          : ""}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AmountInput
+                        id={OPENING_PACKAGE_FIELD_ID}
+                        className="w-40"
+                        value={investmentValues[OPENING_PACKAGE_FIELD_ID] ?? ""}
+                        onValueChange={(raw) => handleInvestmentCostChange(OPENING_PACKAGE_FIELD_ID, raw)}
+                      />
+                      {editedInvestmentFields.has(OPENING_PACKAGE_FIELD_ID) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 shrink-0 text-[10px]"
+                          onClick={() => {
+                            setEditedInvestmentFields((prev) => {
+                              const next = new Set(prev)
+                              next.delete(OPENING_PACKAGE_FIELD_ID)
+                              return next
+                            })
+                            setInvestmentValues((prev) => ({
+                              ...prev,
+                              [OPENING_PACKAGE_FIELD_ID]: String(
+                                computeOpeningPackageCost(
+                                  floorAreaTsubo,
+                                  parseInt(royaltyRate, 10) as 0 | 10 | 15,
+                                  openingPackageConfig,
+                                ),
+                              ),
+                            }))
+                          }}
+                        >
+                          自動に戻す
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                 {costPageItems.map((item) => (
                   <div key={item.id} className="flex flex-col gap-1.5">
@@ -1585,7 +1735,7 @@ export function SimulationForm({ onSubmit, onSubmitWithData }: SimulationFormPro
         {isLast ? (
           <Button type="button" onClick={() => { void handleSimulate() }} disabled={isSubmitting} className="gap-1.5 text-xs">
             <CalculatorIcon className="size-3.5" />
-            {isSubmitting ? "試算中..." : "試算を実行する"}
+            {isSubmitting ? "試算中..." : (submitLabel ?? "試算を実行する")}
           </Button>
         ) : (
           <Button type="button" onClick={() => setActiveTab(TABS[currentIndex + 1].id)} className="gap-1.5 text-xs">

@@ -55,6 +55,16 @@ import { normalizeMasterCode } from "@/lib/master-value-mapping"
 const ROWS_PER_PAGE = 10
 type SortDir = "asc" | "desc" | null
 
+/**
+ * 数量基準セレクトのトリガー用クラス。
+ * Shadcn の SelectTrigger は既定が `w-fit` + `whitespace-nowrap` のため、
+ * 「床面積連動（単価 × 入力坪数 × 数量）」のような長いラベルを選ぶとグリッド列の幅を突き抜ける。
+ * 列幅に固定（w-full min-w-0）し、収まらない場合は末尾を省略表示にする。
+ * ※ SelectValue には既定で `flex` が当たっており line-clamp が効かないため truncate を上書きする。
+ */
+const QUANTITY_BASIS_TRIGGER_CLASS =
+  "h-8 w-full min-w-0 text-xs *:data-[slot=select-value]:block *:data-[slot=select-value]:truncate"
+
 function getPageNumbers(total: number, current: number): (number | "ellipsis")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const pages: (number | "ellipsis")[] = [1]
@@ -524,7 +534,7 @@ export default function RunningCostPage() {
                     setForm((f) => ({ ...f, quantityBasis: value === "perTsubo" ? "perTsubo" : value === "fixed" ? "fixed" : "monthly" }))
                   }
                 >
-                  <SelectTrigger className="h-8 text-xs">
+                  <SelectTrigger className={QUANTITY_BASIS_TRIGGER_CLASS}>
                     <SelectValue placeholder="基準を選択" />
                   </SelectTrigger>
                   <SelectContent>
@@ -571,7 +581,7 @@ export default function RunningCostPage() {
                       value={form.royaltyRuleMode === "rate" ? "rate" : "binary"}
                       onValueChange={(value) => setForm((f) => ({ ...f, royaltyRuleMode: value === "rate" ? "rate" : "binary" }))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className={QUANTITY_BASIS_TRIGGER_CLASS}>
                         <SelectValue placeholder="切替方式を選択" />
                       </SelectTrigger>
                       <SelectContent>
