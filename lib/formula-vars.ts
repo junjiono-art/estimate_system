@@ -33,7 +33,10 @@ export const FORMULA_VAR_REGISTRY: FormulaVarDef[] = [
   // ──────────────────────────────
   { key: "paymentFeeRate", label: "決済手数料率", source: "param", unit: "%" },
   { key: "royaltyCapMonthly", label: "ロイヤリティ上限(月)", source: "param", unit: "円" },
-  { key: "appFeeMonthly", label: "アプリ利用料(月)", source: "param", unit: "円" },
+  { key: "appFeeMonthly", label: "アプリ利用料(月/旧・未使用)", source: "param", unit: "円" },
+  { key: "appFeePerMember", label: "アプリ利用料/人", source: "param", unit: "円/人" },
+  { key: "royaltyCapRate10", label: "ロイヤリティ上限(FC10%)", source: "param", unit: "円" },
+  { key: "royaltyCapOther", label: "ロイヤリティ上限(FC10%以外)", source: "param", unit: "円" },
 
   // 広告費スケジュール（事業計画 R42）。adCostMonthly 式から参照（パラメータ連動維持）
   { key: "adCostYear1Month1", label: "広告費 1年目1月", source: "param", unit: "円" },
@@ -44,10 +47,23 @@ export const FORMULA_VAR_REGISTRY: FormulaVarDef[] = [
   { key: "adCostYear3PlusMonthly", label: "広告費 3年目以降(月)", source: "param", unit: "円" },
 
   // 競合影響率（入力欄 E78 / calcParams.competitorImpact）。initialJoiners 式から参照
-  { key: "competitorImpactUpTo2", label: "競合影響率(2件以下)", source: "param", unit: "%" },
+  { key: "competitorImpactNone", label: "競合影響率(0件)", source: "param", unit: "%" },
+  { key: "competitorImpactFor1", label: "競合影響率(1件)", source: "param", unit: "%" },
+  { key: "competitorImpactUpTo2", label: "競合影響率(2件)", source: "param", unit: "%" },
   { key: "competitorImpactFor3", label: "競合影響率(3件)", source: "param", unit: "%" },
   { key: "competitorImpactFor4", label: "競合影響率(4件)", source: "param", unit: "%" },
   { key: "competitorImpactOver4", label: "競合影響率(5件以上)", source: "param", unit: "%" },
+
+  // 商圏獲得率（入力欄 E59/F59/G59）。立地タイプ別。initialJoiners 式から参照
+  { key: "catchmentUrbanKm1", label: "商圏獲得率 都市型1km", source: "param", unit: "%" },
+  { key: "catchmentUrbanKm3", label: "商圏獲得率 都市型3km", source: "param", unit: "%" },
+  { key: "catchmentUrbanKm5", label: "商圏獲得率 都市型5km", source: "param", unit: "%" },
+  { key: "catchmentSuburbanKm1", label: "商圏獲得率 郊外型1km", source: "param", unit: "%" },
+  { key: "catchmentSuburbanKm3", label: "商圏獲得率 郊外型3km", source: "param", unit: "%" },
+  { key: "catchmentSuburbanKm5", label: "商圏獲得率 郊外型5km", source: "param", unit: "%" },
+  { key: "catchmentRuralKm1", label: "商圏獲得率 田舎型1km", source: "param", unit: "%" },
+  { key: "catchmentRuralKm3", label: "商圏獲得率 田舎型3km", source: "param", unit: "%" },
+  { key: "catchmentRuralKm5", label: "商圏獲得率 田舎型5km", source: "param", unit: "%" },
 
   // ──────────────────────────────
   // Constant層

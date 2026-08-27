@@ -118,7 +118,7 @@ export const FORMULA_FALLBACKS: Record<string, FormulaFallbackDef> = {
     key: "appFee",
     label: "アプリ利用料",
     fallbackType: "derived",
-    // appFee = monthlyRoyalty > 0 ? appFeeMonthly : 0
+    // appFee = franchiseRate > 0 ? round(members × appFeePerMember) : 0（事業計画 R61）
     min: 0,
   },
   monthlyCost: {

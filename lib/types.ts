@@ -402,6 +402,19 @@ export interface CalcCatchmentRateSet {
   km5: number
 }
 
+/** ロイヤリティ率別の月額上限（入力欄 E73 の IF 分岐）。rate10 = FC10%、other = それ以外(0%/15%) */
+export interface CalcRoyaltyCapSet {
+  rate10: number
+  other: number
+}
+
+/** 立地タイプ別の獲得単価（入力欄 C64/C65 の IF 分岐） */
+export interface CalcSemCpaSet {
+  urban: number
+  suburban: number
+  rural: number
+}
+
 export interface CalcCatchmentConfig {
   urban: CalcCatchmentRateSet
   suburban: CalcCatchmentRateSet
@@ -501,10 +514,20 @@ export interface CalcAcquisitionConfig {
   referralRate: number
   /** 初月見込み客の媒体配分 入力欄!D41/D42/D43 */
   channelSplit: { signage: number; web: number; sns: number }
-  /** SEM獲得単価(1〜2年目) 入力欄!C64 */
+  /**
+   * SEM獲得単価(1〜2年目) 入力欄!C64。
+   * Excelは立地タイプ別の分岐（都市型3000/郊外型4000/田舎型5000）。
+   * semCpaY1Y2 は旧レコード互換のための郊外型フォールバック。
+   */
   semCpaY1Y2: number
-  /** SEM獲得単価(3年目以降) 入力欄!C65 */
+  semCpaY1Y2ByLocation?: CalcSemCpaSet
+  /**
+   * SEM獲得単価(3年目以降) 入力欄!C65（都市型5000/郊外型6000/田舎型8000）。
+   * 元Excelでは3年目以降も獲得数の算出に C64 を使っており C65 は参照されていないが、
+   * 定義はマスタとして保持する。
+   */
   semCpaY3Plus: number
+  semCpaY3PlusByLocation?: CalcSemCpaSet
   /** SNS広告単価 入力欄!C66 */
   snsAdUnitCost: number
   /** Web広告月予算（獲得計算用） 入力欄!C76 */
@@ -729,8 +752,19 @@ export interface CalcParameterConfig {
   id?: string
   updatedAt?: string
   paymentFeeRate: number
+  /**
+   * ロイヤリティ月額上限（入力欄 E73 = IF($C$73=10%, 300000, 5000000)）。
+   * Excelはロイヤリティ率で上限が変わる。royaltyCapMonthly は旧レコード互換のフラット値。
+   */
   royaltyCapMonthly: number
+  royaltyCapByRate?: CalcRoyaltyCapSet
+  /**
+   * アプリ利用料（入力欄 C74 = IF(ロイヤリティ=0, 0, 50)）。
+   * Excelは事業計画 R61 = 会員数 × 単価 の「1人あたり」。
+   * appFeeMonthly は月額固定として扱っていた旧実装の残骸で、現在は使用しない。
+   */
   appFeeMonthly: number
+  appFeePerMember?: number
   competitorImpact: CalcCompetitorImpactConfig
   /** 立地タイプ別の商圏獲得率（入力欄 E59/F59/G59）。未設定時は既定値で補完 */
   catchment?: CalcCatchmentConfig

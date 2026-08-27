@@ -2,6 +2,7 @@ import type { ScenarioType, SimulationRequestInput, SimulationResult } from "@/l
 import type { CalcParameterConfig } from "@/lib/types"
 import type { FormulaSetRecordLike } from "@/lib/formula-types"
 import { computeAveragePrice, computeVariableCostPerMember } from "@/lib/average-price"
+import { APP_FEE_PER_MEMBER_WITH_ROYALTY } from "@/lib/calc-constants"
 import { computeCapacity } from "@/lib/capacity"
 import { simulateMemberGrowth } from "@/lib/member-growth"
 import { computeMonthlyDepreciation } from "@/lib/depreciation"
@@ -89,6 +90,28 @@ function getCompetitorImpactRate(competitorCount: number, calcParams: CalcParame
   if (competitorCount === 3) return impact.for3
   if (competitorCount === 4) return impact.for4
   return impact.over4
+}
+
+/**
+ * ロイヤリティの月額上限（入力欄 E73 = IF($C$73=10%, 300000, 5000000)）。
+ * Excelは率で上限が変わる。FC10%は30万で頭打ち、0%/15%は500万＝実質無制限。
+ * 旧レコード（byRate 無し）はフラット値へフォールバックする。
+ */
+function resolveRoyaltyCap(calcParams: CalcParameterConfig, royaltyRatePercent: number): number {
+  const byRate = calcParams.royaltyCapByRate
+  if (!byRate) return calcParams.royaltyCapMonthly
+  return royaltyRatePercent === 10 ? byRate.rate10 : byRate.other
+}
+
+/**
+ * アプリ利用料（事業計画 R61 = 会員数 × 入力欄!C74）。
+ * C74 = IF(ロイヤリティ=0, 0, 50) なので直営は0、FCは会員1人あたり50円。
+ * 旧実装は月額固定 appFeeMonthly を使っており会員数に連動していなかった（不具合一覧 #35）。
+ */
+function getAppFee(members: number, calcParams: CalcParameterConfig, royaltyRatePercent: number): number {
+  if (royaltyRatePercent <= 0) return 0
+  const perMember = calcParams.appFeePerMember ?? 0
+  return Math.round(members * perMember)
 }
 
 function getPaymentFee(revenue: number, calcParams: CalcParameterConfig): number {
@@ -325,9 +348,11 @@ export function buildRegressionRows(
     retention: calcParams.retention,
     acquisition: calcParams.acquisition,
     signage: calcParams.signage[scenario],
+    locationType,
   })
 
-  const royaltyRate = Math.max(0, resolveFranchiseRate(resolvedInput)) / 100
+  const franchiseRatePercent = Math.max(0, resolveFranchiseRate(resolvedInput))
+  const royaltyRate = franchiseRatePercent / 100
   const monthlyRent = resolveMonthlyRent(resolvedInput)
   // ランニングコストにマシンメンテナンス費（入力欄 B34）を内包する。
   // 手入力（固定枠）があればそれを優先、無ければパラメータから自動算出する。
@@ -342,8 +367,9 @@ export function buildRegressionRows(
     const adCost = getMonthlyAdCost(g.month, calcParams, scenario)
 
     const defaultPaymentFee = getPaymentFee(revenue, calcParams)
-    const defaultRoyalty = Math.min(Math.round(revenue * royaltyRate), calcParams.royaltyCapMonthly)
-    const defaultAppFee = defaultRoyalty > 0 ? calcParams.appFeeMonthly : 0
+    const defaultRoyalty = Math.min(Math.round(revenue * royaltyRate), resolveRoyaltyCap(calcParams, franchiseRatePercent))
+    // アプリ利用料は会員数連動（事業計画 R61）。ロイヤリティ額ではなくFC率の有無で判定する。
+    const defaultAppFee = getAppFee(members, calcParams, franchiseRatePercent)
     const defaultCost = fixedCost + adCost + defaultPaymentFee + defaultRoyalty + defaultAppFee
 
     let cost = defaultCost
@@ -606,8 +632,8 @@ export function calculateSimulation(
   const monthlyRevenue = year1Last?.revenue ?? 0
   const monthlyProfit = year1Last?.profit ?? 0
   const projectedMembers = Math.max(0, year1Last?.members ?? 0)
-  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), calcParams.royaltyCapMonthly)
-  const monthlyAppFee = monthlyRoyalty > 0 ? calcParams.appFeeMonthly : 0
+  const monthlyRoyalty = Math.min(Math.round(monthlyRevenue * royaltyRate), resolveRoyaltyCap(calcParams, franchiseRate))
+  const monthlyAppFee = getAppFee(projectedMembers, calcParams, franchiseRate)
 
   // 損益分岐会員数（限界利益ベース。事業計画 D4 = O60/L4 = 固定費 / 限界利益単価）
   const memberFee = calcParams.pricing.memberFeeExTax
@@ -617,6 +643,7 @@ export function calculateSimulation(
     royaltyRate,
     calcParams.paymentFeeRate,
     calcParams.pricing,
+    calcParams.appFeePerMember ?? APP_FEE_PER_MEMBER_WITH_ROYALTY,
   )
   const contributionMargin = averagePrice - variableCostPerMember
   const fixedCostForBreakeven = monthlyRent + monthlyRunningCost

@@ -18,14 +18,16 @@ export function computeAveragePrice(pricing: CalcPricingConfig): number {
  * @param royaltyRate  ロイヤリティ率（0〜1。例: 10% = 0.1）
  * @param paymentFeeRate 決済手数料率（入力欄!C75）
  * @param pricing 料金設定（サプリ原価の算出にオプション構成を使用）
+ * @param appFeePerMember アプリ利用料/人（入力欄!C74）。未指定なら定数の既定値。
  */
 export function computeVariableCostPerMember(
   averagePrice: number,
   royaltyRate: number,
   paymentFeeRate: number,
   pricing: CalcPricingConfig,
+  appFeePerMember: number = APP_FEE_PER_MEMBER_WITH_ROYALTY,
 ): number {
-  const appFee = royaltyRate > 0 ? APP_FEE_PER_MEMBER_WITH_ROYALTY : 0          // L6
+  const appFee = royaltyRate > 0 ? appFeePerMember : 0                          // L6
   const royaltyCost = royaltyRate > 0 ? averagePrice * royaltyRate : 0          // L7
   const paymentFee = averagePrice * paymentFeeRate                              // L8
   const supplement = pricing.options                                           // L10

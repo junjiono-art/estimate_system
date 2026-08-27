@@ -6,8 +6,12 @@ import { PREFECTURE_MACHINE_UNIT_PRICE, FITNESS_MACHINE_FALLBACK_UNIT_PRICE } fr
 // 拡張パラメータ（pricing 以降）は元Excel「入力欄」「事業計画」「キャパシティ計算」由来の既定値。
 export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
   paymentFeeRate: 0.035,
+  // 入力欄 E73 = IF($C$73=10%, 300000, 5000000)。フラット値は旧レコード互換（FC10%相当）。
   royaltyCapMonthly: 300_000,
+  royaltyCapByRate: { rate10: 300_000, other: 5_000_000 },
+  // 入力欄 C74 = IF(ロイヤリティ=0, 0, 50)。事業計画 R61 = 会員数 × 単価 の1人あたり単価。
   appFeeMonthly: 10_000,
+  appFeePerMember: 50,
   // 入力欄 E78。Excel は件数ごとに個別の率（0件は該当分岐が無く 0%）。
   competitorImpact: {
     none: 0,
@@ -66,8 +70,11 @@ export const DEFAULT_CALC_PARAMS: CalcParameterConfig = {
     organicSearchRate: 0.04, // 入力欄!C71
     referralRate: 0.03, // 入力欄!C70
     channelSplit: { signage: 0.7, web: 0.25, sns: 0.05 }, // 入力欄!D41/D42/D43
-    semCpaY1Y2: 4_000, // 入力欄!C64
-    semCpaY3Plus: 6_000, // 入力欄!C65
+    // 入力欄 C64/C65 は立地タイプ別の IF 分岐。フラット側は旧レコード互換の郊外型フォールバック。
+    semCpaY1Y2: 4_000, // 入力欄!C64（郊外型）
+    semCpaY1Y2ByLocation: { urban: 3_000, suburban: 4_000, rural: 5_000 },
+    semCpaY3Plus: 6_000, // 入力欄!C65（郊外型）
+    semCpaY3PlusByLocation: { urban: 5_000, suburban: 6_000, rural: 8_000 },
     snsAdUnitCost: 10_000, // 入力欄!C66
     webBudgetMonthly: 120_000, // 入力欄!C76
     snsBudgetMonthly: 60_000, // 入力欄!C77

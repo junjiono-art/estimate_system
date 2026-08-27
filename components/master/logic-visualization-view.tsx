@@ -287,8 +287,11 @@ export function LogicVisualizationView() {
   const [isSavingStep2, setIsSavingStep2] = useState(false)
   const [isSavingStep3, setIsSavingStep3] = useState(false)
   const [paymentFeeRatePercent, setPaymentFeeRatePercent] = useState("")
-  const [royaltyCapMonthly, setRoyaltyCapMonthly] = useState("")
-  const [appFeeMonthly, setAppFeeMonthly] = useState("")
+  // ロイヤリティ上限は入力欄 E73 = IF($C$73=10%, 300000, 5000000) でFC率により変わる。
+  const [royaltyCapRate10, setRoyaltyCapRate10] = useState("")
+  const [royaltyCapOther, setRoyaltyCapOther] = useState("")
+  // アプリ利用料は入力欄 C74 = 会員1人あたり50円（FCのみ）。事業計画 R61 = 会員数 × 単価。
+  const [appFeePerMember, setAppFeePerMember] = useState("")
   const [competitorNonePercent, setCompetitorNonePercent] = useState("")
   const [competitorFor1Percent, setCompetitorFor1Percent] = useState("")
   const [competitorUpTo2Percent, setCompetitorUpTo2Percent] = useState("")
@@ -323,8 +326,13 @@ export function LogicVisualizationView() {
   const [splitSignage, setSplitSignage] = useState("")
   const [splitWeb, setSplitWeb] = useState("")
   const [splitSns, setSplitSns] = useState("")
-  const [semCpaY1Y2, setSemCpaY1Y2] = useState("")
-  const [semCpaY3Plus, setSemCpaY3Plus] = useState("")
+  // SEM CPA は元Excel C64/C65 が立地タイプ別の IF 分岐（都市型/郊外型/田舎型）。
+  const [semCpaY1Y2Urban, setSemCpaY1Y2Urban] = useState("")
+  const [semCpaY1Y2Suburban, setSemCpaY1Y2Suburban] = useState("")
+  const [semCpaY1Y2Rural, setSemCpaY1Y2Rural] = useState("")
+  const [semCpaY3PlusUrban, setSemCpaY3PlusUrban] = useState("")
+  const [semCpaY3PlusSuburban, setSemCpaY3PlusSuburban] = useState("")
+  const [semCpaY3PlusRural, setSemCpaY3PlusRural] = useState("")
   const [snsAdUnitCost, setSnsAdUnitCost] = useState("")
   const [webBudgetMonthly, setWebBudgetMonthly] = useState("")
   const [snsBudgetMonthly, setSnsBudgetMonthly] = useState("")
@@ -453,8 +461,10 @@ export function LogicVisualizationView() {
 
   function syncFeeParams(params: CalcParameterConfig) {
     setPaymentFeeRatePercent(formatRatePercent(params.paymentFeeRate))
-    setRoyaltyCapMonthly(String(params.royaltyCapMonthly))
-    setAppFeeMonthly(String(params.appFeeMonthly))
+    // byRate を持たない旧レコードはフラット値で両方を初期化する
+    setRoyaltyCapRate10(String(params.royaltyCapByRate?.rate10 ?? params.royaltyCapMonthly))
+    setRoyaltyCapOther(String(params.royaltyCapByRate?.other ?? params.royaltyCapMonthly))
+    setAppFeePerMember(String(params.appFeePerMember ?? 50))
   }
 
   function syncCompetitorParams(params: CalcParameterConfig) {
@@ -495,8 +505,15 @@ export function LogicVisualizationView() {
     setSplitSignage(String(params.acquisition.channelSplit.signage))
     setSplitWeb(String(params.acquisition.channelSplit.web))
     setSplitSns(String(params.acquisition.channelSplit.sns))
-    setSemCpaY1Y2(String(params.acquisition.semCpaY1Y2))
-    setSemCpaY3Plus(String(params.acquisition.semCpaY3Plus))
+    // ByLocation を持たない旧レコードはフラット値（郊外型相当）で3つとも初期化する
+    const cpa1 = params.acquisition.semCpaY1Y2ByLocation
+    const cpa3 = params.acquisition.semCpaY3PlusByLocation
+    setSemCpaY1Y2Urban(String(cpa1?.urban ?? params.acquisition.semCpaY1Y2))
+    setSemCpaY1Y2Suburban(String(cpa1?.suburban ?? params.acquisition.semCpaY1Y2))
+    setSemCpaY1Y2Rural(String(cpa1?.rural ?? params.acquisition.semCpaY1Y2))
+    setSemCpaY3PlusUrban(String(cpa3?.urban ?? params.acquisition.semCpaY3Plus))
+    setSemCpaY3PlusSuburban(String(cpa3?.suburban ?? params.acquisition.semCpaY3Plus))
+    setSemCpaY3PlusRural(String(cpa3?.rural ?? params.acquisition.semCpaY3Plus))
     setSnsAdUnitCost(String(params.acquisition.snsAdUnitCost))
     setWebBudgetMonthly(String(params.acquisition.webBudgetMonthly))
     setSnsBudgetMonthly(String(params.acquisition.snsBudgetMonthly))
@@ -662,16 +679,22 @@ export function LogicVisualizationView() {
     }
 
     const paymentFeeRateRaw = parseRequiredNumber(paymentFeeRatePercent)
-    const royaltyCapRaw = parseRequiredNumber(royaltyCapMonthly)
-    const appFeeRaw = parseRequiredNumber(appFeeMonthly)
+    const royaltyCapRate10Raw = parseRequiredNumber(royaltyCapRate10)
+    const royaltyCapOtherRaw = parseRequiredNumber(royaltyCapOther)
+    const appFeeRaw = parseRequiredNumber(appFeePerMember)
 
     if (paymentFeeRateRaw === null || paymentFeeRateRaw < 0 || paymentFeeRateRaw > 100) {
       toast.error("決済手数料率は 0〜100 の範囲で入力してください。")
       return
     }
 
-    if (royaltyCapRaw === null || royaltyCapRaw < 0) {
-      toast.error("ロイヤリティ月額上限は 0 以上で入力してください。")
+    if (royaltyCapRate10Raw === null || royaltyCapRate10Raw < 0) {
+      toast.error("ロイヤリティ月額上限（FC10%）は 0 以上で入力してください。")
+      return
+    }
+
+    if (royaltyCapOtherRaw === null || royaltyCapOtherRaw < 0) {
+      toast.error("ロイヤリティ月額上限（FC10%以外）は 0 以上で入力してください。")
       return
     }
 
@@ -688,8 +711,13 @@ export function LogicVisualizationView() {
       const nextPayload: CalcParameterConfig = {
         ...latestParams,
         paymentFeeRate: paymentFeeRateRaw / 100,
-        royaltyCapMonthly: Math.round(royaltyCapRaw),
-        appFeeMonthly: Math.round(appFeeRaw),
+        // フラット値は旧レコード互換のため FC10% の上限を入れておく
+        royaltyCapMonthly: Math.round(royaltyCapRate10Raw),
+        royaltyCapByRate: {
+          rate10: Math.round(royaltyCapRate10Raw),
+          other: Math.round(royaltyCapOtherRaw),
+        },
+        appFeePerMember: Math.round(appFeeRaw),
       }
 
       const response = await fetch("/api/master/calc-params", {
@@ -927,8 +955,12 @@ export function LogicVisualizationView() {
       }
     }
     const moneys: Array<[string, number | null]> = [
-      ["SEM CPA(1〜2年目)", parseRequiredNumber(semCpaY1Y2)],
-      ["SEM CPA(3年目以降)", parseRequiredNumber(semCpaY3Plus)],
+      ["SEM CPA(1〜2年目) 都市型", parseRequiredNumber(semCpaY1Y2Urban)],
+      ["SEM CPA(1〜2年目) 郊外型", parseRequiredNumber(semCpaY1Y2Suburban)],
+      ["SEM CPA(1〜2年目) 田舎型", parseRequiredNumber(semCpaY1Y2Rural)],
+      ["SEM CPA(3年目以降) 都市型", parseRequiredNumber(semCpaY3PlusUrban)],
+      ["SEM CPA(3年目以降) 郊外型", parseRequiredNumber(semCpaY3PlusSuburban)],
+      ["SEM CPA(3年目以降) 田舎型", parseRequiredNumber(semCpaY3PlusRural)],
       ["SNS広告単価", parseRequiredNumber(snsAdUnitCost)],
       ["Web広告月予算", parseRequiredNumber(webBudgetMonthly)],
       ["SNS広告月予算", parseRequiredNumber(snsBudgetMonthly)],
@@ -954,8 +986,19 @@ export function LogicVisualizationView() {
             web: parseRequiredNumber(splitWeb) as number,
             sns: parseRequiredNumber(splitSns) as number,
           },
-          semCpaY1Y2: Math.round(parseRequiredNumber(semCpaY1Y2) as number),
-          semCpaY3Plus: Math.round(parseRequiredNumber(semCpaY3Plus) as number),
+          // フラット値は旧レコード互換のため郊外型を入れておく
+          semCpaY1Y2: Math.round(parseRequiredNumber(semCpaY1Y2Suburban) as number),
+          semCpaY1Y2ByLocation: {
+            urban: Math.round(parseRequiredNumber(semCpaY1Y2Urban) as number),
+            suburban: Math.round(parseRequiredNumber(semCpaY1Y2Suburban) as number),
+            rural: Math.round(parseRequiredNumber(semCpaY1Y2Rural) as number),
+          },
+          semCpaY3Plus: Math.round(parseRequiredNumber(semCpaY3PlusSuburban) as number),
+          semCpaY3PlusByLocation: {
+            urban: Math.round(parseRequiredNumber(semCpaY3PlusUrban) as number),
+            suburban: Math.round(parseRequiredNumber(semCpaY3PlusSuburban) as number),
+            rural: Math.round(parseRequiredNumber(semCpaY3PlusRural) as number),
+          },
           snsAdUnitCost: Math.round(parseRequiredNumber(snsAdUnitCost) as number),
           webBudgetMonthly: Math.round(parseRequiredNumber(webBudgetMonthly) as number),
           snsBudgetMonthly: Math.round(parseRequiredNumber(snsBudgetMonthly) as number),
@@ -1602,24 +1645,35 @@ export function LogicVisualizationView() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="royaltyCapMonthlyStep1" className="text-xs font-medium">ロイヤリティ月額上限</Label>
+            <Label htmlFor="royaltyCapRate10Step1" className="text-xs font-medium">ロイヤリティ月額上限（FC10%）</Label>
             <SuffixedInput
-              id="royaltyCapMonthlyStep1"
-              value={royaltyCapMonthly}
-              onChange={setRoyaltyCapMonthly}
+              id="royaltyCapRate10Step1"
+              value={royaltyCapRate10}
+              onChange={setRoyaltyCapRate10}
               disabled={isSavingStep1}
               suffix="円"
               inputMode="numeric"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="appFeeMonthlyStep1" className="text-xs font-medium">アプリ利用料</Label>
+            <Label htmlFor="royaltyCapOtherStep1" className="text-xs font-medium">ロイヤリティ月額上限（FC10%以外）</Label>
             <SuffixedInput
-              id="appFeeMonthlyStep1"
-              value={appFeeMonthly}
-              onChange={setAppFeeMonthly}
+              id="royaltyCapOtherStep1"
+              value={royaltyCapOther}
+              onChange={setRoyaltyCapOther}
               disabled={isSavingStep1}
-              suffix="円/月"
+              suffix="円"
+              inputMode="numeric"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="appFeePerMemberStep1" className="text-xs font-medium">アプリ利用料（会員1人あたり）</Label>
+            <SuffixedInput
+              id="appFeePerMemberStep1"
+              value={appFeePerMember}
+              onChange={setAppFeePerMember}
+              disabled={isSavingStep1}
+              suffix="円/人"
               inputMode="numeric"
             />
           </div>
@@ -1947,12 +2001,28 @@ export function LogicVisualizationView() {
             <SuffixedInput id="splitSns" value={splitSns} onChange={setSplitSns} disabled={isSavingStep5} suffix="率" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">SEM CPA（1〜2年目）</Label>
-            <SuffixedInput id="semCpaY1Y2" value={semCpaY1Y2} onChange={setSemCpaY1Y2} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+            <Label className="text-xs font-medium">SEM CPA（1〜2年目）都市型</Label>
+            <SuffixedInput id="semCpaY1Y2Urban" value={semCpaY1Y2Urban} onChange={setSemCpaY1Y2Urban} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">SEM CPA（3年目以降）</Label>
-            <SuffixedInput id="semCpaY3Plus" value={semCpaY3Plus} onChange={setSemCpaY3Plus} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+            <Label className="text-xs font-medium">SEM CPA（1〜2年目）郊外型</Label>
+            <SuffixedInput id="semCpaY1Y2Suburban" value={semCpaY1Y2Suburban} onChange={setSemCpaY1Y2Suburban} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（1〜2年目）田舎型</Label>
+            <SuffixedInput id="semCpaY1Y2Rural" value={semCpaY1Y2Rural} onChange={setSemCpaY1Y2Rural} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（3年目以降）都市型</Label>
+            <SuffixedInput id="semCpaY3PlusUrban" value={semCpaY3PlusUrban} onChange={setSemCpaY3PlusUrban} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（3年目以降）郊外型</Label>
+            <SuffixedInput id="semCpaY3PlusSuburban" value={semCpaY3PlusSuburban} onChange={setSemCpaY3PlusSuburban} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">SEM CPA（3年目以降）田舎型</Label>
+            <SuffixedInput id="semCpaY3PlusRural" value={semCpaY3PlusRural} onChange={setSemCpaY3PlusRural} disabled={isSavingStep5} suffix="円" inputMode="numeric" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">SNS広告単価</Label>

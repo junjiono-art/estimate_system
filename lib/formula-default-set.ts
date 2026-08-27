@@ -37,21 +37,30 @@ const call = (fnName: string, ...args: FormulaToken[][]): FormulaToken[] => {
 const paymentFeeTokens: FormulaToken[] = call("round", [v("monthlyRevenue"), o("*"), v("paymentFeeRate")])
 
 // ── 月次ロイヤリティ = min(round(売上 × FC率 ÷ 100), 上限) ──
+// 上限は入力欄 E73 = IF($C$73=10%, 300000, 5000000) でロイヤリティ率により変わる。
+// 以前は固定の royaltyCapMonthly を参照しており FC15% で頭打ちしていた（不具合一覧 #36）。
 const monthlyRoyaltyTokens: FormulaToken[] = call(
   "min",
   call("round", [v("monthlyRevenue"), o("*"), v("franchiseRate"), o("/"), c(100)]),
-  [v("royaltyCapMonthly")],
+  call("if", [v("franchiseRate"), o("=="), c(10)], [v("royaltyCapRate10")], [v("royaltyCapOther")]),
 )
 
-// ── アプリ利用料 = if(ロイヤリティ > 0, アプリ料, 0) ──
+// ── アプリ利用料 = if(FC率 > 0, round(会員数 × 単価), 0) ──
+// 事業計画 R61 = 会員数 × 入力欄!C74、C74 = IF(ロイヤリティ=0, 0, 50)。
+// 以前は月額固定 appFeeMonthly を返しており会員数に連動していなかった（不具合一覧 #35）。
 const appFeeTokens: FormulaToken[] = call(
   "if",
-  [v("monthlyRoyalty"), o(">"), c(0)],
-  [v("appFeeMonthly")],
+  [v("franchiseRate"), o(">"), c(0)],
+  call("round", [v("members"), o("*"), v("appFeePerMember")]),
   [c(0)],
 )
 
 // ── 月次広告費 = 月インデックスのスケジュール（事業計画 R42）──
+// 事業計画 R42 の月次広告費。
+// ※ 既知の不整合: Excelはシナリオ×年で手入力のスポット増減があり
+//   （calcParams.adCost.scenarioMonthlyOverride: 標準=10年目18万 / 保守=2・3・9年目）、
+//   式のコンテキストに scenario が無いためこの式では表現できない。
+//   結果として標準・保守の該当年で月6万円ずれる（不具合一覧 #34）。
 const adCostMonthlyTokens: FormulaToken[] = call(
   "if", [v("month"), o("<="), c(1)], [v("adCostYear1Month1")],
   call("if", [v("month"), o("<="), c(2)], [v("adCostYear1Month2")],
@@ -93,29 +102,34 @@ const km1 = v("populationKm1Ring")
 const km3 = v("populationKm3Ring")
 const km5 = v("populationKm5Ring")
 
-// 都市型: e60 × (1+e38[km1]) 、e60 = km1 × 0.012
+// 商圏獲得率（入力欄 E59/F59/G59）は立地タイプで変わるため、直値ではなくパラメータを参照する。
+// 以前は3ブランチとも郊外型の値(0.012/0.008/0.001)を直値で埋めており、
+// 都市型(1km 1.5%)・田舎型(3.0%/1.5%/1.0%)でExcelと乖離していた（不具合一覧 #31）。
+// 都市型: e60 × (1+e38[km1])
 const urbanBranch: FormulaToken[] = [
-  km1, o("*"), c(0.012), o("*"), ...onePlusE38([km1]),
+  km1, o("*"), v("catchmentUrbanKm1"), o("*"), ...onePlusE38([km1]),
 ]
-// 郊外型: e60 + f60 × (1+e38[km1+km3]) 、f60 = km3 × 0.008
+// 郊外型: e60 + f60 × (1+e38[km1+km3])
 const suburbanBranch: FormulaToken[] = [
-  km1, o("*"), c(0.012), o("+"),
-  km3, o("*"), c(0.008), o("*"), ...onePlusE38([km1, o("+"), km3]),
+  km1, o("*"), v("catchmentSuburbanKm1"), o("+"),
+  km3, o("*"), v("catchmentSuburbanKm3"), o("*"), ...onePlusE38([km1, o("+"), km3]),
 ]
-// 田舎型: e60 + f60 + g60 × (1+e38[km1+km3+km5]) 、g60 = km5 × 0.001
+// 田舎型: e60 + f60 + g60 × (1+e38[km1+km3+km5])
 const ruralBranch: FormulaToken[] = [
-  km1, o("*"), c(0.012), o("+"),
-  km3, o("*"), c(0.008), o("+"),
-  km5, o("*"), c(0.001), o("*"), ...onePlusE38([km1, o("+"), km3, o("+"), km5]),
+  km1, o("*"), v("catchmentRuralKm1"), o("+"),
+  km3, o("*"), v("catchmentRuralKm3"), o("+"),
+  km5, o("*"), v("catchmentRuralKm5"), o("*"), ...onePlusE38([km1, o("+"), km3, o("+"), km5]),
 ]
 
-// 競合影響率: competitorCount のティア（入力欄 E78 相当、パラメータ連動）
+// 競合影響率: 入力欄 E78 は件数ごとに個別（1件=5%/2件=10%/3件=15%/4件=20%/5件=25%、0件は0%）。
+// 以前は「2件以下」を一律 upTo2 にしていたため、競合1件のとき Excel の倍の減衰率になっていた。
 const competitorImpact: FormulaToken[] = call(
-  "if", [v("competitorCount"), o("<="), c(0)], [c(0)],
-  call("if", [v("competitorCount"), o("<="), c(2)], [v("competitorImpactUpTo2")],
-    call("if", [v("competitorCount"), o("=="), c(3)], [v("competitorImpactFor3")],
-      call("if", [v("competitorCount"), o("=="), c(4)], [v("competitorImpactFor4")],
-        [v("competitorImpactOver4")]))),
+  "if", [v("competitorCount"), o("<="), c(0)], [v("competitorImpactNone")],
+  call("if", [v("competitorCount"), o("=="), c(1)], [v("competitorImpactFor1")],
+    call("if", [v("competitorCount"), o("=="), c(2)], [v("competitorImpactUpTo2")],
+      call("if", [v("competitorCount"), o("=="), c(3)], [v("competitorImpactFor3")],
+        call("if", [v("competitorCount"), o("=="), c(4)], [v("competitorImpactFor4")],
+          [v("competitorImpactOver4")])))),
 )
 
 // 立地分岐: locationType 1=都市 2=田舎 0=郊外
@@ -143,7 +157,7 @@ export const DEFAULT_FORMULA_DEFINITIONS: Record<string, FormulaDefinition> = {
     outputType: "number",
     // 未丸めで会員成長モデルへ渡すため丸めない
     roundResult: false,
-    description: "入力欄 G38 の移植（立地分岐 × 競合影響、人口係数は線形近似）",
+    description: "入力欄 G38 の移植（立地分岐 × 競合影響。商圏獲得率・競合影響率はパラメータ連動、人口係数は線形近似）",
   },
   paymentFee: {
     key: "paymentFee",

@@ -2,6 +2,7 @@ import type {
   CalcAcquisitionConfig,
   CalcRetentionConfig,
   CalcSignageScenarioConfig,
+  LocationType,
 } from "@/lib/types"
 
 export interface MemberGrowthMonth {
@@ -32,6 +33,8 @@ export interface MemberGrowthParams {
   acquisition: CalcAcquisitionConfig
   /** シナリオ別の店頭看板スケジュール */
   signage: CalcSignageScenarioConfig
+  /** SEM獲得単価が立地タイプで変わるため必要（入力欄 C64） */
+  locationType: LocationType
 }
 
 // 店頭看板の月次系列（事業計画 R35）。
@@ -60,6 +63,19 @@ function buildSignageSeries(base: number, cfg: CalcSignageScenarioConfig, months
   return series.slice(0, months)
 }
 
+// SEM獲得単価（入力欄 C64）。Excelは立地タイプ別の分岐:
+//   =IF(B38="都市型",3000,IF(B38="郊外型",4000,IF(B38="田舎型",5000)))
+// 旧レコードには ByLocation が無いため、その場合はフラット値へフォールバックする。
+// 初月はこの単価を使わない（G38の媒体配分）ため、誤ると2か月目以降だけがズレる。
+function resolveSemCpa(acq: CalcAcquisitionConfig, locationType: LocationType): number {
+  const byLocation = acq.semCpaY1Y2ByLocation
+  if (byLocation) {
+    const value = byLocation[locationType]
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return acq.semCpaY1Y2
+}
+
 // 年2以降のWeb/SNS広告効果係数（事業計画 D89/D299 等の ×N）。年1は係数なし。
 function adEffectiveness(month: number, signage: CalcSignageScenarioConfig): number {
   const year = Math.ceil(month / 12)
@@ -70,9 +86,16 @@ function adEffectiveness(month: number, signage: CalcSignageScenarioConfig): num
 
 // Web広告獲得（事業計画 R37/R89/R141）。月1は初月見込み客の媒体配分、月2以降は 月予算/CPA×広告効果係数。
 // 元シートは全年とも SEM CPA(1〜2年目)=C64 を参照（D141=$C$76/$C$64）。3年目以降CPA(C65)は獲得計算では未使用。
-function webJoinersForMonth(month: number, initialJoiners: number, acq: CalcAcquisitionConfig, signage: CalcSignageScenarioConfig): number {
+function webJoinersForMonth(
+  month: number,
+  initialJoiners: number,
+  acq: CalcAcquisitionConfig,
+  signage: CalcSignageScenarioConfig,
+  locationType: LocationType,
+): number {
   if (month === 1) return initialJoiners * acq.channelSplit.web
-  const base = acq.semCpaY1Y2 > 0 ? acq.webBudgetMonthly / acq.semCpaY1Y2 : 0
+  const semCpa = resolveSemCpa(acq, locationType)
+  const base = semCpa > 0 ? acq.webBudgetMonthly / semCpa : 0
   return base * adEffectiveness(month, signage)
 }
 
@@ -98,7 +121,7 @@ function snsJoinersForMonth(month: number, initialJoiners: number, acq: CalcAcqu
 //   会員数がキャパ到達済みだと前者は上限超（例 759.94>725）となり、自然検索/口コミが
 //   わずかに負値になる。売上は MIN で一致するが、内訳表示をExcelと一致させるため再現する。
 export function simulateMemberGrowth(params: MemberGrowthParams): MemberGrowthMonth[] {
-  const { initialJoiners, maxMembers, months, retention, acquisition, signage } = params
+  const { initialJoiners, maxMembers, months, retention, acquisition, signage, locationType } = params
   const cap = maxMembers
 
   const signageBaseRaw = initialJoiners * acquisition.channelSplit.signage * signage.baseFactor
@@ -124,7 +147,7 @@ export function simulateMemberGrowth(params: MemberGrowthParams): MemberGrowthMo
       referral = acquisition.referralRate * prevMembers * headroomRatio
     }
 
-    const web = webJoinersForMonth(m, initialJoiners, acquisition, signage)
+    const web = webJoinersForMonth(m, initialJoiners, acquisition, signage, locationType)
     const sns = snsJoinersForMonth(m, initialJoiners, acquisition, signage)
     const signageJoiners = signageSeries[m - 1]
     const newMembers = signageJoiners + web + sns + organic + referral

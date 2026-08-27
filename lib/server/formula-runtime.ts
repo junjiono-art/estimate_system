@@ -45,11 +45,30 @@ export function buildInitialPhaseContext(
     populationKm5Ring: km5Ring,
     rentPerTsubo: toNumber(input.rentPerTsubo, 0),
     runningCostTotal: toNumber(input.runningCostTotal, 0),
-    // 競合影響率（initialJoiners 式が参照）。パラメータ連動維持
+    // 競合影響率（initialJoiners 式が参照）。パラメータ連動維持。
+    // 入力欄 E78 は件数ごとに個別（1件=5%/2件=10%/3件=15%/4件=20%/5件=25%、0件は0%）。
+    competitorImpactNone: toNumber(calcParams?.competitorImpact?.none, 0),
+    competitorImpactFor1: toNumber(
+      calcParams?.competitorImpact?.for1,
+      // for1 を持たない旧レコードは upTo2 にフォールバック（従来挙動）
+      toNumber(calcParams?.competitorImpact?.upTo2, 0),
+    ),
     competitorImpactUpTo2: toNumber(calcParams?.competitorImpact?.upTo2, 0),
     competitorImpactFor3: toNumber(calcParams?.competitorImpact?.for3, 0),
     competitorImpactFor4: toNumber(calcParams?.competitorImpact?.for4, 0),
     competitorImpactOver4: toNumber(calcParams?.competitorImpact?.over4, 0),
+
+    // 商圏獲得率（入力欄 E59/F59/G59）。立地タイプで変わるため initialJoiners 式が参照する。
+    // 以前は式セット側が郊外型の値を直値で持っており、都市型・田舎型で乖離していた（不具合一覧 #31）。
+    catchmentUrbanKm1: toNumber(calcParams?.catchment?.urban?.km1, 0),
+    catchmentUrbanKm3: toNumber(calcParams?.catchment?.urban?.km3, 0),
+    catchmentUrbanKm5: toNumber(calcParams?.catchment?.urban?.km5, 0),
+    catchmentSuburbanKm1: toNumber(calcParams?.catchment?.suburban?.km1, 0),
+    catchmentSuburbanKm3: toNumber(calcParams?.catchment?.suburban?.km3, 0),
+    catchmentSuburbanKm5: toNumber(calcParams?.catchment?.suburban?.km5, 0),
+    catchmentRuralKm1: toNumber(calcParams?.catchment?.rural?.km1, 0),
+    catchmentRuralKm3: toNumber(calcParams?.catchment?.rural?.km3, 0),
+    catchmentRuralKm5: toNumber(calcParams?.catchment?.rural?.km5, 0),
   }
 }
 
@@ -88,6 +107,11 @@ export function buildFormulaContext({
     paymentFeeRate: toNumber(calcParams.paymentFeeRate, 0),
     royaltyCapMonthly: toNumber(calcParams.royaltyCapMonthly, 0),
     appFeeMonthly: toNumber(calcParams.appFeeMonthly, 0),
+    // ロイヤリティ上限は率で変わる（入力欄 E73）。旧レコードはフラット値へフォールバック。
+    royaltyCapRate10: toNumber(calcParams.royaltyCapByRate?.rate10, toNumber(calcParams.royaltyCapMonthly, 0)),
+    royaltyCapOther: toNumber(calcParams.royaltyCapByRate?.other, toNumber(calcParams.royaltyCapMonthly, 0)),
+    // アプリ利用料は会員1人あたり（入力欄 C74 / 事業計画 R61）。
+    appFeePerMember: toNumber(calcParams.appFeePerMember, 0),
 
     // 広告費スケジュール（adCostMonthly 式が参照。パラメータ連動維持）
     adCostYear1Month1: toNumber(calcParams.adCost?.year1Month1, 0),
