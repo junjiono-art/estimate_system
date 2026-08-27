@@ -139,12 +139,22 @@ export interface SimulationRequestInput {
   initialInvestmentByRoyaltyRate?: Partial<Record<"0" | "10" | "15", number>>
   franchiseRate?: 0 | 10 | 15
   includeDepreciation?: boolean
-  /** 住所から半径別の20〜59歳人口（e-Statメッシュ統計） */
+  /** 住所から半径別の20〜59歳人口（小地域データを商圏円で按分。入力欄 E56/F56/G56 相当） */
   populationByRadius?: {
     km1Ring: number  // 半径0〜1km圏
     km3Ring: number  // 半径1〜3km圏（リング）
     km5Ring: number  // 半径3〜5km圏（リング）
   }
+  /**
+   * 商圏人口の年齢別内訳（入力欄 E47:G54）。試算に使うのは populationByRadius だけだが、
+   * 結果画面に「年齢×距離」を根拠として表示するため、入力値をそのまま持ち回る。
+   * cumulative は内側の圏を含む累計（1km/3km/5km の順）。
+   */
+  populationByAgeRadius?: Array<{
+    from: number
+    label: string
+    cumulative: [number, number, number]
+  }>
   /** 投資コスト内訳（フィールドID → 金額） */
   investmentBreakdown?: Record<string, number>
   /** 投資項目別の耐用年数（フィールドID → 償却年）。マスタ登録値。減価償却の算出に使用 */

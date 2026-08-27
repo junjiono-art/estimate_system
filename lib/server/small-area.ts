@@ -64,17 +64,26 @@ export interface AgeSexRow {
   total: number
 }
 
+/** 半径ごとの内訳。人口は内側の圏を含む「累計」（元Excel E47:G54 と同じ持ち方）。 */
+export interface RadiusBreakdown {
+  radiusKm: number
+  /** 全年齢階級の男女別人口（0〜4歳 … 70〜74歳 / 75歳以上） */
+  byAgeSex: AgeSexRow[]
+  /** 20〜59歳計（元Excel E55/F55/G55） */
+  total2059: number
+  /** この圏に寄与した町丁字の数（重なり比 > 0 のもの） */
+  areaCount: number
+}
+
 export interface SmallAreaPopulationResult {
   /** リング差分。元Excel E56/F56/G56 に対応し、calc-engine の populationByRadius と同じ形。 */
   km1Ring: number
   km3Ring: number
   km5Ring: number
-  /** 半径ごとの累計（元Excel E55/F55/G55）。フォームの初期値に使う。 */
+  /** 半径ごとの20〜59歳累計（元Excel E55/F55/G55）。 */
   cumulative: { km1: number; km3: number; km5: number }
-  /** 5km圏の男女・5歳階級別内訳 */
-  byAgeSex: AgeSexRow[]
-  /** 各圏に寄与した町丁字の数（重なり比 > 0 のもの） */
-  areaCount: { km1: number; km3: number; km5: number }
+  /** 半径ごと（1km/3km/5km）の男女・5歳階級別内訳。元Excel E47:G54 に対応する。 */
+  byRadius: RadiusBreakdown[]
   prefecturesUsed: Array<{ prefCode: string; prefName: string }>
   surveyYear: number
   source: string
@@ -178,10 +187,10 @@ export function aggregateSmallAreaPopulation(
     .filter(({ b }) => b.from >= TARGET_AGE_MIN && b.from <= TARGET_AGE_MAX - 4)
     .map(({ i }) => i)
 
-  const cumulative = [0, 0, 0]
-  const areaCount = [0, 0, 0]
-  const maleByBucket = new Array(buckets.length).fill(0)
-  const femaleByBucket = new Array(buckets.length).fill(0)
+  // 半径ごとに全階級を積む。元Excel E47:G54 と同じく、外側の圏は内側を含む「累計」。
+  const areaCount = radiiKm.map(() => 0)
+  const maleByRadius = radiiKm.map(() => new Array(buckets.length).fill(0))
+  const femaleByRadius = radiiKm.map(() => new Array(buckets.length).fill(0))
   const prefecturesUsed: Array<{ prefCode: string; prefName: string }> = []
 
   for (const prefCode of prefCodes) {
@@ -198,44 +207,45 @@ export function aggregateSmallAreaPopulation(
       const male = pref.male[a]
       const female = pref.female[a]
 
-      let target = 0
-      for (const b of targetBucketIdx) target += male[b] + female[b]
-
       for (let r = 0; r < radiiKm.length; r += 1) {
         const ratio = overlapRatio(distance, radiiKm[r], er)
         if (ratio <= 0) continue
-        cumulative[r] += target * ratio
         areaCount[r] += 1
-        // 男女・階級別の内訳は最大半径（5km圏）についてのみ保持する
-        if (r === radiiKm.length - 1) {
-          for (let b = 0; b < buckets.length; b += 1) {
-            maleByBucket[b] += male[b] * ratio
-            femaleByBucket[b] += female[b] * ratio
-          }
-          contributed = true
+        for (let b = 0; b < buckets.length; b += 1) {
+          maleByRadius[r][b] += male[b] * ratio
+          femaleByRadius[r][b] += female[b] * ratio
         }
+        contributed = true
       }
     }
 
     if (contributed) prefecturesUsed.push({ prefCode: pref.prefCode, prefName: pref.prefName })
   }
 
-  const km1 = Math.round(cumulative[0])
-  const km3 = Math.round(cumulative[1])
-  const km5 = Math.round(cumulative[2])
+  const byRadius: RadiusBreakdown[] = radiiKm.map((radiusKm, r) => {
+    const byAgeSex = buckets.map((b, i) => {
+      const m = Math.round(maleByRadius[r][i])
+      const f = Math.round(femaleByRadius[r][i])
+      return { label: b.label, from: b.from, to: b.to, male: m, female: f, total: m + f }
+    })
+    // 20〜59歳計は丸め後の階級値の合計にする（画面の内訳と合計が一致するように）
+    const total2059 = byAgeSex
+      .filter((row) => targetBucketIdx.includes(buckets.findIndex((b) => b.label === row.label)))
+      .reduce((sum, row) => sum + row.total, 0)
+    return { radiusKm, byAgeSex, total2059, areaCount: areaCount[r] }
+  })
+
+  const km1 = byRadius[0].total2059
+  const km3 = byRadius[1].total2059
+  const km5 = byRadius[2].total2059
 
   return {
-    // 累計→リング差分。丸め後に引くことで「リングの合計＝累計」を保つ。
+    // 累計→リング差分。
     km1Ring: km1,
     km3Ring: Math.max(0, km3 - km1),
     km5Ring: Math.max(0, km5 - km3),
     cumulative: { km1, km3, km5 },
-    byAgeSex: buckets.map((b, i) => {
-      const m = Math.round(maleByBucket[i])
-      const f = Math.round(femaleByBucket[i])
-      return { label: b.label, from: b.from, to: b.to, male: m, female: f, total: m + f }
-    }),
-    areaCount: { km1: areaCount[0], km3: areaCount[1], km5: areaCount[2] },
+    byRadius,
     prefecturesUsed,
     surveyYear: index.surveyYear,
     source: "令和2年国勢調査 小地域（町丁・字等別）年齢別・男女別人口（e-Stat 統計GIS）",

@@ -211,6 +211,12 @@ export type FormSubmitData = {
     km3Ring: number
     km5Ring: number
   }
+  /** 商圏人口の年齢別内訳（入力欄 E47:G54）。結果画面の「年齢×距離」表示に使う。 */
+  populationByAgeRadius?: Array<{
+    from: number
+    label: string
+    cumulative: [number, number, number]
+  }>
 }
 
 // タブ構成: 店舗基本情報 → 投資コスト → ランニングコスト（ユーザーfb②）。
@@ -242,15 +248,35 @@ const DRAFT_STORAGE_KEY = "estimate-form-draft-v1"
 // v2: ゴルフ専用入力を廃止し、投資費目の数量(investmentQuantities)へ統合。旧v1下書きは復元対象外。
 const DRAFT_VERSION = 2
 
+/**
+ * 商圏人口の入力対象（元Excel 入力欄 R47:R54）。
+ * 会員数の算出に使うのは 20〜59歳のみなので、この8階級だけを入力させる。
+ */
+const POPULATION_AGE_BRACKETS = [
+  { from: 20, label: "２０〜２４歳" },
+  { from: 25, label: "２５〜２９歳" },
+  { from: 30, label: "３０〜３４歳" },
+  { from: 35, label: "３５〜３９歳" },
+  { from: 40, label: "４０〜４４歳" },
+  { from: 45, label: "４５〜４９歳" },
+  { from: 50, label: "５０〜５４歳" },
+  { from: 55, label: "５５〜５９歳" },
+] as const
+
+/** 商圏の半径（元Excel E列/F列/G列）。各列は内側の圏を含む累計。 */
+const POPULATION_RADII = [
+  { km: 1, label: "1km圏" },
+  { km: 3, label: "3km圏" },
+  { km: 5, label: "5km圏" },
+] as const
+
 type FormDraft = {
   version: number
   savedAt: string
   storeName: string
   address: string
-  /** 商圏人口（半径ごとの20〜59歳人口の累計）。旧バージョンの下書きには存在しないため任意。 */
-  pop1km?: string
-  pop3km?: string
-  pop5km?: string
+  /** 商圏人口（5歳階級×1km/3km/5km の24セル）。旧バージョンの下書きには存在しないため任意。 */
+  popAges?: string[][]
   floorArea: string
   rentPerTsubo: string
   royaltyRate: "0" | "10" | "15"
@@ -317,16 +343,22 @@ export function SimulationForm({
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
 
-  // 商圏人口（元Excel 入力欄 E55/F55/G55 = 半径ごとの20〜59歳人口の「累計」）。
-  // 小地域データから自動集計した値を初期値として入れ、必要なら手で上書きできる。
+  // 商圏人口（元Excel 入力欄 E47:G54 = 5歳階級 × 半径1km/3km/5km の24セル）。
+  // 各列は内側の圏を含む「累計」。小地域データからの自動集計値を初期値に入れ、手で上書きできる。
   // 元Excelは jSTAT MAP 等の画面を目視転記した値なので、そちらに合わせたい場合の逃げ道を残す。
-  const [pop1km, setPop1km] = useState("")
-  const [pop3km, setPop3km] = useState("")
-  const [pop5km, setPop5km] = useState("")
-  const [popAuto, setPopAuto] = useState<{ km1: number; km3: number; km5: number } | null>(null)
-  const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: { km1: number; km3: number; km5: number } } | null>(null)
+  const [popAges, setPopAges] = useState<string[][]>(() => POPULATION_AGE_BRACKETS.map(() => ["", "", ""]))
+  const [popAutoAges, setPopAutoAges] = useState<number[][] | null>(null)
+  const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: number[] } | null>(null)
   const [popLoading, setPopLoading] = useState(false)
   const [popError, setPopError] = useState("")
+
+  // 半径ごとの20〜59歳合計（元Excel E55/F55/G55）。会員数の算出はこの3つだけを使う。
+  const popTotals = POPULATION_RADII.map((_, col) =>
+    popAges.reduce((sum, row) => {
+      const v = Number(String(row[col]).replace(/,/g, ""))
+      return sum + (Number.isFinite(v) ? v : 0)
+    }, 0),
+  )
 
   // 住所から商圏人口（1km/3km/5km圏の20〜59歳人口・累計）を自動集計してフォームへ入れる。
   // 集計は小地域（町丁・字等）データを円で切って按分する方式（lib/server/small-area.ts）。
@@ -355,14 +387,19 @@ export function SimulationForm({
       const pop = await popRes.json()
       if (!popRes.ok) throw new Error(getErrorMessage(pop, "商圏人口の取得に失敗しました。"))
 
-      setPopAuto(pop.cumulative)
-      setPop1km(String(pop.cumulative.km1))
-      setPop3km(String(pop.cumulative.km3))
-      setPop5km(String(pop.cumulative.km5))
+      // byRadius[列] の 5歳階級から、20〜59歳の8階級だけを取り出して表に流し込む
+      const filled = POPULATION_AGE_BRACKETS.map((bracket) =>
+        POPULATION_RADII.map((_, col) => {
+          const row = pop.byRadius?.[col]?.byAgeSex?.find((x: { from: number }) => x.from === bracket.from)
+          return Number(row?.total ?? 0)
+        }),
+      )
+      setPopAutoAges(filled)
+      setPopAges(filled.map((row) => row.map((v) => String(v))))
       setPopMeta({
         surveyYear: pop.surveyYear,
         prefNames: (pop.prefecturesUsed ?? []).map((p: { prefName: string }) => p.prefName),
-        areaCount: pop.areaCount,
+        areaCount: (pop.byRadius ?? []).map((r: { areaCount: number }) => r.areaCount),
       })
       setFieldErrors((prev) => ({ ...prev, population: "" }))
     } catch (error) {
@@ -439,9 +476,11 @@ export function SimulationForm({
     if (!d) return
     setStoreName(d.storeName ?? "")
     setAddress(d.address ?? "")
-    setPop1km(d.pop1km ?? "")
-    setPop3km(d.pop3km ?? "")
-    setPop5km(d.pop5km ?? "")
+    setPopAges(
+      Array.isArray(d.popAges) && d.popAges.length === POPULATION_AGE_BRACKETS.length
+        ? d.popAges
+        : POPULATION_AGE_BRACKETS.map(() => ["", "", ""]),
+    )
     setFloorArea(d.floorArea ?? "")
     setRentPerTsubo(d.rentPerTsubo ?? "")
     setRoyaltyRate(d.royaltyRate === "10" ? "10" : d.royaltyRate === "15" ? "15" : "0")
@@ -480,9 +519,7 @@ export function SimulationForm({
           savedAt: new Date().toISOString(),
           storeName,
           address,
-          pop1km,
-          pop3km,
-          pop5km,
+          popAges,
           floorArea,
           rentPerTsubo,
           royaltyRate,
@@ -509,7 +546,7 @@ export function SimulationForm({
     return () => clearTimeout(timer)
   }, [
     draftChecked, draftToRestore,
-    storeName, address, pop1km, pop3km, pop5km, floorArea, rentPerTsubo,
+    storeName, address, popAges, floorArea, rentPerTsubo,
     royaltyRate, competitorCount, locationType,
     runningValues, runningQuantities, investmentValues, investmentQuantities,
     editedRunningFields, editedInvestmentFields,
@@ -929,12 +966,16 @@ export function SimulationForm({
     if (!floorArea.trim())    errors.floorArea    = "床面積は必須です。"
 
     // 商圏人口は会員数算出の起点（元Excel G38）。欠けたまま試算すると根拠のない数字が出るため必須にする。
-    const popValues = [pop1km, pop3km, pop5km].map((v) => Number(String(v).replace(/,/g, "")))
-    if (popValues.some((v) => !Number.isFinite(v) || v <= 0)) {
-      errors.population = "商圏人口を取得（または入力）してください。"
-    } else if (!(popValues[0] <= popValues[1] && popValues[1] <= popValues[2])) {
-      // 半径ごとの「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
-      errors.population = "1km ≦ 3km ≦ 5km の順に大きくなる必要があります（各欄は累計人口です）。"
+    const hasBlankCell = popAges.some((row) =>
+      row.some((v) => String(v).trim() === "" || !Number.isFinite(Number(String(v).replace(/,/g, "")))),
+    )
+    if (hasBlankCell) {
+      errors.population = "商圏人口の年齢別セルをすべて埋めてください（「住所から自動取得」で一括入力できます）。"
+    } else if (popTotals.some((t) => t <= 0)) {
+      errors.population = "商圏人口が0です。住所または入力値を確認してください。"
+    } else if (!(popTotals[0] <= popTotals[1] && popTotals[1] <= popTotals[2])) {
+      // 各列は「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
+      errors.population = "各列は内側の圏を含む累計です。1km ≦ 3km ≦ 5km の順に大きくなる必要があります。"
     }
 
     if (Object.keys(errors).length > 0) {
@@ -985,15 +1026,19 @@ export function SimulationForm({
       // 商圏人口はフォームの入力値（自動集計値、またはユーザーが上書きした値）を正とする。
       // 各欄は半径ごとの「累計」（元Excel E55/F55/G55）なので、リング差分へ変換して渡す。
       // バリデーション済みなので数値化と単調性は保証されている。
-      const toNumber = (v: string) => Math.round(Number(String(v).replace(/,/g, "")))
-      const cum1 = toNumber(pop1km)
-      const cum3 = toNumber(pop3km)
-      const cum5 = toNumber(pop5km)
+      const [cum1, cum3, cum5] = popTotals.map((t) => Math.round(t))
       const populationByRadius: FormSubmitData["populationByRadius"] = {
         km1Ring: cum1,
         km3Ring: cum3 - cum1,
         km5Ring: cum5 - cum3,
       }
+      const populationByAgeRadius: FormSubmitData["populationByAgeRadius"] = POPULATION_AGE_BRACKETS.map(
+        (bracket, rowIdx) => ({
+          from: bracket.from,
+          label: bracket.label,
+          cumulative: popAges[rowIdx].map((v) => Math.round(Number(String(v).replace(/,/g, "")) || 0)) as [number, number, number],
+        }),
+      )
 
       // 投資費目の実効取得額（fixed=単価×数量, perTsubo=単価×坪数×数量）。ゴルフ設備費もここに含まれる。
       const investmentByField = { ...investmentEffectiveByField }
@@ -1097,6 +1142,7 @@ export function SimulationForm({
         demographics,
         demographicsError,
         populationByRadius,
+        populationByAgeRadius,
       }
 
       await onSubmitWithData?.(formData)
@@ -1226,12 +1272,12 @@ export function SimulationForm({
                     </span>
                   </div>
 
-                  {/* 商圏人口（元Excel 入力欄 E55/F55/G55）。会員数算出の起点となるため必須。
-                      小地域データからの自動集計値を入れたうえで、手修正も許す。 */}
+                  {/* 商圏人口（元Excel 入力欄 E47:G54）。5歳階級 × 半径の24セル。
+                      会員数算出の起点となるため必須。自動集計値を入れたうえで手修正も許す。 */}
                   <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Label className="flex items-center gap-1.5 text-xs font-medium">
-                        商圏人口（20〜59歳・半径ごとの累計）
+                        商圏人口（年齢別・半径別）
                         <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
                       </Label>
                       <Button
@@ -1245,50 +1291,82 @@ export function SimulationForm({
                         {popLoading ? "取得中..." : "住所から自動取得"}
                       </Button>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {([
-                        { id: "pop1km", label: "〜1km圏", value: pop1km, set: setPop1km, auto: popAuto?.km1 },
-                        { id: "pop3km", label: "〜3km圏", value: pop3km, set: setPop3km, auto: popAuto?.km3 },
-                        { id: "pop5km", label: "〜5km圏", value: pop5km, set: setPop5km, auto: popAuto?.km5 },
-                      ] as const).map((f) => (
-                        <div key={f.id} className="flex flex-col gap-1">
-                          <Label htmlFor={f.id} className="text-[11px] text-muted-foreground">{f.label}</Label>
-                          <Input
-                            id={f.id}
-                            type="number"
-                            inputMode="numeric"
-                            placeholder="例: 42,485"
-                            value={f.value}
-                            onChange={(e) => { f.set(e.target.value); setFieldErrors((prev) => ({ ...prev, population: "" })) }}
-                            className={fieldErrors.population ? "border-destructive focus-visible:ring-destructive" : ""}
-                          />
-                          {f.auto !== undefined && String(f.auto) !== f.value && (
-                            <button
-                              type="button"
-                              className="self-start text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                              onClick={() => f.set(String(f.auto))}
-                            >
-                              自動取得値 {f.auto.toLocaleString()} に戻す
-                            </button>
-                          )}
-                        </div>
-                      ))}
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[420px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
+                        <thead>
+                          <tr>
+                            <th className="text-left font-medium text-muted-foreground">年齢</th>
+                            {POPULATION_RADII.map((r) => (
+                              <th key={r.km} className="text-right font-medium text-muted-foreground">{r.label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {POPULATION_AGE_BRACKETS.map((bracket, rowIdx) => (
+                            <tr key={bracket.from}>
+                              <td className="whitespace-nowrap text-muted-foreground">{bracket.label}</td>
+                              {POPULATION_RADII.map((radius, colIdx) => {
+                                const auto = popAutoAges?.[rowIdx]?.[colIdx]
+                                const value = popAges[rowIdx]?.[colIdx] ?? ""
+                                const edited = auto !== undefined && String(auto) !== value
+                                return (
+                                  <td key={radius.km}>
+                                    <Input
+                                      aria-label={`${bracket.label} ${radius.label}`}
+                                      type="number"
+                                      inputMode="numeric"
+                                      value={value}
+                                      onChange={(e) => {
+                                        const next = popAges.map((r) => [...r])
+                                        next[rowIdx][colIdx] = e.target.value
+                                        setPopAges(next)
+                                        setFieldErrors((prev) => ({ ...prev, population: "" }))
+                                      }}
+                                      className={`h-8 text-right tabular-nums ${edited ? "border-primary/60" : ""} ${fieldErrors.population ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                    />
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                          <tr>
+                            <td className="whitespace-nowrap pt-1 font-medium">20〜59歳計</td>
+                            {popTotals.map((total, i) => (
+                              <td key={i} className="pt-1 text-right font-medium tabular-nums">
+                                {total.toLocaleString()}
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
+
+                    {popAutoAges && (
+                      <button
+                        type="button"
+                        className="self-start text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                        onClick={() => setPopAges(popAutoAges.map((row) => row.map((v) => String(v))))}
+                      >
+                        自動取得値に戻す
+                      </button>
+                    )}
                     {fieldErrors.population && (
                       <p className="text-[11px] text-destructive">{fieldErrors.population}</p>
                     )}
                     {popError && <p className="text-[11px] text-destructive">{popError}</p>}
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
-                      各欄は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出はこの人口が起点になります。
+                      各列は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出には「20〜59歳計」のみを使います。
                       {popMeta && (
                         <>
                           {" "}自動取得値は{popMeta.surveyYear}年国勢調査の小地域（町丁・字等）データを商圏円で按分したもので、
-                          {popMeta.prefNames.join("・")}の{popMeta.areaCount.km5.toLocaleString()}件を集計しています。
+                          {popMeta.prefNames.join("・")}の{(popMeta.areaCount[2] ?? 0).toLocaleString()}件を集計しています。
                           地図画面（jSTAT MAP 等）の値に合わせたい場合は上書きしてください。
                         </>
                       )}
                     </span>
                   </div>
+
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="rentPerTsubo" className="flex items-center gap-1.5 text-xs font-medium">

@@ -173,6 +173,7 @@ export default function NewSimulationPage() {
       franchiseRate: data.calcParams.royaltyRate,
       includeDepreciation: true,
       populationByRadius: data.populationByRadius,
+      populationByAgeRadius: data.populationByAgeRadius,
     investmentBreakdown: data.investmentCosts.byField,
     depreciationYearsByField: data.investmentCosts.depreciationYearsByField,
     securityIntroBreakdown: data.investmentCosts.securityIntroBreakdown,

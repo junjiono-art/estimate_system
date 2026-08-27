@@ -167,7 +167,17 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
     femaleLabel: d.female,
   }))
 
-  // 距離別見込み人数の計算（e-Statメッシュ統計が取得できた場合のみ）
+  // 年齢×距離の商圏人口（入力欄 E47:G54）。試算に使った入力値をそのまま根拠として表示する。
+  // 各列は内側の圏を含む累計。
+  const ageRadiusRows = simulationRequest?.populationByAgeRadius ?? null
+  const ageRadiusTotals: [number, number, number] | null = ageRadiusRows
+    ? ageRadiusRows.reduce<[number, number, number]>(
+        (acc, row) => [acc[0] + row.cumulative[0], acc[1] + row.cumulative[1], acc[2] + row.cumulative[2]],
+        [0, 0, 0],
+      )
+    : null
+
+  // 距離別見込み人数の計算（商圏人口が取得できた場合のみ）
   const pop = simulationRequest?.populationByRadius
   const locType = simulationRequest?.locationType ?? "suburban"
 
@@ -186,14 +196,22 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
   // 係数(e38)は立地タイプの「最外圈」にのみ適用
   const radiusRows = pop
     ? (() => {
-        const e60 = pop.km1Ring * 0.012
-        const f60 = pop.km3Ring * 0.008
-        const g60 = pop.km5Ring * 0.001
+        // 商圏獲得率は立地タイプで変わる（入力欄 E59/F59/G59）。
+        // 以前は郊外型の値を直値で持っていたため、都市型・田舎型で実際の計算と食い違っていた。
+        const rates =
+          locType === "urban"
+            ? { km1: 0.015, km3: 0.008, km5: 0.001 }
+            : locType === "rural"
+              ? { km1: 0.03, km3: 0.015, km5: 0.01 }
+              : { km1: 0.012, km3: 0.008, km5: 0.001 }
+        const e60 = pop.km1Ring * rates.km1
+        const f60 = pop.km3Ring * rates.km3
+        const g60 = pop.km5Ring * rates.km5
         return [
           {
             label: "〜1km圏",
             population: pop.km1Ring,
-            rate: 1.2,
+            rate: rates.km1 * 100,
             rawJoiners: Math.round(e60),
             applyCoeff: locType === "urban",
             usedInFormula: true,
@@ -202,7 +220,7 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
           {
             label: "1〜3km圏",
             population: pop.km3Ring,
-            rate: 0.8,
+            rate: rates.km3 * 100,
             rawJoiners: Math.round(f60),
             applyCoeff: locType === "suburban",
             usedInFormula: locType !== "urban",
@@ -211,7 +229,7 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
           {
             label: "3〜5km圏",
             population: pop.km5Ring,
-            rate: 0.1,
+            rate: rates.km5 * 100,
             rawJoiners: Math.round(g60),
             applyCoeff: locType === "rural",
             usedInFormula: locType === "rural",
@@ -434,6 +452,47 @@ export function DemographicsView({ data, demographicsData, demographicsError, si
                 </div>
               </div>
             </div>
+
+            {ageRadiusRows && ageRadiusTotals && (
+              <div className="rounded-lg border border-border bg-card overflow-hidden">
+                <div className="border-b border-border px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    商圏人口（年齢別 × 距離別）
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">
+                    各列は内側の圏を含む累計 / 試算に使用した入力値
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground">年齢</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">〜1km圏</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">〜3km圏</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground">〜5km圏</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ageRadiusRows.map((row) => (
+                        <tr key={row.from} className="border-b border-border/50 last:border-0">
+                          <td className="px-4 py-2 text-muted-foreground">{row.label}</td>
+                          {row.cumulative.map((v, i) => (
+                            <td key={i} className="px-4 py-2 text-right tabular-nums">{v.toLocaleString()}</td>
+                          ))}
+                        </tr>
+                      ))}
+                      <tr className="border-t border-border bg-muted/20 font-medium">
+                        <td className="px-4 py-2">20〜59歳計</td>
+                        {ageRadiusTotals.map((v, i) => (
+                          <td key={i} className="px-4 py-2 text-right tabular-nums">{v.toLocaleString()}</td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {radiusRows && (
               <div className="rounded-lg border border-border bg-card overflow-hidden">
