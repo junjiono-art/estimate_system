@@ -1,0 +1,510 @@
+{
+  "surveyYear": 2020,
+  "buckets": [
+    {
+      "label": "0～4歳",
+      "from": 0,
+      "to": 4
+    },
+    {
+      "label": "5～9歳",
+      "from": 5,
+      "to": 9
+    },
+    {
+      "label": "10～14歳",
+      "from": 10,
+      "to": 14
+    },
+    {
+      "label": "15～19歳",
+      "from": 15,
+      "to": 19
+    },
+    {
+      "label": "20～24歳",
+      "from": 20,
+      "to": 24
+    },
+    {
+      "label": "25～29歳",
+      "from": 25,
+      "to": 29
+    },
+    {
+      "label": "30～34歳",
+      "from": 30,
+      "to": 34
+    },
+    {
+      "label": "35～39歳",
+      "from": 35,
+      "to": 39
+    },
+    {
+      "label": "40～44歳",
+      "from": 40,
+      "to": 44
+    },
+    {
+      "label": "45～49歳",
+      "from": 45,
+      "to": 49
+    },
+    {
+      "label": "50～54歳",
+      "from": 50,
+      "to": 54
+    },
+    {
+      "label": "55～59歳",
+      "from": 55,
+      "to": 59
+    },
+    {
+      "label": "60～64歳",
+      "from": 60,
+      "to": 64
+    },
+    {
+      "label": "65～69歳",
+      "from": 65,
+      "to": 69
+    },
+    {
+      "label": "70～74歳",
+      "from": 70,
+      "to": 74
+    },
+    {
+      "label": "75歳以上",
+      "from": 75,
+      "to": null
+    }
+  ],
+  "prefectures": [
+    {
+      "prefCode": "01",
+      "prefName": "北海道",
+      "areaCount": 22587,
+      "minLat": 41.360049,
+      "maxLat": 45.515085,
+      "minLng": 139.356001,
+      "maxLng": 145.80614
+    },
+    {
+      "prefCode": "02",
+      "prefName": "青森県",
+      "areaCount": 4496,
+      "minLat": 40.266381,
+      "maxLat": 41.525792,
+      "minLng": 139.49754,
+      "maxLng": 141.643798
+    },
+    {
+      "prefCode": "03",
+      "prefName": "岩手県",
+      "areaCount": 3924,
+      "minLat": 38.775974,
+      "maxLat": 40.44104,
+      "minLng": 140.700265,
+      "maxLng": 142.027649
+    },
+    {
+      "prefCode": "04",
+      "prefName": "宮城県",
+      "areaCount": 5125,
+      "minLat": 37.828697,
+      "maxLat": 38.985037,
+      "minLng": 140.291674,
+      "maxLng": 141.669089
+    },
+    {
+      "prefCode": "05",
+      "prefName": "秋田県",
+      "areaCount": 4330,
+      "minLat": 38.956607,
+      "maxLat": 40.467676,
+      "minLng": 139.707945,
+      "maxLng": 140.89605
+    },
+    {
+      "prefCode": "06",
+      "prefName": "山形県",
+      "areaCount": 4309,
+      "minLat": 37.816086,
+      "maxLat": 39.203151,
+      "minLng": 139.543221,
+      "maxLng": 140.61063
+    },
+    {
+      "prefCode": "07",
+      "prefName": "福島県",
+      "areaCount": 6650,
+      "minLat": 36.809423,
+      "maxLat": 37.914819,
+      "minLng": 139.291456,
+      "maxLng": 141.035962
+    },
+    {
+      "prefCode": "08",
+      "prefName": "茨城県",
+      "areaCount": 4392,
+      "minLat": 35.741977,
+      "maxLat": 36.907476,
+      "minLng": 139.692947,
+      "maxLng": 140.841928
+    },
+    {
+      "prefCode": "09",
+      "prefName": "栃木県",
+      "areaCount": 2611,
+      "minLat": 36.215744,
+      "maxLat": 37.121468,
+      "minLng": 139.373899,
+      "maxLng": 140.265122
+    },
+    {
+      "prefCode": "10",
+      "prefName": "群馬県",
+      "areaCount": 2400,
+      "minLat": 36.048249,
+      "maxLat": 36.920613,
+      "minLng": 138.437247,
+      "maxLng": 139.656757
+    },
+    {
+      "prefCode": "11",
+      "prefName": "埼玉県",
+      "areaCount": 5978,
+      "minLat": 35.755551,
+      "maxLat": 36.275352,
+      "minLng": 138.760744,
+      "maxLng": 139.893536
+    },
+    {
+      "prefCode": "12",
+      "prefName": "千葉県",
+      "areaCount": 5958,
+      "minLat": 34.905996,
+      "maxLat": 36.099078,
+      "minLng": 139.759739,
+      "maxLng": 140.865035
+    },
+    {
+      "prefCode": "13",
+      "prefName": "東京都",
+      "areaCount": 5595,
+      "minLat": 20.42515,
+      "maxLat": 35.856627,
+      "minLng": 136.069956,
+      "maxLng": 153.97661
+    },
+    {
+      "prefCode": "14",
+      "prefName": "神奈川県",
+      "areaCount": 5088,
+      "minLat": 35.13379,
+      "maxLat": 35.654373,
+      "minLng": 138.982361,
+      "maxLng": 139.777377
+    },
+    {
+      "prefCode": "15",
+      "prefName": "新潟県",
+      "areaCount": 7698,
+      "minLat": 36.801599,
+      "maxLat": 38.549306,
+      "minLng": 137.662026,
+      "maxLng": 139.790774
+    },
+    {
+      "prefCode": "16",
+      "prefName": "富山県",
+      "areaCount": 3635,
+      "minLat": 36.325104,
+      "maxLat": 36.967691,
+      "minLng": 136.792215,
+      "maxLng": 137.690892
+    },
+    {
+      "prefCode": "17",
+      "prefName": "石川県",
+      "areaCount": 3421,
+      "minLat": 36.133239,
+      "maxLat": 37.850191,
+      "minLng": 136.251465,
+      "maxLng": 137.326293
+    },
+    {
+      "prefCode": "18",
+      "prefName": "福井県",
+      "areaCount": 2886,
+      "minLat": 35.360994,
+      "maxLat": 36.289191,
+      "minLng": 135.457486,
+      "maxLng": 136.791599
+    },
+    {
+      "prefCode": "19",
+      "prefName": "山梨県",
+      "areaCount": 1310,
+      "minLat": 35.195418,
+      "maxLat": 35.918442,
+      "minLng": 138.22877,
+      "maxLng": 139.125682
+    },
+    {
+      "prefCode": "20",
+      "prefName": "長野県",
+      "areaCount": 3463,
+      "minLat": 35.224122,
+      "maxLat": 37.00214,
+      "minLng": 137.391667,
+      "maxLng": 138.700627
+    },
+    {
+      "prefCode": "21",
+      "prefName": "岐阜県",
+      "areaCount": 7627,
+      "minLat": 35.148876,
+      "maxLat": 36.455115,
+      "minLng": 136.329029,
+      "maxLng": 137.596928
+    },
+    {
+      "prefCode": "22",
+      "prefName": "静岡県",
+      "areaCount": 4801,
+      "minLat": 34.597825,
+      "maxLat": 35.421658,
+      "minLng": 137.48425,
+      "maxLng": 139.170409
+    },
+    {
+      "prefCode": "23",
+      "prefName": "愛知県",
+      "areaCount": 14119,
+      "minLat": 34.582862,
+      "maxLat": 35.406527,
+      "minLng": 136.677134,
+      "maxLng": 137.790713
+    },
+    {
+      "prefCode": "24",
+      "prefName": "三重県",
+      "areaCount": 3338,
+      "minLat": 33.737242,
+      "maxLat": 35.227721,
+      "minLng": 135.890574,
+      "maxLng": 136.982303
+    },
+    {
+      "prefCode": "25",
+      "prefName": "滋賀県",
+      "areaCount": 2771,
+      "minLat": 34.816035,
+      "maxLat": 35.67184,
+      "minLng": 135.781492,
+      "maxLng": 136.433101
+    },
+    {
+      "prefCode": "26",
+      "prefName": "京都府",
+      "areaCount": 9205,
+      "minLat": 34.706704,
+      "maxLat": 35.766213,
+      "minLng": 134.876059,
+      "maxLng": 136.030449
+    },
+    {
+      "prefCode": "27",
+      "prefName": "大阪府",
+      "areaCount": 8718,
+      "minLat": 34.292283,
+      "maxLat": 35.034918,
+      "minLng": 135.094759,
+      "maxLng": 135.738561
+    },
+    {
+      "prefCode": "28",
+      "prefName": "兵庫県",
+      "areaCount": 9720,
+      "minLat": 34.165732,
+      "maxLat": 35.667393,
+      "minLng": 134.271645,
+      "maxLng": 135.458342
+    },
+    {
+      "prefCode": "29",
+      "prefName": "奈良県",
+      "areaCount": 3078,
+      "minLat": 33.877979,
+      "maxLat": 34.772244,
+      "minLng": 135.565393,
+      "maxLng": 136.211692
+    },
+    {
+      "prefCode": "30",
+      "prefName": "和歌山県",
+      "areaCount": 2377,
+      "minLat": 33.448596,
+      "maxLat": 34.376779,
+      "minLng": 135.064518,
+      "maxLng": 136.007014
+    },
+    {
+      "prefCode": "31",
+      "prefName": "鳥取県",
+      "areaCount": 2482,
+      "minLat": 35.072774,
+      "maxLat": 35.603805,
+      "minLng": 133.14982,
+      "maxLng": 134.495912
+    },
+    {
+      "prefCode": "32",
+      "prefName": "島根県",
+      "areaCount": 1353,
+      "minLat": 34.33018,
+      "maxLat": 36.323949,
+      "minLng": 131.687513,
+      "maxLng": 133.372269
+    },
+    {
+      "prefCode": "33",
+      "prefName": "岡山県",
+      "areaCount": 5246,
+      "minLat": 34.304107,
+      "maxLat": 35.330362,
+      "minLng": 133.294627,
+      "maxLng": 134.400836
+    },
+    {
+      "prefCode": "34",
+      "prefName": "広島県",
+      "areaCount": 4258,
+      "minLat": 34.054515,
+      "maxLat": 35.07641,
+      "minLng": 132.085823,
+      "maxLng": 133.454104
+    },
+    {
+      "prefCode": "35",
+      "prefName": "山口県",
+      "areaCount": 4086,
+      "minLat": 33.738421,
+      "maxLat": 34.774668,
+      "minLng": 130.786323,
+      "maxLng": 132.434676
+    },
+    {
+      "prefCode": "36",
+      "prefName": "徳島県",
+      "areaCount": 1548,
+      "minLat": 33.563018,
+      "maxLat": 34.243835,
+      "minLng": 133.699063,
+      "maxLng": 134.811045
+    },
+    {
+      "prefCode": "37",
+      "prefName": "香川県",
+      "areaCount": 901,
+      "minLat": 34.026174,
+      "maxLat": 34.560858,
+      "minLng": 133.53381,
+      "maxLng": 134.430499
+    },
+    {
+      "prefCode": "38",
+      "prefName": "愛媛県",
+      "areaCount": 2910,
+      "minLat": 32.912372,
+      "maxLat": 34.300593,
+      "minLng": 132.036561,
+      "maxLng": 133.665893
+    },
+    {
+      "prefCode": "39",
+      "prefName": "高知県",
+      "areaCount": 2213,
+      "minLat": 32.720576,
+      "maxLat": 33.85317,
+      "minLng": 132.489391,
+      "maxLng": 134.301021
+    },
+    {
+      "prefCode": "40",
+      "prefName": "福岡県",
+      "areaCount": 7616,
+      "minLat": 33.003951,
+      "maxLat": 33.994888,
+      "minLng": 130.03608,
+      "maxLng": 131.179005
+    },
+    {
+      "prefCode": "41",
+      "prefName": "佐賀県",
+      "areaCount": 2234,
+      "minLat": 32.95569,
+      "maxLat": 33.601389,
+      "minLng": 129.758067,
+      "maxLng": 130.538987
+    },
+    {
+      "prefCode": "42",
+      "prefName": "長崎県",
+      "areaCount": 3532,
+      "minLat": 32.045627,
+      "maxLat": 34.695468,
+      "minLng": 128.399376,
+      "maxLng": 130.378223
+    },
+    {
+      "prefCode": "43",
+      "prefName": "熊本県",
+      "areaCount": 2884,
+      "minLat": 32.11739,
+      "maxLat": 33.169659,
+      "minLng": 129.98991,
+      "maxLng": 131.288764
+    },
+    {
+      "prefCode": "44",
+      "prefName": "大分県",
+      "areaCount": 2267,
+      "minLat": 32.749505,
+      "maxLat": 33.728038,
+      "minLng": 130.86256,
+      "maxLng": 132.074255
+    },
+    {
+      "prefCode": "45",
+      "prefName": "宮崎県",
+      "areaCount": 2443,
+      "minLat": 31.372696,
+      "maxLat": 32.814548,
+      "minLng": 130.719298,
+      "maxLng": 131.856157
+    },
+    {
+      "prefCode": "46",
+      "prefName": "鹿児島県",
+      "areaCount": 1758,
+      "minLat": 27.027687,
+      "maxLat": 32.280049,
+      "minLng": 128.415186,
+      "maxLng": 131.165238
+    },
+    {
+      "prefCode": "47",
+      "prefName": "沖縄県",
+      "areaCount": 1262,
+      "minLat": 24.058521,
+      "maxLat": 27.872898,
+      "minLng": 122.988939,
+      "maxLng": 131.311312
+    }
+  ]
+}

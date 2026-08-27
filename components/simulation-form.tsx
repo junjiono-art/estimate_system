@@ -247,6 +247,10 @@ type FormDraft = {
   savedAt: string
   storeName: string
   address: string
+  /** 商圏人口（半径ごとの20〜59歳人口の累計）。旧バージョンの下書きには存在しないため任意。 */
+  pop1km?: string
+  pop3km?: string
+  pop5km?: string
   floorArea: string
   rentPerTsubo: string
   royaltyRate: "0" | "10" | "15"
@@ -312,6 +316,61 @@ export function SimulationForm({
   const [address,        setAddress]        = useState("")
   const [floorArea,      setFloorArea]      = useState("")
   const [rentPerTsubo,   setRentPerTsubo]   = useState("")
+
+  // 商圏人口（元Excel 入力欄 E55/F55/G55 = 半径ごとの20〜59歳人口の「累計」）。
+  // 小地域データから自動集計した値を初期値として入れ、必要なら手で上書きできる。
+  // 元Excelは jSTAT MAP 等の画面を目視転記した値なので、そちらに合わせたい場合の逃げ道を残す。
+  const [pop1km, setPop1km] = useState("")
+  const [pop3km, setPop3km] = useState("")
+  const [pop5km, setPop5km] = useState("")
+  const [popAuto, setPopAuto] = useState<{ km1: number; km3: number; km5: number } | null>(null)
+  const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: { km1: number; km3: number; km5: number } } | null>(null)
+  const [popLoading, setPopLoading] = useState(false)
+  const [popError, setPopError] = useState("")
+
+  // 住所から商圏人口（1km/3km/5km圏の20〜59歳人口・累計）を自動集計してフォームへ入れる。
+  // 集計は小地域（町丁・字等）データを円で切って按分する方式（lib/server/small-area.ts）。
+  async function fetchTradeAreaPopulation() {
+    const targetAddress = address.trim()
+    if (!targetAddress) {
+      setPopError("先に住所を入力してください。")
+      return
+    }
+    setPopLoading(true)
+    setPopError("")
+    try {
+      const geoRes = await fetch("/api/geocoding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: targetAddress }),
+      })
+      const geo = await geoRes.json()
+      if (!geoRes.ok) throw new Error(getErrorMessage(geo, "住所の座標変換に失敗しました。"))
+
+      const popRes = await fetch("/api/e-stat/small-area-population", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ latitude: geo.latitude, longitude: geo.longitude }),
+      })
+      const pop = await popRes.json()
+      if (!popRes.ok) throw new Error(getErrorMessage(pop, "商圏人口の取得に失敗しました。"))
+
+      setPopAuto(pop.cumulative)
+      setPop1km(String(pop.cumulative.km1))
+      setPop3km(String(pop.cumulative.km3))
+      setPop5km(String(pop.cumulative.km5))
+      setPopMeta({
+        surveyYear: pop.surveyYear,
+        prefNames: (pop.prefecturesUsed ?? []).map((p: { prefName: string }) => p.prefName),
+        areaCount: pop.areaCount,
+      })
+      setFieldErrors((prev) => ({ ...prev, population: "" }))
+    } catch (error) {
+      setPopError(error instanceof Error ? error.message : "商圏人口の取得に失敗しました。")
+    } finally {
+      setPopLoading(false)
+    }
+  }
 
   // ランニングコスト・投資コストの入力値（フィールドID → 入力文字列）。
   // 項目構成・項目名・並び順はマスタから動的に決まるため、汎用マップで保持する。
@@ -380,6 +439,9 @@ export function SimulationForm({
     if (!d) return
     setStoreName(d.storeName ?? "")
     setAddress(d.address ?? "")
+    setPop1km(d.pop1km ?? "")
+    setPop3km(d.pop3km ?? "")
+    setPop5km(d.pop5km ?? "")
     setFloorArea(d.floorArea ?? "")
     setRentPerTsubo(d.rentPerTsubo ?? "")
     setRoyaltyRate(d.royaltyRate === "10" ? "10" : d.royaltyRate === "15" ? "15" : "0")
@@ -418,6 +480,9 @@ export function SimulationForm({
           savedAt: new Date().toISOString(),
           storeName,
           address,
+          pop1km,
+          pop3km,
+          pop5km,
           floorArea,
           rentPerTsubo,
           royaltyRate,
@@ -444,7 +509,7 @@ export function SimulationForm({
     return () => clearTimeout(timer)
   }, [
     draftChecked, draftToRestore,
-    storeName, address, floorArea, rentPerTsubo,
+    storeName, address, pop1km, pop3km, pop5km, floorArea, rentPerTsubo,
     royaltyRate, competitorCount, locationType,
     runningValues, runningQuantities, investmentValues, investmentQuantities,
     editedRunningFields, editedInvestmentFields,
@@ -863,6 +928,15 @@ export function SimulationForm({
     if (!rentPerTsubo.trim()) errors.rentPerTsubo = "家賃は必須です。"
     if (!floorArea.trim())    errors.floorArea    = "床面積は必須です。"
 
+    // 商圏人口は会員数算出の起点（元Excel G38）。欠けたまま試算すると根拠のない数字が出るため必須にする。
+    const popValues = [pop1km, pop3km, pop5km].map((v) => Number(String(v).replace(/,/g, "")))
+    if (popValues.some((v) => !Number.isFinite(v) || v <= 0)) {
+      errors.population = "商圏人口を取得（または入力）してください。"
+    } else if (!(popValues[0] <= popValues[1] && popValues[1] <= popValues[2])) {
+      // 半径ごとの「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
+      errors.population = "1km ≦ 3km ≦ 5km の順に大きくなる必要があります（各欄は累計人口です）。"
+    }
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       setActiveTab("store")
@@ -892,52 +966,33 @@ export function SimulationForm({
 
       let demographics: FormSubmitData["demographics"] | undefined
       let demographicsError: string | undefined
-      let populationByRadius: FormSubmitData["populationByRadius"] | undefined
 
-      // demographics と meshPopulation を並列取得
-      const [demographicsResult, meshPopResult] = await Promise.allSettled([
-        fetch("/api/e-stat/demographics", {
+      // 人口統計（市区町村の年齢別グラフ用）。取得失敗しても試算自体は継続してよい。
+      try {
+        const res = await fetch("/api/e-stat/demographics", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ address: targetAddress }),
-        }).then(async (res) => {
-          const payload = await res.json()
-          if (!res.ok) throw new Error(getErrorMessage(payload, "人口統計データの取得に失敗しました。"))
-          return payload
-        }),
-        fetch("/api/e-stat/mesh-population", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            latitude: geocodePayload.latitude,
-            longitude: geocodePayload.longitude,
-          }),
-        }).then(async (res) => {
-          const payload = await res.json()
-          if (!res.ok) throw new Error(payload?.error ?? "メッシュ人口データの取得に失敗しました。")
-          return payload as { km1Ring: number; km3Ring: number; km5Ring: number }
-        }),
-      ])
-
-      if (demographicsResult.status === "fulfilled") {
-        demographics = demographicsResult.value
-      } else {
-        demographicsError = demographicsResult.reason instanceof Error
-          ? demographicsResult.reason.message
-          : "人口統計データの取得に失敗しました。"
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(getErrorMessage(payload, "人口統計データの取得に失敗しました。"))
+        demographics = payload
+      } catch (error) {
+        demographicsError = error instanceof Error ? error.message : "人口統計データの取得に失敗しました。"
         console.warn(demographicsError)
       }
 
-      // 商圏人口（1km/3km/5km圏の20〜59歳人口）は会員数算出の起点（入力欄 G38）であり、
-      // 欠けたまま試算を続けると Excel と無関係の値が出てしまう。取得失敗はここで打ち切る。
-      // （旧実装は console.warn だけで続行していた。doc/不具合一覧.md #32）
-      if (meshPopResult.status === "fulfilled") {
-        populationByRadius = meshPopResult.value
-      } else {
-        const meshError = meshPopResult.reason instanceof Error
-          ? meshPopResult.reason.message
-          : "メッシュ人口データの取得に失敗しました。"
-        throw new Error(`商圏人口を取得できなかったため試算を中止しました。${meshError}`)
+      // 商圏人口はフォームの入力値（自動集計値、またはユーザーが上書きした値）を正とする。
+      // 各欄は半径ごとの「累計」（元Excel E55/F55/G55）なので、リング差分へ変換して渡す。
+      // バリデーション済みなので数値化と単調性は保証されている。
+      const toNumber = (v: string) => Math.round(Number(String(v).replace(/,/g, "")))
+      const cum1 = toNumber(pop1km)
+      const cum3 = toNumber(pop3km)
+      const cum5 = toNumber(pop5km)
+      const populationByRadius: FormSubmitData["populationByRadius"] = {
+        km1Ring: cum1,
+        km3Ring: cum3 - cum1,
+        km5Ring: cum5 - cum3,
       }
 
       // 投資費目の実効取得額（fixed=単価×数量, perTsubo=単価×坪数×数量）。ゴルフ設備費もここに含まれる。
@@ -1168,6 +1223,70 @@ export function SimulationForm({
                     )}
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
                       住所の都道府県をもとにフィットネスマシン費・マシンメンテナンス費の単価を算出します。
+                    </span>
+                  </div>
+
+                  {/* 商圏人口（元Excel 入力欄 E55/F55/G55）。会員数算出の起点となるため必須。
+                      小地域データからの自動集計値を入れたうえで、手修正も許す。 */}
+                  <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/20 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className="flex items-center gap-1.5 text-xs font-medium">
+                        商圏人口（20〜59歳・半径ごとの累計）
+                        <span className="rounded px-1 py-0.5 text-[10px] font-semibold bg-destructive/10 text-destructive">必須</span>
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={fetchTradeAreaPopulation}
+                        disabled={popLoading || !address.trim()}
+                      >
+                        {popLoading ? "取得中..." : "住所から自動取得"}
+                      </Button>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {([
+                        { id: "pop1km", label: "〜1km圏", value: pop1km, set: setPop1km, auto: popAuto?.km1 },
+                        { id: "pop3km", label: "〜3km圏", value: pop3km, set: setPop3km, auto: popAuto?.km3 },
+                        { id: "pop5km", label: "〜5km圏", value: pop5km, set: setPop5km, auto: popAuto?.km5 },
+                      ] as const).map((f) => (
+                        <div key={f.id} className="flex flex-col gap-1">
+                          <Label htmlFor={f.id} className="text-[11px] text-muted-foreground">{f.label}</Label>
+                          <Input
+                            id={f.id}
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="例: 42,485"
+                            value={f.value}
+                            onChange={(e) => { f.set(e.target.value); setFieldErrors((prev) => ({ ...prev, population: "" })) }}
+                            className={fieldErrors.population ? "border-destructive focus-visible:ring-destructive" : ""}
+                          />
+                          {f.auto !== undefined && String(f.auto) !== f.value && (
+                            <button
+                              type="button"
+                              className="self-start text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                              onClick={() => f.set(String(f.auto))}
+                            >
+                              自動取得値 {f.auto.toLocaleString()} に戻す
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {fieldErrors.population && (
+                      <p className="text-[11px] text-destructive">{fieldErrors.population}</p>
+                    )}
+                    {popError && <p className="text-[11px] text-destructive">{popError}</p>}
+                    <span className="text-[10px] leading-relaxed text-muted-foreground">
+                      各欄は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出はこの人口が起点になります。
+                      {popMeta && (
+                        <>
+                          {" "}自動取得値は{popMeta.surveyYear}年国勢調査の小地域（町丁・字等）データを商圏円で按分したもので、
+                          {popMeta.prefNames.join("・")}の{popMeta.areaCount.km5.toLocaleString()}件を集計しています。
+                          地図画面（jSTAT MAP 等）の値に合わせたい場合は上書きしてください。
+                        </>
+                      )}
                     </span>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
