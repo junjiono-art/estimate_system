@@ -928,13 +928,16 @@ export function SimulationForm({
         console.warn(demographicsError)
       }
 
+      // 商圏人口（1km/3km/5km圏の20〜59歳人口）は会員数算出の起点（入力欄 G38）であり、
+      // 欠けたまま試算を続けると Excel と無関係の値が出てしまう。取得失敗はここで打ち切る。
+      // （旧実装は console.warn だけで続行していた。doc/不具合一覧.md #32）
       if (meshPopResult.status === "fulfilled") {
         populationByRadius = meshPopResult.value
       } else {
         const meshError = meshPopResult.reason instanceof Error
           ? meshPopResult.reason.message
-          : "メッシュ人口データの取得に失敗しました。試算を続行します。"
-        console.warn(meshError)
+          : "メッシュ人口データの取得に失敗しました。"
+        throw new Error(`商圏人口を取得できなかったため試算を中止しました。${meshError}`)
       }
 
       // 投資費目の実効取得額（fixed=単価×数量, perTsubo=単価×坪数×数量）。ゴルフ設備費もここに含まれる。

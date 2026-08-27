@@ -175,6 +175,22 @@ export async function POST(request: Request) {
       }
     }
 
+    // 全リング0＝年齢区分フィルタが全落ちした等の実質的な取得失敗。
+    // 200 で 0 を返すと試算側が「人口0の商圏」として計算してしまうため、明示的に失敗させる。
+    // （doc/不具合一覧.md #32）
+    if (km1Ring + km3Ring + km5Ring <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "メッシュ人口が全圏域で0件でした。統計表の年齢区分と isAge2059() の判定が噛み合っていない可能性があります。",
+          km1Ring: 0,
+          km3Ring: 0,
+          km5Ring: 0,
+        },
+        { status: 502 },
+      )
+    }
+
     return NextResponse.json({
       km1Ring,
       km3Ring,

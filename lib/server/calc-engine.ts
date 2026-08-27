@@ -52,11 +52,6 @@ const INTERIOR_COST = 15_000_000
 const DEFAULT_MONTHLY_RENT = 900_000
 const DEFAULT_MONTHLY_RUNNING = 308_000
 const BASE_FLOOR_AREA_TSUBO = 50
-const BASE_SUBURBAN_FIRST_MONTH_JOINERS = 334
-const BASE_URBAN_ESTIMATED_JOINERS = 137
-const BASE_SUBURBAN_ESTIMATED_JOINERS = 137 + 316
-const BASE_RURAL_ESTIMATED_JOINERS = 137 + 316 + 65
-const POPULATION_FACTOR = 1 - 0.26
 
 // 回帰テスト/未入力時の基準ケース（元Excel「入力欄」の基準値。data/regression/input-base.csv 準拠）
 const BASE_REGRESSION_INPUT: SimulateInput = {
@@ -94,21 +89,6 @@ function getCompetitorImpactRate(competitorCount: number, calcParams: CalcParame
   if (competitorCount === 3) return impact.for3
   if (competitorCount === 4) return impact.for4
   return impact.over4
-}
-
-function getDemandMultiplier(locationType: SimulateInput["locationType"], competitorCount: number, calcParams: CalcParameterConfig): number {
-  if (locationType === "urban") {
-    const urbanJoiners = BASE_URBAN_ESTIMATED_JOINERS * POPULATION_FACTOR
-    return urbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
-  }
-
-  if (locationType === "rural") {
-    const ruralJoiners = BASE_RURAL_ESTIMATED_JOINERS * POPULATION_FACTOR * (1 - getCompetitorImpactRate(competitorCount, calcParams))
-    return ruralJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
-  }
-
-  const suburbanJoiners = BASE_SUBURBAN_ESTIMATED_JOINERS * POPULATION_FACTOR
-  return suburbanJoiners / BASE_SUBURBAN_FIRST_MONTH_JOINERS
 }
 
 function getPaymentFee(revenue: number, calcParams: CalcParameterConfig): number {
@@ -214,7 +194,10 @@ function lookupMemberCoefficient(population: number): number {
  * E38 = VLOOKUP(累計人口, 見込み人数テーブル) ← 立地タイプで累計範囲が変わる
  * E78 = 競合影響率
  *
- * populationByRadius が未設定の場合は従来ロジック（立地タイプ×坪数ベース）にフォールバック。
+ * 商圏人口（populationByRadius）が無い場合は POPULATION_UNAVAILABLE で例外を投げる。
+ * 以前は「立地タイプ×坪数」の概算にフォールバックしていたが、Excelとは無関係の別ロジックで
+ * あるにもかかわらず、それらしい会員数を無音で返してしまい原因特定を著しく妨げていた
+ * （doc/不具合一覧.md #32）。試算結果は必ず商圏人口に基づく必要があるため、概算はしない。
  * 会員数成長モデルが精度を要するため、丸めは行わない。
  */
 function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterConfig): number {
@@ -223,13 +206,21 @@ function resolveInitialJoiners(input: SimulateInput, calcParams: CalcParameterCo
   const competitorCount = Math.max(0, input.competitorCount ?? 0)
 
   if (!pop) {
-    const locationMultiplier = getDemandMultiplier(locationType, competitorCount, calcParams)
-    const floorArea = Number(input.floorAreaTsubo)
-    const areaMultiplier = Number.isFinite(floorArea) && floorArea > 0 ? floorArea / BASE_FLOOR_AREA_TSUBO : 1
-    return Math.max(0.2, locationMultiplier * areaMultiplier) * BASE_SUBURBAN_FIRST_MONTH_JOINERS
+    throw new Error(
+      "POPULATION_UNAVAILABLE: 商圏人口（1km/3km/5km圏の20〜59歳人口）が取得できていないため試算できません。",
+    )
   }
 
-  const { km1Ring, km3Ring, km5Ring } = pop
+  const km1Ring = Number(pop.km1Ring) || 0
+  const km3Ring = Number(pop.km3Ring) || 0
+  const km5Ring = Number(pop.km5Ring) || 0
+
+  // 全リングが0＝取得失敗と同義（年齢区分フィルタが全落ちした場合など）。概算せず明示エラーにする。
+  if (km1Ring + km3Ring + km5Ring <= 0) {
+    throw new Error(
+      "POPULATION_UNAVAILABLE: 商圏人口が全圏域で0件のため試算できません。メッシュ人口の取得結果を確認してください。",
+    )
+  }
 
   // 商圏獲得率 E59/F59/G59 は立地タイプで変わる（入力欄）。
   // 旧実装は郊外型の値（1.2%/0.8%/0.1%）をハードコードしていたため、

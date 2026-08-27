@@ -141,6 +141,11 @@ export async function POST(request: Request) {
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : "試算に失敗しました。"
+    // 商圏人口が取れていない場合は概算にフォールバックせず、原因が分かる形で 422 を返す
+    // （旧実装は無音で「立地タイプ×坪数」の概算に落ちていた。doc/不具合一覧.md #32）
+    if (message.startsWith("POPULATION_UNAVAILABLE:")) {
+      return errorResponse(ErrorCode.VALIDATION_ERROR, message.replace("POPULATION_UNAVAILABLE:", "").trim(), 422)
+    }
     if (message.startsWith("BREAKEVEN_UNCALCULABLE:")) {
       return errorResponse(ErrorCode.VALIDATION_ERROR, message.replace("BREAKEVEN_UNCALCULABLE:", "").trim(), 422)
     }
