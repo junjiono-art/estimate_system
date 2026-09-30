@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,6 +28,7 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { AmountInput } from "@/components/amount-input"
 import { getErrorMessage } from "@/lib/error-utils"
+import { parsePopulationPaste } from "@/lib/population-paste"
 import {
   getFitnessMachineUnitPriceByAddressAndRoyalty,
   FITNESS_MACHINE_CODE,
@@ -351,6 +353,8 @@ export function SimulationForm({
   const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: number[] } | null>(null)
   const [popLoading, setPopLoading] = useState(false)
   const [popError, setPopError] = useState("")
+  // 貼り付け結果のフィードバック（何セルに反映したか・無視した階級があるか）。
+  const [popPasteInfo, setPopPasteInfo] = useState("")
 
   // 半径ごとの20〜59歳合計（元Excel E55/F55/G55）。会員数の算出はこの3つだけを使う。
   const popTotals = POPULATION_RADII.map((_, col) =>
@@ -359,6 +363,33 @@ export function SimulationForm({
       return sum + (Number.isFinite(v) ? v : 0)
     }, 0),
   )
+
+  /**
+   * 商圏人口表への貼り付けを1セルではなく表全体へ展開する（ユーザーfb: jSTAT MAP からの転記効率化）。
+   * 解析は lib/population-paste.ts に分離。年齢ラベルが読めれば階級を突き合わせ、
+   * 数値だけなら 8×3 として、それも無理なら貼り付け開始セルから順に埋める。
+   *
+   * @param anchorRow/@param anchorCol 貼り付け操作を行ったセル（逐次方式の起点）
+   * @returns true なら表へ反映したので既定のペースト動作を止める
+   */
+  function applyPopulationPaste(text: string, anchorRow: number, anchorCol: number): boolean {
+    const result = parsePopulationPaste(text, {
+      ageFroms: POPULATION_AGE_BRACKETS.map((b) => b.from),
+      radiusKms: POPULATION_RADII.map((r) => r.km),
+      anchorRow,
+      anchorCol,
+    })
+    // 値が1つだけ（=通常の1セル貼り付け）のときは横取りせず、ブラウザ既定の動作に任せる。
+    if (result.filledCount < 2) return false
+
+    setPopAges((prev) =>
+      prev.map((row, rowIdx) => row.map((cell, colIdx) => result.values[rowIdx]?.[colIdx] ?? cell)),
+    )
+    setFieldErrors((prevErrors) => ({ ...prevErrors, population: "" }))
+    setPopError("")
+    setPopPasteInfo([`貼り付けから${result.filledCount}セルに反映しました。`, ...result.notes].join(" "))
+    return true
+  }
 
   // 住所から商圏人口（1km/3km/5km圏の20〜59歳人口・累計）を自動集計してフォームへ入れる。
   // 集計は小地域（町丁・字等）データを円で切って按分する方式（lib/server/small-area.ts）。
@@ -370,6 +401,7 @@ export function SimulationForm({
     }
     setPopLoading(true)
     setPopError("")
+    setPopPasteInfo("")
     try {
       const geoRes = await fetch("/api/geocoding", {
         method: "POST",
@@ -1292,6 +1324,24 @@ export function SimulationForm({
                       </Button>
                     </div>
 
+                    {/* 貼り付け専用の受け皿。セルを選ばなくても Ctrl+V で表全体へ反映できるようにする
+                        （個々のセルへの貼り付けも同じ処理で展開される）。入力値は保持しないので常に空。 */}
+                    <Textarea
+                      aria-label="商圏人口の一括貼り付け"
+                      rows={1}
+                      value=""
+                      placeholder="jSTAT MAP のシンプルレポート等をコピーし、ここで貼り付け（Ctrl+V）すると表全体へ反映します"
+                      className="min-h-8 resize-none px-2 py-1.5 text-[11px] md:text-[11px]"
+                      onChange={() => {}}
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData("text/plain")
+                        if (!applyPopulationPaste(text, 0, 0)) {
+                          setPopPasteInfo("貼り付け内容から人口の値を読み取れませんでした。表の範囲をコピーし直してください。")
+                        }
+                        e.preventDefault()
+                      }}
+                    />
+
                     <div className="overflow-x-auto">
                       <table className="w-full min-w-[420px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
                         <thead>
@@ -1323,6 +1373,11 @@ export function SimulationForm({
                                         setPopAges(next)
                                         setFieldErrors((prev) => ({ ...prev, population: "" }))
                                       }}
+                                      // 表をコピーして貼り付けた場合、1セルに全文が入らないよう表全体へ展開する。
+                                      onPaste={(e) => {
+                                        const text = e.clipboardData.getData("text/plain")
+                                        if (applyPopulationPaste(text, rowIdx, colIdx)) e.preventDefault()
+                                      }}
                                       className={`h-8 text-right tabular-nums ${edited ? "border-primary/60" : ""} ${fieldErrors.population ? "border-destructive focus-visible:ring-destructive" : ""}`}
                                     />
                                   </td>
@@ -1346,7 +1401,10 @@ export function SimulationForm({
                       <button
                         type="button"
                         className="self-start text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                        onClick={() => setPopAges(popAutoAges.map((row) => row.map((v) => String(v))))}
+                        onClick={() => {
+                          setPopAges(popAutoAges.map((row) => row.map((v) => String(v))))
+                          setPopPasteInfo("")
+                        }}
                       >
                         自動取得値に戻す
                       </button>
@@ -1354,9 +1412,12 @@ export function SimulationForm({
                     {fieldErrors.population && (
                       <p className="text-[11px] text-destructive">{fieldErrors.population}</p>
                     )}
+                    {popPasteInfo && <p className="text-[11px] text-muted-foreground">{popPasteInfo}</p>}
                     {popError && <p className="text-[11px] text-destructive">{popError}</p>}
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
                       各列は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出には「20〜59歳計」のみを使います。
+                      jSTAT MAP のシンプルレポート（年齢が横並び・商圏名に「-5km」等が付く形）をそのまま貼り付けできます。
+                      商圏名から半径を判定するため、5km→1km の並び順でも正しい列に入ります。
                       {popMeta && (
                         <>
                           {" "}自動取得値は{popMeta.surveyYear}年国勢調査の小地域（町丁・字等）データを商圏円で按分したもので、
