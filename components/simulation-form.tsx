@@ -273,6 +273,15 @@ const POPULATION_RADII = [
   { km: 5, label: "5km圏" },
 ] as const
 
+/**
+ * 入力表に商圏を並べる順（POPULATION_RADII への添字）。
+ * jSTAT MAP のシンプルレポートが 5km→3km→1km の降順で出力するため、画面もそれに合わせる
+ * （ユーザーfb 2026-09-30）。データ側の並び（POPULATION_RADII / popAges の列順 / popTotals /
+ * リング差分変換）は 1km→5km の昇順のままなので、ここは表示順だけを持つ。
+ * 貼り付け解析にも radiusViewOrder として渡し、数値のみの貼り付けが行順どおりに入るようにする。
+ */
+const POPULATION_RADII_VIEW_ORDER = [2, 1, 0] as const
+
 type FormDraft = {
   version: number
   savedAt: string
@@ -386,6 +395,7 @@ export function SimulationForm({
       anchorAgeIndex,
       anchorRadiusIndex,
       viewOrientation: "radius-rows",
+      radiusViewOrder: POPULATION_RADII_VIEW_ORDER,
     })
     // 値が1つだけ（=通常の1セル貼り付け）のときは横取りせず、ブラウザ既定の動作に任せる。
     if (result.filledCount < 2) return false
@@ -1031,7 +1041,7 @@ export function SimulationForm({
       errors.population = "商圏人口が0です。住所または入力値を確認してください。"
     } else if (!(popTotals[0] <= popTotals[1] && popTotals[1] <= popTotals[2])) {
       // 各行は「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
-      errors.population = "各行は内側の圏を含む累計です。1km ≦ 3km ≦ 5km の順に大きくなる必要があります。"
+      errors.population = "各行は内側の圏を含む累計です。内側ほど小さくなる必要があります（1km ≦ 3km ≦ 5km）。"
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1430,7 +1440,9 @@ export function SimulationForm({
                           </tr>
                         </thead>
                         <tbody>
-                          {POPULATION_RADII.map((radius, radiusIdx) => (
+                          {POPULATION_RADII_VIEW_ORDER.map((radiusIdx) => {
+                            const radius = POPULATION_RADII[radiusIdx]
+                            return (
                             <tr key={radius.km}>
                               <td className="whitespace-nowrap font-medium text-muted-foreground">{radius.label}</td>
                               {POPULATION_AGE_BRACKETS.map((bracket, ageIdx) => {
@@ -1468,7 +1480,8 @@ export function SimulationForm({
                                 {popTotals[radiusIdx].toLocaleString()}
                               </td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1491,7 +1504,8 @@ export function SimulationForm({
                     {popPasteInfo && <p className="text-[11px] text-muted-foreground">{popPasteInfo}</p>}
                     {popError && <p className="text-[11px] text-destructive">{popError}</p>}
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
-                      各行は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出には右端の「20〜59歳計」のみを使います。
+                      各行は内側の圏を含む累計です（3km圏は1km圏を含む）。外側の5km圏が上、内側の1km圏が下です。
+                      会員数の算出には右端の「20〜59歳計」のみを使います。
                       表はjSTAT MAP のシンプルレポートと同じ並び（行=商圏・列=年齢階級）なので、コピーしてそのまま貼り付け、
                       またはTSV/CSVファイル（UTF-8・Shift_JIS 自動判定）の読み込みができます。
                       商圏名から半径を判定するため、5km→1km の並び順でも正しい行に入ります。

@@ -36,11 +36,18 @@ export type PopulationPasteOptions = {
   anchorRadiusIndex: number
   /**
    * 画面上の表の向き。逐次方式で「改行＝どちら向きに進むか」が変わるため必要。
-   * "radius-rows"（既定・現UI）= 行が半径(1km/3km/5km)・列が年齢階級。
+   * "radius-rows"（既定・現UI）= 行が半径・列が年齢階級。
    * "age-rows" = 行が年齢階級・列が半径。
    * 戻り値 values は画面の向きに関係なく常に [年齢階級][半径] で返す。
    */
   viewOrientation?: "age-rows" | "radius-rows"
+  /**
+   * 画面に並ぶ半径の順序を radiusKms への添字で表したもの。既定は radiusKms と同じ並び。
+   * 現UIは jSTAT MAP のレポートに合わせて 5km→3km→1km の降順で表示するため [2, 1, 0] を渡す。
+   * これを見ずに「画面の上から順＝radiusKms の順」と決め打つと、数値のみを貼ったときに
+   * 1km圏と5km圏が入れ替わる（合計の単調性チェックで弾かれはするが、貼り付け機能として使えない）。
+   */
+  radiusViewOrder?: readonly number[]
 }
 
 /** 全角数字・全角カンマ・全角空白を半角へ寄せる。 */
@@ -103,11 +110,6 @@ function splitGrid(text: string): string[][] {
 function transpose(grid: string[][]): string[][] {
   const width = grid.reduce((max, row) => Math.max(max, row.length), 0)
   return Array.from({ length: width }, (_, col) => grid.map((row) => row[col] ?? ""))
-}
-
-function transposeNumbers(grid: number[][]): number[][] {
-  const width = grid.reduce((max, row) => Math.max(max, row.length), 0)
-  return Array.from({ length: width }, (_, col) => grid.map((row) => row[col]))
 }
 
 /** 空の結果（行=年齢階級, 列=半径 の null 埋め）。 */
@@ -245,6 +247,10 @@ function tryReportLayout(
  */
 export function parsePopulationPaste(text: string, options: PopulationPasteOptions): PopulationPasteResult {
   const { ageFroms, radiusKms, anchorAgeIndex, anchorRadiusIndex, viewOrientation = "radius-rows" } = options
+  // 画面上の n 番目に表示されている半径が radiusKms の何番目か（およびその逆引き）。
+  const radiusViewOrder = options.radiusViewOrder ?? radiusKms.map((_, i) => i)
+  const radiusAtViewPos = (viewPos: number): number | undefined => radiusViewOrder[viewPos]
+  const viewPosOfRadius = (radiusIdx: number): number => radiusViewOrder.indexOf(radiusIdx)
   const rows = ageFroms.length
   const cols = radiusKms.length
   const notes: string[] = []
@@ -308,13 +314,9 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
       })
     }
     if (filledCount > 0) {
+      // 並び順を推測で決めたことは必ず伝える。ここは貼り付け内容の並び（元データ基準）の話。
       if (!radiusHeaderFound) {
-        // 並び順を推測で決めたことは必ず伝える。案内の向きは画面の表に合わせる。
-        notes.push(
-          viewOrientation === "radius-rows"
-            ? "半径の見出し（1km/3km/5km）が無いため、上から 1km→3km→5km の順とみなしました。行の並びをご確認ください。"
-            : "半径の見出し（1km/3km/5km）が無いため、左から 1km→3km→5km の順とみなしました。列の並びをご確認ください。",
-        )
+        notes.push("半径の見出し（1km/3km/5km）が無いため、貼り付け内容の左から 1km→3km→5km の順とみなしました。値の位置をご確認ください。")
       }
       if (ignoredBrackets > 0) notes.push(`20〜59歳以外の${ignoredBrackets}階級は入力対象外のため無視しました。`)
       const missing = values.filter((row) => row.every((v) => v === null)).length
@@ -345,12 +347,16 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
   }
   if (isRectangular && numericGrid.length === cols && numericGrid[0].length === rows) {
     if (viewOrientation === "age-rows") notes.push(transposedNote)
-    return {
-      values: transposeNumbers(numericGrid).map((row) => row.map((v) => String(v))),
-      filledCount: rows * cols,
-      mode: "transposed-matrix",
-      notes,
-    }
+    // 行=半径。画面と同じ並びで貼られたものとして、表示順で半径へ割り当てる。
+    const values = emptyValues(rows, cols)
+    numericGrid.forEach((row, viewPos) => {
+      const radiusIdx = radiusAtViewPos(viewPos)
+      if (radiusIdx === undefined) return
+      row.forEach((v, ageIdx) => {
+        values[ageIdx][radiusIdx] = String(v)
+      })
+    })
+    return { values, filledCount: rows * cols, mode: "transposed-matrix", notes }
   }
   // 1行だけ／1列だけの貼り付けは、個数で軸を決める（階級数8と半径数3は一致しないので曖昧にならない）。
   // 画面の向きに関係なく「8個なら年齢方向」「3個なら半径方向」へ揃えるので、
@@ -368,8 +374,10 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
     }
     if (flat.length === cols) {
       const values = emptyValues(rows, cols)
-      flat.forEach((v, i) => {
-        values[anchorAgeIndex][i] = String(v)
+      flat.forEach((v, viewPos) => {
+        const radiusIdx = radiusAtViewPos(viewPos)
+        if (radiusIdx === undefined) return
+        values[anchorAgeIndex][radiusIdx] = String(v)
       })
       notes.push(`${ageFroms[anchorAgeIndex]}歳階級の${cols}商圏として反映しました。`)
       return { values, filledCount: cols, mode: "matrix", notes }
@@ -382,8 +390,10 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
     const values = emptyValues(rows, cols)
     flat.forEach((v, i) => {
       if (viewOrientation === "radius-rows") {
-        // 画面: 行=半径 × 列=年齢階級
-        values[i % rows][Math.floor(i / rows)] = String(v)
+        // 画面: 行=半径 × 列=年齢階級（行は表示順）
+        const radiusIdx = radiusAtViewPos(Math.floor(i / rows))
+        if (radiusIdx === undefined) return
+        values[i % rows][radiusIdx] = String(v)
       } else {
         values[Math.floor(i / cols)][i % cols] = String(v)
       }
@@ -398,11 +408,15 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
   let filledCount = 0
   let clipped = false
   const radiusRowsView = viewOrientation === "radius-rows"
-  numericGrid.forEach((r0, r) => {
-    r0.forEach((value, c) => {
+  // 貼り付け開始セルが画面の何行目（半径の表示順で何番目）かを起点にする。
+  const anchorViewPos = viewPosOfRadius(anchorRadiusIndex)
+  numericGrid.forEach((gridRow, r) => {
+    gridRow.forEach((value, c) => {
       const ageIdx = radiusRowsView ? anchorAgeIndex + c : anchorAgeIndex + r
-      const radiusIdx = radiusRowsView ? anchorRadiusIndex + r : anchorRadiusIndex + c
-      if (ageIdx >= rows || radiusIdx >= cols) {
+      const radiusIdx = radiusRowsView
+        ? radiusAtViewPos(anchorViewPos + r)
+        : radiusAtViewPos(viewPosOfRadius(anchorRadiusIndex) + c)
+      if (ageIdx >= rows || radiusIdx === undefined) {
         clipped = true
         return
       }
