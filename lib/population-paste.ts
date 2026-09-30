@@ -30,9 +30,17 @@ export type PopulationPasteOptions = {
   ageFroms: readonly number[]
   /** 入力表の半径（km）。列順に並べる（例: [1,3,5]）。 */
   radiusKms: readonly number[]
-  /** 貼り付け操作を行ったセル（逐次方式・部分貼り付けの起点）。 */
-  anchorRow: number
-  anchorCol: number
+  /** 貼り付け操作を行ったセルの年齢階級インデックス（逐次方式・部分貼り付けの起点）。 */
+  anchorAgeIndex: number
+  /** 同じセルの半径インデックス。 */
+  anchorRadiusIndex: number
+  /**
+   * 画面上の表の向き。逐次方式で「改行＝どちら向きに進むか」が変わるため必要。
+   * "radius-rows"（既定・現UI）= 行が半径(1km/3km/5km)・列が年齢階級。
+   * "age-rows" = 行が年齢階級・列が半径。
+   * 戻り値 values は画面の向きに関係なく常に [年齢階級][半径] で返す。
+   */
+  viewOrientation?: "age-rows" | "radius-rows"
 }
 
 /** 全角数字・全角カンマ・全角空白を半角へ寄せる。 */
@@ -236,20 +244,20 @@ function tryReportLayout(
  * filledCount が 0 の場合は解釈できなかったということなので、呼び出し側は既定のペースト動作に任せる。
  */
 export function parsePopulationPaste(text: string, options: PopulationPasteOptions): PopulationPasteResult {
-  const { ageFroms, radiusKms, anchorRow, anchorCol } = options
+  const { ageFroms, radiusKms, anchorAgeIndex, anchorRadiusIndex, viewOrientation = "radius-rows" } = options
   const rows = ageFroms.length
   const cols = radiusKms.length
   const notes: string[] = []
   const grid = splitGrid(text)
   if (grid.length === 0) return { values: emptyValues(rows, cols), filledCount: 0, mode: "sequential", notes }
 
-  // ── 0) レポート方式（jSTAT MAP シンプルレポート: 年齢=列見出し、半径=商圏名）──
+  // ── 1) レポート方式（jSTAT MAP シンプルレポート: 年齢=列見出し、半径=商圏名）──
   const report = tryReportLayout(grid, ageFroms, radiusKms)
   if (report) {
     return { values: report.values, filledCount: report.filledCount, mode: "report", notes: report.notes }
   }
 
-  // ── 1) 年齢ラベル方式 ────────────────────────────────────────────────
+  // ── 2) 年齢ラベル方式 ────────────────────────────────────────────────
   // 行方向にラベルが無ければ、年齢が列見出しになっている（縦横が逆の）可能性を見る。
   let labelGrid = grid
   let labeled = collectLabeledRows(labelGrid)
@@ -288,7 +296,7 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
       for (const v of picked) if (v !== null) hasHeaderValue = true
       if (!hasHeaderValue) {
         // 数値が列数分あれば左から順に、足りなければ貼り付け開始列から埋める。
-        const offset = row.numbers.length >= cols ? 0 : anchorCol
+        const offset = row.numbers.length >= cols ? 0 : anchorRadiusIndex
         row.numbers.slice(0, cols - offset).forEach((n, i) => {
           picked[offset + i] = n.value
         })
@@ -301,7 +309,12 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
     }
     if (filledCount > 0) {
       if (!radiusHeaderFound) {
-        notes.push("半径の見出し（1km/3km/5km）が見つからないため、左から 1km→3km→5km の順とみなしました。列の並びをご確認ください。")
+        // 並び順を推測で決めたことは必ず伝える。案内の向きは画面の表に合わせる。
+        notes.push(
+          viewOrientation === "radius-rows"
+            ? "半径の見出し（1km/3km/5km）が無いため、上から 1km→3km→5km の順とみなしました。行の並びをご確認ください。"
+            : "半径の見出し（1km/3km/5km）が無いため、左から 1km→3km→5km の順とみなしました。列の並びをご確認ください。",
+        )
       }
       if (ignoredBrackets > 0) notes.push(`20〜59歳以外の${ignoredBrackets}階級は入力対象外のため無視しました。`)
       const missing = values.filter((row) => row.every((v) => v === null)).length
@@ -310,15 +323,19 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
     }
   }
 
-  // ── 2) 行列方式（数値のみ）────────────────────────────────────────────
+  // ── 3) 行列方式（数値のみ）────────────────────────────────────────────
   const numericGrid = grid
     .map((row) => row.map(parseNumber).filter((n): n is number => n !== null))
     .filter((row) => row.length > 0)
   const total = numericGrid.reduce((sum, row) => sum + row.length, 0)
   if (total === 0) return { values: emptyValues(rows, cols), filledCount: 0, mode: "sequential", notes }
 
+  // 8×3 と 3×8 はどちらも一意に解釈できる（階級数と半径数が異なるため）。
+  // ただし「縦横が逆」と案内すべきかは画面の向きによって反転するので、表示中の並びと違うときだけ伝える。
+  const transposedNote = "貼り付け内容の縦横が画面の表と逆だったため、並べ替えて反映しました。"
   const isRectangular = numericGrid.every((row) => row.length === numericGrid[0].length)
   if (isRectangular && numericGrid.length === rows && numericGrid[0].length === cols) {
+    if (viewOrientation === "radius-rows") notes.push(transposedNote)
     return {
       values: numericGrid.map((row) => row.map((v) => String(v))),
       filledCount: rows * cols,
@@ -327,7 +344,7 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
     }
   }
   if (isRectangular && numericGrid.length === cols && numericGrid[0].length === rows) {
-    notes.push("縦横が逆だったため、行=年齢階級・列=半径に並べ替えて反映しました。")
+    if (viewOrientation === "age-rows") notes.push(transposedNote)
     return {
       values: transposeNumbers(numericGrid).map((row) => row.map((v) => String(v))),
       filledCount: rows * cols,
@@ -335,31 +352,82 @@ export function parsePopulationPaste(text: string, options: PopulationPasteOptio
       notes,
     }
   }
-  if (total === rows * cols) {
-    // 24個そろっているが形が崩れている場合は、左上から行優先で詰め直す。
+  // 1行だけ／1列だけの貼り付けは、個数で軸を決める（階級数8と半径数3は一致しないので曖昧にならない）。
+  // 画面の向きに関係なく「8個なら年齢方向」「3個なら半径方向」へ揃えるので、
+  // Excel の縦1列をコピーしても、画面の横1行をコピーしても同じ結果になる。
+  const isVector = numericGrid.length === 1 || numericGrid.every((row) => row.length === 1)
+  if (isVector && rows !== cols) {
     const flat = numericGrid.flat()
-    const values = Array.from({ length: rows }, (_, r) =>
-      Array.from({ length: cols }, (_, c) => String(flat[r * cols + c])),
-    )
+    if (flat.length === rows) {
+      const values = emptyValues(rows, cols)
+      flat.forEach((v, i) => {
+        values[i][anchorRadiusIndex] = String(v)
+      })
+      notes.push(`${radiusKms[anchorRadiusIndex]}km圏の${rows}階級として反映しました。`)
+      return { values, filledCount: rows, mode: "matrix", notes }
+    }
+    if (flat.length === cols) {
+      const values = emptyValues(rows, cols)
+      flat.forEach((v, i) => {
+        values[anchorAgeIndex][i] = String(v)
+      })
+      notes.push(`${ageFroms[anchorAgeIndex]}歳階級の${cols}商圏として反映しました。`)
+      return { values, filledCount: cols, mode: "matrix", notes }
+    }
+  }
+
+  if (total === rows * cols) {
+    // 24個そろっているが形が崩れている場合は、画面の左上から見た目の行優先で詰め直す。
+    const flat = numericGrid.flat()
+    const values = emptyValues(rows, cols)
+    flat.forEach((v, i) => {
+      if (viewOrientation === "radius-rows") {
+        // 画面: 行=半径 × 列=年齢階級
+        values[i % rows][Math.floor(i / rows)] = String(v)
+      } else {
+        values[Math.floor(i / cols)][i % cols] = String(v)
+      }
+    })
+    notes.push("貼り付け内容の行数・列数が表と一致しなかったため、左上から順に詰めました。値の位置をご確認ください。")
     return { values, filledCount: rows * cols, mode: "matrix", notes }
   }
 
-  // ── 3) 逐次方式（表計算ソフトと同じ、貼り付け開始セルからの相対配置）──
+  // ── 4) 逐次方式（表計算ソフトと同じ、貼り付け開始セルからの相対配置）──
+  // 貼り付けテキストの行／列は「画面の見た目」に対応するので、画面の向きに合わせて写す。
   const values = emptyValues(rows, cols)
   let filledCount = 0
   let clipped = false
-  numericGrid.forEach((row, r) => {
-    row.forEach((value, c) => {
-      const targetRow = anchorRow + r
-      const targetCol = anchorCol + c
-      if (targetRow >= rows || targetCol >= cols) {
+  const radiusRowsView = viewOrientation === "radius-rows"
+  numericGrid.forEach((r0, r) => {
+    r0.forEach((value, c) => {
+      const ageIdx = radiusRowsView ? anchorAgeIndex + c : anchorAgeIndex + r
+      const radiusIdx = radiusRowsView ? anchorRadiusIndex + r : anchorRadiusIndex + c
+      if (ageIdx >= rows || radiusIdx >= cols) {
         clipped = true
         return
       }
-      values[targetRow][targetCol] = String(value)
+      values[ageIdx][radiusIdx] = String(value)
       filledCount += 1
     })
   })
   if (clipped) notes.push("入力表に収まらない値は切り捨てました。貼り付け先のセルを確認してください。")
   return { values, filledCount, mode: "sequential", notes }
+}
+
+/**
+ * TSV/CSV ファイルのバイト列を文字列へ復号する。
+ *
+ * jSTAT MAP のダウンロード出力（tsv/csv）は **Shift_JIS** のことがあり、UTF-8 として読むと
+ * 「総数２０～２４歳」等の見出しが化けてレポート方式・年齢ラベル方式が両方とも失敗する。
+ * UTF-8 として厳密に（fatal）読めたならそれを採用し、読めなければ Shift_JIS とみなす。
+ * 数字だけは化けても読めてしまうぶん、見出しが化けると静かに誤配置になり得るので先に手を打つ。
+ */
+export function decodeTextBytes(bytes: ArrayBuffer): string {
+  const view = new Uint8Array(bytes)
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(view).replace(/^﻿/, "")
+  } catch {
+    // TextDecoder の "shift_jis" は Windows-31J 相当で、未定義バイトは U+FFFD になるだけで例外は出ない。
+    return new TextDecoder("shift_jis").decode(view).replace(/^﻿/, "")
+  }
 }

@@ -28,7 +28,7 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { AmountInput } from "@/components/amount-input"
 import { getErrorMessage } from "@/lib/error-utils"
-import { parsePopulationPaste } from "@/lib/population-paste"
+import { decodeTextBytes, parsePopulationPaste } from "@/lib/population-paste"
 import {
   getFitnessMachineUnitPriceByAddressAndRoyalty,
   FITNESS_MACHINE_CODE,
@@ -255,14 +255,15 @@ const DRAFT_VERSION = 2
  * 会員数の算出に使うのは 20〜59歳のみなので、この8階級だけを入力させる。
  */
 const POPULATION_AGE_BRACKETS = [
-  { from: 20, label: "２０〜２４歳" },
-  { from: 25, label: "２５〜２９歳" },
-  { from: 30, label: "３０〜３４歳" },
-  { from: 35, label: "３５〜３９歳" },
-  { from: 40, label: "４０〜４４歳" },
-  { from: 45, label: "４５〜４９歳" },
-  { from: 50, label: "５０〜５４歳" },
-  { from: 55, label: "５５〜５９歳" },
+  // label は結果画面へ渡す正式名称（元Excel表記）、short は列見出し用の短縮表記。
+  { from: 20, label: "２０〜２４歳", short: "20〜24" },
+  { from: 25, label: "２５〜２９歳", short: "25〜29" },
+  { from: 30, label: "３０〜３４歳", short: "30〜34" },
+  { from: 35, label: "３５〜３９歳", short: "35〜39" },
+  { from: 40, label: "４０〜４４歳", short: "40〜44" },
+  { from: 45, label: "４５〜４９歳", short: "45〜49" },
+  { from: 50, label: "５０〜５４歳", short: "50〜54" },
+  { from: 55, label: "５５〜５９歳", short: "55〜59" },
 ] as const
 
 /** 商圏の半径（元Excel E列/F列/G列）。各列は内側の圏を含む累計。 */
@@ -355,6 +356,9 @@ export function SimulationForm({
   const [popError, setPopError] = useState("")
   // 貼り付け結果のフィードバック（何セルに反映したか・無視した階級があるか）。
   const [popPasteInfo, setPopPasteInfo] = useState("")
+  // TSV/CSV のドラッグ中ハイライトと、隠しファイル入力への参照。
+  const [isPopDragOver, setIsPopDragOver] = useState(false)
+  const popFileInputRef = useRef<HTMLInputElement>(null)
 
   // 半径ごとの20〜59歳合計（元Excel E55/F55/G55）。会員数の算出はこの3つだけを使う。
   const popTotals = POPULATION_RADII.map((_, col) =>
@@ -365,19 +369,23 @@ export function SimulationForm({
   )
 
   /**
-   * 商圏人口表への貼り付けを1セルではなく表全体へ展開する（ユーザーfb: jSTAT MAP からの転記効率化）。
-   * 解析は lib/population-paste.ts に分離。年齢ラベルが読めれば階級を突き合わせ、
-   * 数値だけなら 8×3 として、それも無理なら貼り付け開始セルから順に埋める。
+   * 商圏人口表への貼り付け／TSV読み込みを、1セルではなく表全体へ展開する
+   * （ユーザーfb: jSTAT MAP からの転記効率化）。解析は lib/population-paste.ts に分離。
    *
-   * @param anchorRow/@param anchorCol 貼り付け操作を行ったセル（逐次方式の起点）
+   * 画面の表は「行=半径(1km/3km/5km) × 列=年齢階級」だが、内部状態 popAges は
+   * 従来どおり [年齢階級][半径] のまま保持する（下書きの互換・popTotals・送信変換を壊さないため）。
+   * そのため解析側にも画面の向き（viewOrientation）とアンカーを年齢／半径で渡す。
+   *
+   * @param anchorAgeIndex/@param anchorRadiusIndex 貼り付け操作を行ったセル（逐次方式の起点）
    * @returns true なら表へ反映したので既定のペースト動作を止める
    */
-  function applyPopulationPaste(text: string, anchorRow: number, anchorCol: number): boolean {
+  function applyPopulationPaste(text: string, anchorAgeIndex: number, anchorRadiusIndex: number, source: "貼り付け" | "ファイル" | "ドロップ" = "貼り付け"): boolean {
     const result = parsePopulationPaste(text, {
       ageFroms: POPULATION_AGE_BRACKETS.map((b) => b.from),
       radiusKms: POPULATION_RADII.map((r) => r.km),
-      anchorRow,
-      anchorCol,
+      anchorAgeIndex,
+      anchorRadiusIndex,
+      viewOrientation: "radius-rows",
     })
     // 値が1つだけ（=通常の1セル貼り付け）のときは横取りせず、ブラウザ既定の動作に任せる。
     if (result.filledCount < 2) return false
@@ -387,8 +395,24 @@ export function SimulationForm({
     )
     setFieldErrors((prevErrors) => ({ ...prevErrors, population: "" }))
     setPopError("")
-    setPopPasteInfo([`貼り付けから${result.filledCount}セルに反映しました。`, ...result.notes].join(" "))
+    setPopPasteInfo([`${source}から${result.filledCount}セルに反映しました。`, ...result.notes].join(" "))
     return true
+  }
+
+  /**
+   * TSV/CSV ファイル（jSTAT MAP のダウンロード出力など）を読み込んで表へ反映する。
+   * 文字コードは UTF-8 / Shift_JIS を自動判定する（decodeTextBytes）。
+   */
+  async function loadPopulationFile(file: File) {
+    setPopPasteInfo("")
+    try {
+      const text = decodeTextBytes(await file.arrayBuffer())
+      if (!applyPopulationPaste(text, 0, 0, "ファイル")) {
+        setPopError(`${file.name} から商圏人口の値を読み取れませんでした。年齢階級の見出しを含む表を保存したファイルを指定してください。`)
+      }
+    } catch {
+      setPopError(`${file.name} の読み込みに失敗しました。`)
+    }
   }
 
   // 住所から商圏人口（1km/3km/5km圏の20〜59歳人口・累計）を自動集計してフォームへ入れる。
@@ -1002,12 +1026,12 @@ export function SimulationForm({
       row.some((v) => String(v).trim() === "" || !Number.isFinite(Number(String(v).replace(/,/g, "")))),
     )
     if (hasBlankCell) {
-      errors.population = "商圏人口の年齢別セルをすべて埋めてください（「住所から自動取得」で一括入力できます）。"
+      errors.population = "商圏人口のセルをすべて埋めてください（「住所から自動取得」または貼り付け／TSV読み込みで一括入力できます）。"
     } else if (popTotals.some((t) => t <= 0)) {
       errors.population = "商圏人口が0です。住所または入力値を確認してください。"
     } else if (!(popTotals[0] <= popTotals[1] && popTotals[1] <= popTotals[2])) {
-      // 各列は「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
-      errors.population = "各列は内側の圏を含む累計です。1km ≦ 3km ≦ 5km の順に大きくなる必要があります。"
+      // 各行は「累計」なので外側ほど大きくなる。逆転するとリング差分が負になり会員数が壊れる。
+      errors.population = "各行は内側の圏を含む累計です。1km ≦ 3km ≦ 5km の順に大きくなる必要があります。"
     }
 
     if (Object.keys(errors).length > 0) {
@@ -1324,75 +1348,127 @@ export function SimulationForm({
                       </Button>
                     </div>
 
-                    {/* 貼り付け専用の受け皿。セルを選ばなくても Ctrl+V で表全体へ反映できるようにする
-                        （個々のセルへの貼り付けも同じ処理で展開される）。入力値は保持しないので常に空。 */}
-                    <Textarea
-                      aria-label="商圏人口の一括貼り付け"
-                      rows={1}
-                      value=""
-                      placeholder="jSTAT MAP のシンプルレポート等をコピーし、ここで貼り付け（Ctrl+V）すると表全体へ反映します"
-                      className="min-h-8 resize-none px-2 py-1.5 text-[11px] md:text-[11px]"
-                      onChange={() => {}}
-                      onPaste={(e) => {
-                        const text = e.clipboardData.getData("text/plain")
-                        if (!applyPopulationPaste(text, 0, 0)) {
-                          setPopPasteInfo("貼り付け内容から人口の値を読み取れませんでした。表の範囲をコピーし直してください。")
-                        }
-                        e.preventDefault()
-                      }}
-                    />
+                    {/* 貼り付け／TSV読み込みの受け皿。セルを選ばなくても Ctrl+V でき、
+                        TSV・CSVファイルのドラッグ＆ドロップも受ける（個々のセルへの貼り付けも同じ処理）。
+                        入力値は保持しないので常に空。 */}
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start">
+                      <Textarea
+                        aria-label="商圏人口の一括貼り付け"
+                        rows={1}
+                        value=""
+                        placeholder="jSTAT MAP のシンプルレポート等をコピーして貼り付け（Ctrl+V）／TSV・CSVをドラッグ＆ドロップ"
+                        className={cn(
+                          "min-h-8 flex-1 resize-none px-2 py-1.5 text-[11px] md:text-[11px]",
+                          isPopDragOver && "border-primary bg-primary/5",
+                        )}
+                        onChange={() => {}}
+                        onPaste={(e) => {
+                          const text = e.clipboardData.getData("text/plain")
+                          if (!applyPopulationPaste(text, 0, 0)) {
+                            setPopPasteInfo("貼り付け内容から人口の値を読み取れませんでした。表の範囲をコピーし直してください。")
+                          }
+                          e.preventDefault()
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setIsPopDragOver(true)
+                        }}
+                        onDragLeave={() => setIsPopDragOver(false)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setIsPopDragOver(false)
+                          const file = e.dataTransfer.files?.[0]
+                          if (file) {
+                            void loadPopulationFile(file)
+                            return
+                          }
+                          // ファイルではなく選択テキストをドロップされた場合も同じ解析で受ける。
+                          const dropped = e.dataTransfer.getData("text/plain")
+                          if (dropped && !applyPopulationPaste(dropped, 0, 0, "ドロップ")) {
+                            setPopPasteInfo("ドロップ内容から人口の値を読み取れませんでした。")
+                          }
+                        }}
+                      />
+                      {/* ファイル選択は input を隠してボタンから開く（Shadcn の見た目を保つため）。 */}
+                      <input
+                        ref={popFileInputRef}
+                        type="file"
+                        accept=".tsv,.csv,.txt,text/tab-separated-values,text/csv,text/plain"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) void loadPopulationFile(file)
+                          // 同じファイルを選び直しても onChange が発火するようにリセットする。
+                          e.target.value = ""
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 shrink-0 text-[11px]"
+                        onClick={() => popFileInputRef.current?.click()}
+                      >
+                        TSV/CSVを読み込む
+                      </Button>
+                    </div>
 
+                    {/* 行=商圏(1km/3km/5km) × 列=年齢階級。jSTAT MAP のシンプルレポートと同じ並びにして
+                        目視照合しやすくしている（ユーザーfb 2026-09-30）。
+                        内部状態 popAges は [年齢階級][半径] のままなので、添字は ageIdx / radiusIdx で読み替える。 */}
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[420px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
+                      <table className="w-full min-w-[760px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
                         <thead>
                           <tr>
-                            <th className="text-left font-medium text-muted-foreground">年齢</th>
-                            {POPULATION_RADII.map((r) => (
-                              <th key={r.km} className="text-right font-medium text-muted-foreground">{r.label}</th>
+                            <th className="text-left font-medium text-muted-foreground">商圏</th>
+                            {POPULATION_AGE_BRACKETS.map((bracket) => (
+                              <th key={bracket.from} className="whitespace-nowrap text-right font-medium text-muted-foreground">
+                                {bracket.short}
+                              </th>
                             ))}
+                            <th className="whitespace-nowrap text-right font-medium">20〜59歳計</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {POPULATION_AGE_BRACKETS.map((bracket, rowIdx) => (
-                            <tr key={bracket.from}>
-                              <td className="whitespace-nowrap text-muted-foreground">{bracket.label}</td>
-                              {POPULATION_RADII.map((radius, colIdx) => {
-                                const auto = popAutoAges?.[rowIdx]?.[colIdx]
-                                const value = popAges[rowIdx]?.[colIdx] ?? ""
+                          {POPULATION_RADII.map((radius, radiusIdx) => (
+                            <tr key={radius.km}>
+                              <td className="whitespace-nowrap font-medium text-muted-foreground">{radius.label}</td>
+                              {POPULATION_AGE_BRACKETS.map((bracket, ageIdx) => {
+                                const auto = popAutoAges?.[ageIdx]?.[radiusIdx]
+                                const value = popAges[ageIdx]?.[radiusIdx] ?? ""
                                 const edited = auto !== undefined && String(auto) !== value
                                 return (
-                                  <td key={radius.km}>
+                                  <td key={bracket.from}>
                                     <Input
-                                      aria-label={`${bracket.label} ${radius.label}`}
+                                      aria-label={`${radius.label} ${bracket.label}`}
                                       type="number"
                                       inputMode="numeric"
                                       value={value}
                                       onChange={(e) => {
                                         const next = popAges.map((r) => [...r])
-                                        next[rowIdx][colIdx] = e.target.value
+                                        next[ageIdx][radiusIdx] = e.target.value
                                         setPopAges(next)
                                         setFieldErrors((prev) => ({ ...prev, population: "" }))
                                       }}
                                       // 表をコピーして貼り付けた場合、1セルに全文が入らないよう表全体へ展開する。
                                       onPaste={(e) => {
                                         const text = e.clipboardData.getData("text/plain")
-                                        if (applyPopulationPaste(text, rowIdx, colIdx)) e.preventDefault()
+                                        if (applyPopulationPaste(text, ageIdx, radiusIdx)) e.preventDefault()
                                       }}
-                                      className={`h-8 text-right tabular-nums ${edited ? "border-primary/60" : ""} ${fieldErrors.population ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                      className={cn(
+                                        "h-8 min-w-[72px] text-right tabular-nums",
+                                        edited && "border-primary/60",
+                                        fieldErrors.population && "border-destructive focus-visible:ring-destructive",
+                                      )}
                                     />
                                   </td>
                                 )
                               })}
+                              <td className="whitespace-nowrap text-right font-medium tabular-nums">
+                                {popTotals[radiusIdx].toLocaleString()}
+                              </td>
                             </tr>
                           ))}
-                          <tr>
-                            <td className="whitespace-nowrap pt-1 font-medium">20〜59歳計</td>
-                            {popTotals.map((total, i) => (
-                              <td key={i} className="pt-1 text-right font-medium tabular-nums">
-                                {total.toLocaleString()}
-                              </td>
-                            ))}
-                          </tr>
                         </tbody>
                       </table>
                     </div>
@@ -1415,9 +1491,10 @@ export function SimulationForm({
                     {popPasteInfo && <p className="text-[11px] text-muted-foreground">{popPasteInfo}</p>}
                     {popError && <p className="text-[11px] text-destructive">{popError}</p>}
                     <span className="text-[10px] leading-relaxed text-muted-foreground">
-                      各列は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出には「20〜59歳計」のみを使います。
-                      jSTAT MAP のシンプルレポート（年齢が横並び・商圏名に「-5km」等が付く形）をそのまま貼り付けできます。
-                      商圏名から半径を判定するため、5km→1km の並び順でも正しい列に入ります。
+                      各行は内側の圏を含む累計です（3km圏は1km圏を含む）。会員数の算出には右端の「20〜59歳計」のみを使います。
+                      表はjSTAT MAP のシンプルレポートと同じ並び（行=商圏・列=年齢階級）なので、コピーしてそのまま貼り付け、
+                      またはTSV/CSVファイル（UTF-8・Shift_JIS 自動判定）の読み込みができます。
+                      商圏名から半径を判定するため、5km→1km の並び順でも正しい行に入ります。
                       {popMeta && (
                         <>
                           {" "}自動取得値は{popMeta.surveyYear}年国勢調査の小地域（町丁・字等）データを商圏円で按分したもので、
