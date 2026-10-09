@@ -122,7 +122,13 @@ def main():
             # 作成日（元は自動更新の日付フィールド。開くたびに日付が変わらないよう固定値にする）
             set_runs(sh.text_frame.paragraphs[0], ["{{date}}"])
 
-    # ── 3. 競合情報: サンプルの吹き出し・矢印・赤枠・アイコンを除去（地図画像と見出しだけ残す）──
+    # ── 2. 店舗写真: 見出し（タイトル＋下線）だけ残し、写真枠・サンプル図形は除去する（写真は手で貼る）──
+    photo = s[1]
+    for sh in list(photo.shapes):
+        if sh.name not in ("Text Box 2", "Line 4"):
+            remove_shape(sh)
+
+    # ── 3. 競合情報:サンプルの吹き出し・矢印・赤枠・アイコンを除去（地図画像と見出しだけ残す）──
     comp = s[2]
     for sh in list(comp.shapes):
         if sh.name.startswith("Google Shape;"):
