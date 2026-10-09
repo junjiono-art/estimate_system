@@ -56,12 +56,36 @@ export async function invokeLambdaGateway<T>(options: LambdaRequestOptions): Pro
     cache: "no-store",
   })
 
-  const payload = (await response.json().catch(() => null)) as
+  // 非JSON応答（API Gatewayのエラーページ等）も診断できるよう、テキストで受けてからパースする
+  const rawText = await response.text().catch(() => "")
+  let parsedPayload: unknown = null
+  try {
+    parsedPayload = rawText ? JSON.parse(rawText) : null
+  } catch {
+    parsedPayload = null
+  }
+  const payload = parsedPayload as
     | T
-    | { error?: { code?: string; message?: string } | string }
+    | { error?: { code?: string; message?: string } | string; message?: string }
     | null
 
   if (!response.ok) {
+    // Lambda標準形式 {error:{code,message}} 以外（API Gatewayの {message} や文字列error）のメッセージを拾う
+    const upstreamMessage =
+      payload && typeof payload === "object"
+        ? "error" in payload && typeof payload.error === "string"
+          ? payload.error
+          : "message" in payload && typeof payload.message === "string"
+            ? payload.message
+            : undefined
+        : undefined
+    console.error("[lambda-gateway] upstream error", {
+      method: options.method,
+      path: options.path,
+      status: response.status,
+      body: rawText.slice(0, 1000),
+    })
+
     const errorCode =
       payload &&
       typeof payload === "object" &&
@@ -78,7 +102,7 @@ export async function invokeLambdaGateway<T>(options: LambdaRequestOptions): Pro
       typeof payload.error === "object" &&
       payload.error?.message
         ? payload.error.message
-        : "Lambda API呼び出しに失敗しました。"
+        : `Lambda API呼び出しに失敗しました。(HTTP ${response.status}${upstreamMessage ? `: ${upstreamMessage}` : ""})`
 
     const errorDetails =
       payload &&
@@ -88,7 +112,7 @@ export async function invokeLambdaGateway<T>(options: LambdaRequestOptions): Pro
       payload.error !== null &&
       "details" in payload.error
         ? (payload.error as { details?: unknown }).details
-        : undefined
+        : { upstreamStatus: response.status, upstreamBody: rawText.slice(0, 500) || undefined }
 
     return {
       ok: false,

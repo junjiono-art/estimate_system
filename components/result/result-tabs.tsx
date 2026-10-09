@@ -32,7 +32,7 @@ import { DEFAULT_REPORT_EXPORT_CONFIG, normalizeReportExportConfig } from "@/lib
 import type { FormSubmitData } from "@/components/simulation-form"
 import { getErrorMessage } from "@/lib/error-utils"
 import { resolveMasterFieldValues } from "@/lib/master-value-mapping"
-import { exportResultToPptx } from "@/lib/export-pptx"
+import { exportReportPptx } from "@/lib/export-report-pptx"
 import { cn, extractCity } from "@/lib/utils"
 
 // 地図(leaflet)はブラウザ専用のため SSR を無効化して読み込む。
@@ -131,7 +131,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
   const [mapOpen, setMapOpen] = useState(true)
   // PDF出力時は全セクションを縦積みで描画する（タブ非表示分のグラフも正しく出力するため）。
   const [printing, setPrinting] = useState(false)
-  // レポート出力設定（マスタ）。PDF/PPTX の用紙・表紙・テーマ・セクション/KPI に反映。
+  // PPTX出力中（3シナリオの再計算と地図の合成に数秒かかる）
+  const [exportingPptx, setExportingPptx] = useState(false)
+  // レポート出力設定（マスタ）。PDF の用紙・表紙・テーマ・セクション/KPI に反映（PPTXは雛形形式で固定）。
   const [reportConfig, setReportConfig] = useState<ReportExportConfig>(DEFAULT_REPORT_EXPORT_CONFIG)
   // 近隣ジムの選択/反映状態は StoreMap がタブ離脱でアンマウントされても保持するため親で持つ。
   const [gymApply, setGymApply] = useState(false)
@@ -208,6 +210,56 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       runningCostTotal,
       requestInitialInvestmentTotal,
     }
+  }
+
+  /**
+   * 現在の操作条件（ロイヤリティ・立地・減価償却・競合数）で指定シナリオを再計算する。
+   * 結果はシナリオキャッシュに格納し、同条件の再要求ではキャッシュを返す。
+   * 画面のシナリオ切替と、レポート出力（3シナリオ一括）の両方から使う。
+   */
+  async function fetchScenarioResult(nextScenario: ScenarioType, effectiveCompetitor: number, signal?: AbortSignal): Promise<SimulationResult> {
+    const nextRoyaltyRate = (parseInt(franchiseRate) || 0) as 0 | 10 | 15
+    const cacheKey = buildScenarioCacheKey(nextScenario, nextRoyaltyRate, includeDepreciation, locationType, effectiveCompetitor)
+    const cached = scenarioCacheRef.current.get(cacheKey)
+    if (cached) return cached
+
+    const requestValues = resolveRequestValues(nextRoyaltyRate)
+    const requestBody = {
+      ...(simulationRequest ?? {}),
+      storeName: simulationRequest?.storeName ?? initialData.storeName,
+      location: simulationRequest?.location ?? initialData.location,
+      scenario: nextScenario,
+      royaltyRate: nextRoyaltyRate,
+      franchiseRate: nextRoyaltyRate,
+      locationType,
+      competitorCount: effectiveCompetitor,
+      runningCostTotal: requestValues.runningCostTotal,
+      initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
+      includeDepreciation,
+    }
+
+    const response = await fetch("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+      signal,
+    })
+
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.data) {
+      throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
+    }
+
+    const computed = applyResolvedBreakdown(
+      payload.data as SimulationResult,
+      masterValues,
+      nextRoyaltyRate,
+      requestValues.requestInitialInvestmentTotal,
+      floorAreaTsubo,
+    )
+    const withLocation = { ...computed, locationType }
+    if (!signal?.aborted) scenarioCacheRef.current.set(cacheKey, withLocation)
+    return withLocation
   }
 
   // 単価マスタは静的データのため、simulationRequest の参照が変わるたびに再フェッチしない。
@@ -289,7 +341,6 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     setScenarioError("")
 
     const nextRoyaltyRate = nextFranchiseRate as 0 | 10 | 15
-    const requestValues = resolveRequestValues(nextRoyaltyRate)
     const cacheKey = buildScenarioCacheKey(scenario, nextRoyaltyRate, includeDepreciation, locationType, effectiveCompetitor)
     const cached = scenarioCacheRef.current.get(cacheKey)
 
@@ -307,43 +358,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     async function recalculateScenario() {
       setIsRecalculating(true)
       try {
-        const requestBody = {
-          ...(simulationRequest ?? {}),
-          storeName: simulationRequest?.storeName ?? initialData.storeName,
-          location: simulationRequest?.location ?? initialData.location,
-          scenario,
-          royaltyRate: nextRoyaltyRate,
-          franchiseRate: nextFranchiseRate as 0 | 10 | 15,
-          locationType,
-          competitorCount: effectiveCompetitor,
-          runningCostTotal: requestValues.runningCostTotal,
-          initialInvestmentTotal: requestValues.requestInitialInvestmentTotal,
-          includeDepreciation,
-        }
-
-        const response = await fetch("/api/simulate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        })
-
-        const payload = await response.json().catch(() => null)
-        if (!response.ok || !payload?.data) {
-          throw new Error(getErrorMessage(payload, "シナリオ再計算に失敗しました。"))
-        }
-
+        const computed = await fetchScenarioResult(scenario, effectiveCompetitor, controller.signal)
         if (controller.signal.aborted) return
-
-        const computed = applyResolvedBreakdown(
-          payload.data as SimulationResult,
-          masterValues,
-          nextRoyaltyRate,
-          requestValues.requestInitialInvestmentTotal,
-          floorAreaTsubo,
-        )
-        scenarioCacheRef.current.set(cacheKey, { ...computed, locationType })
-        setScenarioData({ ...computed, locationType })
+        setScenarioData(computed)
         prevIncludeDepreciation.current = includeDepreciation
         prevCompetitor.current = effectiveCompetitor
       } catch (error) {
@@ -454,6 +471,29 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
     }
   }
 
+  // 試算レポート（PPTX）。財務シミュレーションは3シナリオ分を現在の条件で揃えて出力する。
+  async function handleExportPptx() {
+    setExportingPptx(true)
+    try {
+      const effectiveCompetitor = competitorOverride ?? (Number(simulationRequest?.competitorCount) || 0)
+      const order: ScenarioType[] = ["aggressive", "standard", "conservative"]
+      const [aggressive, standard, conservative] = await Promise.all(
+        order.map((s) => (s === scenario ? Promise.resolve(currentData) : fetchScenarioResult(s, effectiveCompetitor))),
+      )
+      await exportReportPptx({
+        current: currentData,
+        scenarios: { aggressive, standard, conservative },
+        request: simulationRequest,
+        masterValues,
+        selectedGymIds: gymApply ? gymSelectedIds : null,
+      })
+    } catch (error) {
+      alert(error instanceof Error ? `PPTXの生成に失敗しました。${error.message}` : "PPTXの生成に失敗しました。")
+    } finally {
+      setExportingPptx(false)
+    }
+  }
+
   // レポート出力設定をマスタから取得（失敗時は既定値のまま）。
   useEffect(() => {
     let active = true
@@ -528,9 +568,9 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={printing}>
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs" disabled={printing || exportingPptx}>
                 <DownloadIcon className="size-3.5" />
-                {printing ? "PDF準備中..." : "エクスポート"}
+                {printing ? "PDF準備中..." : exportingPptx ? "PPTX作成中..." : "エクスポート"}
                 <ChevronDownIcon className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
@@ -542,7 +582,7 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="text-xs"
-                onClick={() => { void exportResultToPptx(currentData, reportConfig).catch(() => alert("PPTXの生成に失敗しました。")) }}
+                onClick={() => { void handleExportPptx() }}
               >
                 PowerPoint（PPTX）
               </DropdownMenuItem>

@@ -107,7 +107,7 @@ export default function ReportExportMasterPage() {
     <>
       <PageHeader
         title="レポート出力設定"
-        description="PDF / PPTX エクスポートのフォーマット（セクション・項目・表紙・テーマ・用紙）を編集します。"
+        description="PDF エクスポートのフォーマット（セクション・項目・表紙・テーマ・用紙）を編集します。PPTX は試算レポート雛形の形式で出力されます。"
       />
       <div className="overflow-auto">
         <div className="mx-auto max-w-3xl px-8 py-7">
@@ -118,7 +118,7 @@ export default function ReportExportMasterPage() {
               {/* セクション ON/OFF・並べ替え */}
               <section className="flex flex-col gap-3">
                 <h3 className="text-sm font-semibold text-foreground">出力セクション（表示順）</h3>
-                <p className="text-xs text-muted-foreground">チェックで出力対象、矢印で順序を変更します（PDF/PPTX共通）。</p>
+                <p className="text-xs text-muted-foreground">チェックで出力対象、矢印で順序を変更します。</p>
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {config.sections.map((s, i) => (
                     <li key={s.id} className="flex items-center gap-3 px-3 py-2">
