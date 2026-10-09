@@ -282,6 +282,20 @@ const POPULATION_RADII = [
  */
 const POPULATION_RADII_VIEW_ORDER = [2, 1, 0] as const
 
+/**
+ * 商圏人口セルの入力欄クラス。
+ *
+ * 人口は最大で6桁（例: 5km圏の45〜49歳 126,405）になるため、6桁が隠れない幅を確保する。
+ * 内訳: 幅88px − 左右padding 16px（px-2）− 枠線2px = 文字領域70px。
+ * 入力欄の文字は Input 既定の md:text-sm(14px)／text-base(16px) で、tabular-nums の
+ * 1桁あたり約0.6em = 8.4px／9.6px なので、カンマ込み7文字でも収まる。
+ * 文字サイズは小さくしない方針（ユーザーfb 2026-09-30）なので、幅と余白だけで確保している。
+ *
+ * type="number" のスピナー矢印（Chrome/Safari）は右寄せした数字の右端に重なって桁を隠すため消す。
+ */
+const POPULATION_CELL_INPUT_CLASS =
+  "h-8 min-w-[88px] px-2 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+
 type FormDraft = {
   version: number
   savedAt: string
@@ -1427,7 +1441,7 @@ export function SimulationForm({
                         目視照合しやすくしている（ユーザーfb 2026-09-30）。
                         内部状態 popAges は [年齢階級][半径] のままなので、添字は ageIdx / radiusIdx で読み替える。 */}
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[760px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
+                      <table className="w-full min-w-[920px] border-separate border-spacing-x-2 border-spacing-y-1 text-xs">
                         <thead>
                           <tr>
                             <th className="text-left font-medium text-muted-foreground">商圏</th>
@@ -1468,7 +1482,7 @@ export function SimulationForm({
                                         if (applyPopulationPaste(text, ageIdx, radiusIdx)) e.preventDefault()
                                       }}
                                       className={cn(
-                                        "h-8 min-w-[72px] text-right tabular-nums",
+                                        POPULATION_CELL_INPUT_CLASS,
                                         edited && "border-primary/60",
                                         fieldErrors.population && "border-destructive focus-visible:ring-destructive",
                                       )}
