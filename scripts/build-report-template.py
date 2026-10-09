@@ -100,6 +100,27 @@ def table_by_header(slide, header_text):
     raise KeyError(header_text)
 
 
+def remove_orphan_axes(chart):
+    """どのグラフ（barChart等）からも参照されない軸を除去する。
+
+    replace_data で系列数を減らすと、python-pptx は系列の無くなったグラフ要素（2軸目の barChart 等）を
+    削除するが、その軸（catAx/valAx）は残す。参照元の無い軸があると PowerPoint はファイルを破損扱いにし、
+    修復時にグラフごと消えてしまう（人口情報スライドの年齢別グラフで発生）。
+    """
+    NS_C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+    plot = chart._chartSpace.find(f".//{{{NS_C}}}plotArea")
+    ax_tags = {f"{{{NS_C}}}{t}" for t in ("catAx", "valAx", "dateAx", "serAx")}
+    used = {
+        el.get("val")
+        for child in plot
+        if child.tag not in ax_tags
+        for el in child.findall(f"{{{NS_C}}}axId")
+    }
+    for child in list(plot):
+        if child.tag in ax_tags and child.find(f"{{{NS_C}}}axId").get("val") not in used:
+            plot.remove(child)
+
+
 def main():
     prs = Presentation(str(SRC))
     s = prs.slides
@@ -154,6 +175,7 @@ def main():
             cd.categories = cats
             cd.add_series("1km圏人口", tuple(0 for _ in cats))
         chart.replace_data(cd)
+        remove_orphan_axes(chart)
 
     # ── 5. 投資金額 / 運営コスト ──
     cost = s[4]
