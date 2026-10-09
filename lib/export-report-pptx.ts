@@ -602,7 +602,10 @@ function runningRows(input: ReportPptxInput) {
     current.businessPlan?.fixedCostItems ??
     [
       { id: "rent", label: "家賃", monthlyAmount: current.monthlyRent },
-      ...(request?.runningCostBreakdown ?? []),
+      // 内訳が無い（旧履歴など）場合もランニングコストが表から消えないよう合計1行で出す
+      ...(request?.runningCostBreakdown?.length
+        ? request.runningCostBreakdown
+        : [{ id: "runningCostTotal", label: "ランニングコスト", monthlyAmount: current.monthlyRunningCost }]),
       { id: "machineMaintenance", label: "マシンメンテナンス費", monthlyAmount: current.monthlyMachineMaintenance ?? 0 },
     ]
 

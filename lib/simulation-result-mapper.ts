@@ -144,6 +144,9 @@ export function mapHistoryItemToResult(item: HistoryApiResult): SimulationResult
   const createdAt = createdAtEpoch > 0 ? new Date(createdAtEpoch).toISOString() : new Date().toISOString()
 
   return {
+    // 保存時は SimulationResult をそのまま保存しているため、下で正規化しない項目
+    // （businessPlan・investmentBreakdown・monthlyMachineMaintenance 等。PPTX出力や内訳表示で使う）は生値を引き継ぐ
+    ...(item.result as Partial<SimulationResult>),
     id: item.resultId,
     storeName: item.storeName,
     location: item.input?.location,
