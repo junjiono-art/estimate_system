@@ -218,6 +218,7 @@ export type FormSubmitData = {
     from: number
     label: string
     cumulative: [number, number, number]
+    sex1km?: { male: number; female: number }
   }>
 }
 
@@ -374,6 +375,8 @@ export function SimulationForm({
   // 元Excelは jSTAT MAP 等の画面を目視転記した値なので、そちらに合わせたい場合の逃げ道を残す。
   const [popAges, setPopAges] = useState<string[][]>(() => POPULATION_AGE_BRACKETS.map(() => ["", "", ""]))
   const [popAutoAges, setPopAutoAges] = useState<number[][] | null>(null)
+  // 自動集計した1km圏の男女別人口（年齢階級ごとの [男, 女]）。PPTXの人口ピラミッドで使う。
+  const [popAutoSex1km, setPopAutoSex1km] = useState<Array<[number, number]> | null>(null)
   const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: number[] } | null>(null)
   const [popLoading, setPopLoading] = useState(false)
   const [popError, setPopError] = useState("")
@@ -475,6 +478,12 @@ export function SimulationForm({
         }),
       )
       setPopAutoAges(filled)
+      setPopAutoSex1km(
+        POPULATION_AGE_BRACKETS.map((bracket) => {
+          const row = pop.byRadius?.[0]?.byAgeSex?.find((x: { from: number }) => x.from === bracket.from)
+          return [Number(row?.male ?? 0), Number(row?.female ?? 0)] as [number, number]
+        }),
+      )
       setPopAges(filled.map((row) => row.map((v) => String(v))))
       setPopMeta({
         surveyYear: pop.surveyYear,
@@ -1113,11 +1122,20 @@ export function SimulationForm({
         km5Ring: cum5 - cum3,
       }
       const populationByAgeRadius: FormSubmitData["populationByAgeRadius"] = POPULATION_AGE_BRACKETS.map(
-        (bracket, rowIdx) => ({
-          from: bracket.from,
-          label: bracket.label,
-          cumulative: popAges[rowIdx].map((v) => Math.round(Number(String(v).replace(/,/g, "")) || 0)) as [number, number, number],
-        }),
+        (bracket, rowIdx) => {
+          const cumulative = popAges[rowIdx].map((v) => Math.round(Number(String(v).replace(/,/g, "")) || 0)) as [number, number, number]
+          // 1km圏の男女別: 自動集計の男女比で入力値（手で上書きされていてもその値）を按分する。
+          // 男女比が取れない階級（自動集計なし・0人）は付けない。
+          const [autoMale, autoFemale] = popAutoSex1km?.[rowIdx] ?? [0, 0]
+          const sex1km =
+            autoMale + autoFemale > 0
+              ? (() => {
+                  const male = Math.round((cumulative[0] * autoMale) / (autoMale + autoFemale))
+                  return { male, female: cumulative[0] - male }
+                })()
+              : undefined
+          return { from: bracket.from, label: bracket.label, cumulative, ...(sex1km ? { sex1km } : {}) }
+        },
       )
 
       // 投資費目の実効取得額（fixed=単価×数量, perTsubo=単価×坪数×数量）。ゴルフ設備費もここに含まれる。

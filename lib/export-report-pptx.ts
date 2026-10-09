@@ -216,8 +216,35 @@ async function readRels(zip: JSZipType, partPath: string): Promise<Array<{ id: s
   })
 }
 
-/** スライドに含まれるグラフを出現順に series で更新する */
-async function updateSlideCharts(JSZip: typeof JSZipType, zip: JSZipType, slideNo: number, charts: ChartSeries[][]) {
+/** 0 から max を含む「きりのよい」上限（1/2/5×10^n の刻み）を返す */
+function niceCeil(max: number): number {
+  if (!(max > 0)) return 100
+  const step = 10 ** Math.floor(Math.log10(max))
+  const nice = [1, 2, 2.5, 5, 10].map((k) => k * step).find((v) => v >= max) ?? 10 * step
+  return nice
+}
+
+/**
+ * 値軸（c:valAx）の最小・最大を ±limit に揃える（人口ピラミッドの左右を同じ目盛りにする）。
+ * 目盛りは人数なので、負側もマイナス記号なしで表示する。
+ */
+function setSymmetricValueAxes(xml: string, limit: number): string {
+  return xml.replace(/<c:valAx>[\s\S]*?<\/c:valAx>/g, (ax) =>
+    ax
+      .replace(/<c:max val="[^"]*"\/>/, `<c:max val="${limit}"/>`)
+      .replace(/<c:min val="[^"]*"\/>/, `<c:min val="${-limit}"/>`)
+      .replace(/<c:numFmt formatCode="[^"]*" sourceLinked="[01]"\/>/, '<c:numFmt formatCode="#,##0;#,##0" sourceLinked="0"/>'),
+  )
+}
+
+/** スライドに含まれるグラフを出現順に series で更新する。transforms で更新後のグラフXMLを個別に加工できる */
+async function updateSlideCharts(
+  JSZip: typeof JSZipType,
+  zip: JSZipType,
+  slideNo: number,
+  charts: ChartSeries[][],
+  transforms: Array<((xml: string) => string) | undefined> = [],
+) {
   const slidePath = `ppt/slides/slide${slideNo}.xml`
   const slideXml = (await zip.file(slidePath)?.async("string")) ?? ""
   const rels = await readRels(zip, slidePath)
@@ -228,7 +255,7 @@ async function updateSlideCharts(JSZip: typeof JSZipType, zip: JSZipType, slideN
     if (!series || !chartPath) continue
     const chartXml = (await zip.file(chartPath)?.async("string")) ?? ""
     const updated = updateChartXml(chartXml, series)
-    put(zip, chartPath, updated.xml)
+    put(zip, chartPath, transforms[k] ? transforms[k](updated.xml) : updated.xml)
     const embed = (await readRels(zip, chartPath)).find((r) => r.type.endsWith("/package"))
     if (embed) put(zip, embed.target, await buildChartWorkbook(JSZip, updated.cells))
   }
@@ -780,15 +807,27 @@ export async function exportReportPptx(input: ReportPptxInput): Promise<void> {
   }
 
   // グラフ
-  const ageLabels = pop.ages.map((a) => a.label)
-  await updateSlideCharts(JSZip, zip, 4, [
-    [{ name: "本物件", categories: ["1km", "3km", "5km"], values: pop.cumulative ? [...pop.cumulative] : [0, 0, 0] }],
-    [{
-      name: "1km圏人口",
-      categories: ageLabels.length ? ageLabels : ["20～24歳", "25～29歳", "30～34歳", "35～39歳", "40～44歳", "45～49歳", "50～54歳", "55～59歳"],
-      values: pop.ages.length ? pop.ages.map((a) => Number(a.cumulative[0]) || 0) : Array(8).fill(0),
-    }],
-  ])
+  // 年齢別グラフは正本どおり男女の人口ピラミッド（系列は雛形の出現順で 女性 → 男性）。
+  // 男女別が無い入力（手入力のみ・旧履歴）は男女計を片側に出し、系列名で男女計と分かるようにする。
+  const ageLabels = pop.ages.length ? pop.ages.map((a) => a.label) : ["20～24歳", "25～29歳", "30～34歳", "35～39歳", "40～44歳", "45～49歳", "50～54歳", "55～59歳"]
+  const hasSex = pop.ages.length > 0 && pop.ages.every((a) => a.sex1km)
+  const female = hasSex ? pop.ages.map((a) => a.sex1km!.female) : pop.ages.map((a) => Number(a.cumulative[0]) || 0)
+  const male = hasSex ? pop.ages.map((a) => a.sex1km!.male) : ageLabels.map(() => 0)
+  const pyramid: ChartSeries[] = [
+    { name: hasSex ? "女性" : "男女計", categories: ageLabels, values: female.length ? female : ageLabels.map(() => 0) },
+    { name: hasSex ? "男性" : "", categories: ageLabels, values: male },
+  ]
+  const axisLimit = niceCeil(Math.max(0, ...pyramid.flatMap((s) => s.values)))
+  await updateSlideCharts(
+    JSZip,
+    zip,
+    4,
+    [
+      [{ name: "本物件", categories: ["1km", "3km", "5km"], values: pop.cumulative ? [...pop.cumulative] : [0, 0, 0] }],
+      pyramid,
+    ],
+    [undefined, (xml) => setSymmetricValueAxes(xml, axisLimit)],
+  )
   for (const { slide } of FINANCE_SLIDES) {
     await updateSlideCharts(JSZip, zip, slide, [financeCharts[slide]])
   }

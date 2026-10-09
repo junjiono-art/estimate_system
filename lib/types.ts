@@ -154,6 +154,11 @@ export interface SimulationRequestInput {
     from: number
     label: string
     cumulative: [number, number, number]
+    /**
+     * 1km圏の男女別内訳（PPTXの人口ピラミッド用）。自動集計値の男女比で cumulative[0] を按分した値。
+     * 手入力・貼り付けのみで自動集計していない場合や、旧履歴には無い。
+     */
+    sex1km?: { male: number; female: number }
   }>
   /** 投資コスト内訳（フィールドID → 金額） */
   investmentBreakdown?: Record<string, number>

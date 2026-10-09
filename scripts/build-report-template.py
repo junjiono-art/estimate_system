@@ -166,14 +166,13 @@ def main():
         if not sh.has_chart:
             continue
         chart = sh.chart
+        if chart.chart_type is None or "COLUMN" not in str(chart.chart_type):
+            # 年齢別グラフは男女の人口ピラミッド（女性・男性を別軸の barChart 2つで左右に描く）。
+            # 系列構成は正本のまま残し、値は実行時（export-report-pptx.ts）に上書きする。
+            continue
         cd = CategoryChartData(number_format="#,##0")
-        if chart.chart_type is not None and "COLUMN" in str(chart.chart_type):
-            cd.categories = ["1km", "3km", "5km"]
-            cd.add_series("本物件", (0, 0, 0))
-        else:
-            cats = list(chart.plots[0].categories)
-            cd.categories = cats
-            cd.add_series("1km圏人口", tuple(0 for _ in cats))
+        cd.categories = ["1km", "3km", "5km"]
+        cd.add_series("本物件", (0, 0, 0))
         chart.replace_data(cd)
         remove_orphan_axes(chart)
 
