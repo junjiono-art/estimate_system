@@ -28,6 +28,12 @@ export type HistoryApiResult = {
       km5Ring: number
     }
     includeDepreciation?: boolean
+    // 以下はPPTX出力・結果画面の内訳表示用（2026-10-09 以降の履歴にのみ保存される）
+    populationByAgeRadius?: SimulationRequestInput["populationByAgeRadius"]
+    runningCostBreakdown?: SimulationRequestInput["runningCostBreakdown"]
+    machineMaintenanceCost?: number
+    depreciationYearsByField?: Record<string, number>
+    securityIntroBreakdown?: SimulationRequestInput["securityIntroBreakdown"]
   }
   result?: {
     totalInitialInvestment?: number
@@ -244,6 +250,11 @@ export function mapHistoryItemToSimulationRequest(
     initialInvestmentByRoyaltyRate: input.initialInvestmentByRoyaltyRate,
     investmentBreakdown: input.investmentBreakdown ?? fallback.investmentBreakdown,
     populationByRadius: input.populationByRadius,
+    populationByAgeRadius: input.populationByAgeRadius,
+    runningCostBreakdown: input.runningCostBreakdown,
+    machineMaintenanceCost: input.machineMaintenanceCost,
+    depreciationYearsByField: input.depreciationYearsByField,
+    securityIntroBreakdown: input.securityIntroBreakdown ?? fallback.securityIntroBreakdown,
     includeDepreciation: input.includeDepreciation ?? true,
   }
 }

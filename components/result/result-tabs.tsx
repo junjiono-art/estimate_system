@@ -443,6 +443,11 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           investmentBreakdown: simulationRequest?.investmentBreakdown ?? currentData.investmentBreakdown,
           securityIntroBreakdown: simulationRequest?.securityIntroBreakdown ?? currentData.securityIntroBreakdown,
           populationByRadius: simulationRequest?.populationByRadius,
+          // 履歴から開いた結果画面・PPTXで年齢別人口とランニングコスト内訳を再現するため保存する
+          populationByAgeRadius: simulationRequest?.populationByAgeRadius,
+          runningCostBreakdown: simulationRequest?.runningCostBreakdown,
+          machineMaintenanceCost: simulationRequest?.machineMaintenanceCost,
+          depreciationYearsByField: simulationRequest?.depreciationYearsByField,
           includeDepreciation,
         },
         result: {
