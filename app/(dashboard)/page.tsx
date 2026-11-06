@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ArrowLeftIcon, ArrowRightIcon, PencilIcon, SparklesIcon, FlaskConicalIcon } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { SimulationForm, SIMULATION_TABS } from "@/components/simulation-form"
@@ -11,6 +11,11 @@ import { Badge } from "@/components/ui/badge"
 import type { SimulationRequestInput, SimulationResult } from "@/lib/types"
 import { getErrorMessage } from "@/lib/error-utils"
 import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
+import {
+  type HistoryApiResult,
+  mapHistoryItemToResult,
+  mapHistoryItemToSimulationRequest,
+} from "@/lib/simulation-result-mapper"
 
 function buildPreviewResult(submittedData: FormSubmitData | null): SimulationResult {
   const now = new Date().toISOString()
@@ -91,6 +96,14 @@ function buildPreviewResult(submittedData: FormSubmitData | null): SimulationRes
 
 type RegressionStatus = "idle" | "running" | "pass" | "fail"
 
+// 試算履歴からの初期値読込の状態。checking 中はフォームを出さない（初期値なしでマウントされるのを防ぐ）。
+type HistorySeedState =
+  | { status: "checking" }
+  | { status: "none" }
+  | { status: "loading" }
+  | { status: "loaded"; request: SimulationRequestInput }
+  | { status: "error"; message: string }
+
 type ScenarioCheckSummary = {
   scenario: "conservative" | "standard" | "aggressive"
   pass: boolean
@@ -104,6 +117,39 @@ export default function NewSimulationPage() {
   const [simulationRequest, setSimulationRequest] = useState<SimulationRequestInput | null>(null)
   // 入力フォームの表示タブ。結果画面の「編集」ボタンから特定タブへ直接戻すため、ここで保持する（ユーザーfb③）。
   const [formTab, setFormTab] = useState<SimulationTabId>("store")
+
+  // 試算履歴の「条件を変えて試算する」（/?from=<resultId>）から来た場合、その履歴の条件をフォームの初期値にする。
+  const [historySeed, setHistorySeed] = useState<HistorySeedState>({ status: "checking" })
+  useEffect(() => {
+    const fromId = new URLSearchParams(window.location.search).get("from")?.trim()
+    if (!fromId) {
+      setHistorySeed({ status: "none" })
+      return
+    }
+    let active = true
+    setHistorySeed({ status: "loading" })
+    void (async () => {
+      try {
+        const response = await fetch(`/api/results/${encodeURIComponent(fromId)}`, { cache: "no-store" })
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.item) {
+          throw new Error(getErrorMessage(payload, "試算履歴の取得に失敗しました。"))
+        }
+        const item = payload.item as HistoryApiResult
+        const mapped = mapHistoryItemToResult(item)
+        if (!mapped) throw new Error("試算履歴の形式が不正です。")
+        const request = mapHistoryItemToSimulationRequest(item, mapped)
+        if (active) setHistorySeed({ status: "loaded", request })
+      } catch (error) {
+        if (!active) return
+        const reason = error instanceof Error ? error.message : "試算履歴の取得に失敗しました。"
+        setHistorySeed({ status: "error", message: `試算履歴の条件を読み込めませんでした（${reason}）。空のフォームで開始します。` })
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [])
 
   /** 結果画面から入力フォームの指定タブへ戻る */
   function editInputTab(tab: SimulationTabId) {
@@ -177,6 +223,7 @@ export default function NewSimulationPage() {
     investmentBreakdown: data.investmentCosts.byField,
     depreciationYearsByField: data.investmentCosts.depreciationYearsByField,
     securityIntroBreakdown: data.investmentCosts.securityIntroBreakdown,
+      formState: data.formState,
     }
   }
 
@@ -294,12 +341,30 @@ export default function NewSimulationPage() {
                   : "各タブを順番に入力し、最後のタブで「試算を実行する」ボタンを押してください。エリアを選択すると坪単価が自動入力されます。"}
               </p>
             </div>
-            <SimulationForm
-              onSubmitWithData={handleSubmitWithData}
-              submitLabel={hasSimulated ? "この条件で再試算する" : undefined}
-              activeTab={formTab}
-              onActiveTabChange={setFormTab}
-            />
+            {historySeed.status === "checking" ? null : historySeed.status === "loading" ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">試算履歴の条件を読み込み中です...</p>
+            ) : (
+              <>
+                {historySeed.status === "loaded" && (
+                  <p className="mb-4 rounded border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    試算履歴「{historySeed.request.storeName}」の条件を読み込みました。変更して試算を実行してください。
+                  </p>
+                )}
+                {historySeed.status === "error" && (
+                  <p className="mb-4 rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                    {historySeed.message}
+                  </p>
+                )}
+                {/* 初期値は初回レンダリングで state に入るため、履歴の読込完了後にマウントする */}
+                <SimulationForm
+                  onSubmitWithData={handleSubmitWithData}
+                  submitLabel={hasSimulated ? "この条件で再試算する" : undefined}
+                  activeTab={formTab}
+                  onActiveTabChange={setFormTab}
+                  initialRequest={historySeed.status === "loaded" ? historySeed.request : undefined}
+                />
+              </>
+            )}
             {regressionScenarioSummary.length > 0 && (
               <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
                 <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">回帰検証詳細</p>

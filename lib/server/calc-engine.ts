@@ -295,20 +295,69 @@ function buildMonthlyDerivedContext(
   }
 }
 
+export type InitialJoinersResolution = {
+  /** 会員数シミュレーションに実際に使う初月入会人数 */
+  value: number
+  /** コード側（Excel G38 移植）で算出した値。式セットとの比較用 */
+  codeValue: number
+  /** value の出どころ */
+  source: "formula" | "code"
+  /** 式セットの結果を採用しなかった・コードと食い違う場合の警告 */
+  warning?: string
+}
+
+// 式セットとコードの差をどこまで「一致」とみなすか（相対誤差）。
+const INITIAL_JOINERS_DIVERGENCE_TOLERANCE = 0.01
+
 // 初月見込み客（G38）。formulaSet に pre 層の override があれば優先する。
-function resolveInitialJoinersWithFormula(
+//
+// 防御: 式セット（DB）の結果が0以下なのにコード側が正の値なら、式セットが壊れているとみなしコード値を使う。
+// 初月入会人数が0になると、店頭看板・初月Web/SNSの獲得がすべて消え、会員数推移が大きく下振れする
+// （春日井の事例: 正 852人→誤 465人。3シナリオの1期が同値になるのが特徴。doc/不具合一覧.md #41）。
+function resolveInitialJoinersDetailed(
   input: SimulateInput,
   calcParams: CalcParameterConfig,
   engine?: FormulaEvaluationEngine,
-): number {
-  const fallback = resolveInitialJoiners(input, calcParams)
-  if (!engine) return fallback
+): InitialJoinersResolution {
+  const codeValue = resolveInitialJoiners(input, calcParams)
+  if (!engine) return { value: codeValue, codeValue, source: "code" }
+
+  let formulaValue: number | undefined
   try {
     const preContext = buildInitialPhaseContext(input, calcParams)
-    const pre = engine.evaluatePhase("pre", preContext, { initialJoiners: fallback, demandMultiplier: 1 })
-    return Number.isFinite(pre.initialJoiners) ? pre.initialJoiners : fallback
+    const pre = engine.evaluatePhase("pre", preContext, { initialJoiners: codeValue, demandMultiplier: 1 })
+    formulaValue = pre.initialJoiners
   } catch {
-    return fallback
+    formulaValue = undefined
+  }
+
+  if (formulaValue === undefined || !Number.isFinite(formulaValue)) {
+    return { value: codeValue, codeValue, source: "code" }
+  }
+
+  if (formulaValue <= 0 && codeValue > 0) {
+    const warning =
+      `式セットの初月入会人数が ${formulaValue} になったため、コード側の計算値 ${codeValue.toFixed(1)} 人を使用しました。` +
+      "マスタ管理の式セット（initialJoiners）または計算パラメータ（商圏獲得率・競合影響率）を確認してください。"
+    console.warn(`[calc-engine] ${warning}`)
+    return { value: codeValue, codeValue, source: "code", warning }
+  }
+
+  const diverged =
+    codeValue > 0 && Math.abs(formulaValue - codeValue) / codeValue > INITIAL_JOINERS_DIVERGENCE_TOLERANCE
+  const warning = diverged
+    ? `式セットの初月入会人数 ${formulaValue.toFixed(1)} 人がコード側の計算値 ${codeValue.toFixed(1)} 人と異なります（式セットの値を使用）。`
+    : undefined
+  if (warning) console.warn(`[calc-engine] ${warning}`)
+  return { value: formulaValue, codeValue, source: "formula", warning }
+}
+
+function createFormulaEngine(formulaSet?: FormulaSetRecordLike): FormulaEvaluationEngine | undefined {
+  if (!formulaSet) return undefined
+  try {
+    return new FormulaEvaluationEngine(formulaSet)
+  } catch {
+    return undefined
   }
 }
 
@@ -330,16 +379,9 @@ export function buildRegressionRows(
   const floorArea = Number(resolvedInput.floorAreaTsubo) || BASE_FLOOR_AREA_TSUBO
   const capacity = computeCapacity(floorArea, locationType, calcParams.capacity)
 
-  let engine: FormulaEvaluationEngine | undefined
-  if (formulaSet) {
-    try {
-      engine = new FormulaEvaluationEngine(formulaSet)
-    } catch {
-      engine = undefined
-    }
-  }
+  const engine = createFormulaEngine(formulaSet)
 
-  const initialJoiners = resolveInitialJoinersWithFormula(resolvedInput, calcParams, engine)
+  const initialJoiners = resolveInitialJoinersDetailed(resolvedInput, calcParams, engine).value
 
   const growth = simulateMemberGrowth({
     initialJoiners,
@@ -616,6 +658,13 @@ export function calculateSimulation(
   const monthlyRunningCost = resolveMonthlyRunning(input) + monthlyMachineMaintenance
 
   const baseRows = buildRegressionRows(scenario, { ...input, franchiseRate }, calcParams, options?.formulaSet)
+  // 初月入会人数（G38）と、その採用経路の警告。会員数推移ずれの切り分け用に結果へ載せる。
+  // buildRegressionRows 内と同じ入力・式セットで再評価するので値は一致する。
+  const initialJoinersResolution = resolveInitialJoinersDetailed(
+    { ...input, franchiseRate },
+    calcParams,
+    createFormulaEngine(options?.formulaSet),
+  )
   const monthlyDepreciation = includeDepreciation
     ? Math.round(computeMonthlyDepreciation(input.investmentBreakdown, calcParams.depreciation, input.depreciationYearsByField))
     : 0
@@ -713,6 +762,8 @@ export function calculateSimulation(
     simpleBreakevenMembers,
     breakevenVariants,
     formulaSetVersion: options?.formulaSet?.setVersion,
+    initialJoiners: Math.round(initialJoinersResolution.value * 10) / 10,
+    ...(initialJoinersResolution.warning ? { calcWarnings: [initialJoinersResolution.warning] } : {}),
     averagePrice,
     variableCostPerMember: Math.round(variableCostPerMember),
     contributionMarginPerMember: Math.round(contributionMargin),

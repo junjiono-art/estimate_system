@@ -449,6 +449,8 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
           machineMaintenanceCost: simulationRequest?.machineMaintenanceCost,
           depreciationYearsByField: simulationRequest?.depreciationYearsByField,
           includeDepreciation,
+          // 「条件を変えて試算する」でフォームの入力状態（単価・数量・手入力フラグ）を完全復元するため保存する
+          formState: simulationRequest?.formState,
         },
         result: {
           ...currentData,
@@ -712,6 +714,12 @@ export function ResultTabs({ data: initialData, demographicsData, demographicsEr
       {scenarioError && (
         <p className="text-xs text-destructive">{scenarioError}</p>
       )}
+      {/* 試算エンジンの警告（例: 式セットの初月入会人数が0でコード計算に切り替えた）。会員数推移ずれの検知用 */}
+      {currentData.calcWarnings?.map((warning) => (
+        <p key={warning} className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {warning}
+        </p>
+      ))}
 
       {/* KPIカード */}
       <KpiCards data={currentData} />

@@ -23,19 +23,32 @@ export default function ResultPage() {
   useEffect(() => {
     let active = true
 
-    async function loadLatestResult() {
+    // ?id=<resultId> があればその履歴、無ければ最新1件を表示する。
+    // 以前は常に最新1件を表示していたため、履歴一覧のどの行の「詳細」を押しても同じ結果が開いていた。
+    async function loadResult() {
       try {
         setIsLoading(true)
         setLoadError("")
 
-        const response = await fetch("/api/history?limit=1", { cache: "no-store" })
-        const payload = await response.json().catch(() => null)
-        if (!response.ok) {
-          throw new Error(getErrorMessage(payload, "試算結果の取得に失敗しました。"))
+        const resultId = new URLSearchParams(window.location.search).get("id")?.trim()
+        let latestRaw: HistoryApiResult | null
+        if (resultId) {
+          const response = await fetch(`/api/results/${encodeURIComponent(resultId)}`, { cache: "no-store" })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok) {
+            throw new Error(getErrorMessage(payload, "試算結果の取得に失敗しました。"))
+          }
+          latestRaw = (payload?.item ?? null) as HistoryApiResult | null
+        } else {
+          const response = await fetch("/api/history?limit=1", { cache: "no-store" })
+          const payload = await response.json().catch(() => null)
+          if (!response.ok) {
+            throw new Error(getErrorMessage(payload, "試算結果の取得に失敗しました。"))
+          }
+          const items = Array.isArray(payload?.items) ? payload.items : []
+          latestRaw = (items[0] ?? null) as HistoryApiResult | null
         }
 
-        const items = Array.isArray(payload?.items) ? payload.items : []
-        const latestRaw = (items[0] ?? null) as HistoryApiResult | null
         const latest = latestRaw ? mapHistoryItemToResult(latestRaw) : null
         if (!active) return
         setData(latest)
@@ -51,7 +64,7 @@ export default function ResultPage() {
       }
     }
 
-    void loadLatestResult()
+    void loadResult()
     return () => {
       active = false
     }
@@ -63,10 +76,10 @@ export default function ResultPage() {
         title="試算結果"
         description="入力情報をもとにした収益シミュレーション結果です"
         actions={
-          // この画面は履歴の最新1件を表示するだけでフォームstateを持たないため、
-          // 条件を変えて試算し直す場合は新規試算へ誘導する（ユーザーfb③）。
+          // この画面はフォームstateを持たないため、新規試算画面へ表示中の履歴IDを渡し、
+          // その条件をフォームの初期値として読み込ませる（/?from=<resultId>）。
           <Button asChild variant="outline" size="sm" className="gap-1.5 text-xs">
-            <Link href="/">
+            <Link href={data?.id ? `/?from=${encodeURIComponent(data.id)}` : "/"}>
               <PencilIcon className="size-3.5" />
               条件を変えて試算する
             </Link>

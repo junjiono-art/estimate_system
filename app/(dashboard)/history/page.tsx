@@ -256,7 +256,8 @@ export default function HistoryPage() {
                       <TrashIcon className="size-3.5" />
                     </button>
                     <Button asChild size="sm" variant="outline" className="h-7 gap-1 text-xs">
-                      <Link href="/result">
+                      {/* 選択した履歴を開く（以前は /result 固定で、どの行でも最新1件が開いていた） */}
+                      <Link href={`/result?id=${encodeURIComponent(sim.id)}`}>
                         詳細
                         <ArrowRightIcon className="size-3" />
                       </Link>

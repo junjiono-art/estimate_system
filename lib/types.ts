@@ -166,7 +166,15 @@ export interface SimulationRequestInput {
   depreciationYearsByField?: Record<string, number>
   /** ALSOK・USEN導入費の内訳（結果画面の初期投資明細で表示。計算には使用しない） */
   securityIntroBreakdown?: SecurityIntroBreakdown
+  /**
+   * 送信時点の試算フォーム入力状態（components/simulation-form.tsx の SimulationFormState）。
+   * 計算には使用しない。試算履歴に保存し、「条件を変えて試算する」でフォームを完全復元するために使う。
+   */
+  formState?: SimulationFormStateSnapshot
 }
+
+/** 試算フォーム入力状態のスナップショット（中身はフォーム側の型。lib からは版番号だけ参照する） */
+export type SimulationFormStateSnapshot = { version: number; savedAt: string; [key: string]: unknown }
 
 export interface AreaDemographics {
   municipality: {
@@ -270,6 +278,10 @@ export interface BusinessPlanData {
 export interface SimulationResult {
   id: string
   formulaSetVersion?: string
+  /** 初月入会人数（元Excel 入力欄 G38、小数1桁）。会員数推移の起点。旧履歴には無い */
+  initialJoiners?: number
+  /** 試算時の警告（式セットの結果を採用しなかった等）。結果画面に表示する */
+  calcWarnings?: string[]
   storeName: string
   /** 住所（市区町村の人口統計表示に使用） */
   location?: string

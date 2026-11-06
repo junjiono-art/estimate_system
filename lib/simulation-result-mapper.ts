@@ -34,6 +34,8 @@ export type HistoryApiResult = {
     machineMaintenanceCost?: number
     depreciationYearsByField?: Record<string, number>
     securityIntroBreakdown?: SimulationRequestInput["securityIntroBreakdown"]
+    // フォーム入力状態（2026-11 以降の履歴にのみ保存される。「条件を変えて試算する」の完全復元用）
+    formState?: SimulationRequestInput["formState"]
   }
   result?: {
     totalInitialInvestment?: number
@@ -259,5 +261,6 @@ export function mapHistoryItemToSimulationRequest(
     depreciationYearsByField: input.depreciationYearsByField,
     securityIntroBreakdown: input.securityIntroBreakdown ?? fallback.securityIntroBreakdown,
     includeDepreciation: input.includeDepreciation ?? true,
+    formState: input.formState,
   }
 }

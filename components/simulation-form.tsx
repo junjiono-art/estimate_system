@@ -70,6 +70,7 @@ import type {
   LocationType,
   MasterValue,
   SecurityIntroBreakdown,
+  SimulationRequestInput,
 } from "@/lib/types"
 import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import { toast } from "sonner"
@@ -157,6 +158,12 @@ interface SimulationFormProps {
   activeTab?: SimulationTabId
   /** タブ切替時の通知（制御時は呼び出し側で activeTab を更新すること） */
   onActiveTabChange?: (tab: SimulationTabId) => void
+  /**
+   * 試算履歴から「条件を変えて試算する」で開いたときの初期値（履歴に保存された試算リクエスト）。
+   * formState があれば入力状態をそのまま復元し、無い旧履歴は保存済みの金額から逆算して復元する。
+   * 初回レンダリングの state 初期値に使うため、呼び出し側は取得完了後にマウントすること。
+   */
+  initialRequest?: SimulationRequestInput
 }
 
 export type FormSubmitData = {
@@ -220,6 +227,8 @@ export type FormSubmitData = {
     cumulative: [number, number, number]
     sex1km?: { male: number; female: number }
   }>
+  /** 送信時点のフォーム入力状態。試算履歴に保存し「条件を変えて試算する」で完全復元するために使う */
+  formState?: SimulationFormState
 }
 
 // タブ構成: 店舗基本情報 → 投資コスト → ランニングコスト（ユーザーfb②）。
@@ -297,6 +306,9 @@ const POPULATION_RADII_VIEW_ORDER = [2, 1, 0] as const
 const POPULATION_CELL_INPUT_CLASS =
   "h-8 min-w-[88px] px-2 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 
+/** フォームの入力状態（下書き・試算履歴からの復元で共用） */
+export type SimulationFormState = FormDraft
+
 type FormDraft = {
   version: number
   savedAt: string
@@ -336,13 +348,53 @@ function hasQuantityInput(basis?: string): boolean {
   return basis === "fixed" || basis === "perTsubo" || basis === "perOccupancy"
 }
 
+/** 試算履歴の年齢別人口（累計）を商圏人口表の入力値へ戻す。無ければ空欄（自動取得し直してもらう） */
+function popAgesFromRequest(req?: SimulationRequestInput): string[][] {
+  const ages = req?.populationByAgeRadius
+  return POPULATION_AGE_BRACKETS.map((bracket) => {
+    const row = ages?.find((a) => a.from === bracket.from)
+    return row ? row.cumulative.map((v) => String(Math.round(Number(v) || 0))) : ["", "", ""]
+  })
+}
+
+/**
+ * 旧履歴（formState なし）の費目復元用。保存済みの実効額 saved を「単価 × 係数 × 数量」に分解し直す。
+ * まず単価を保ったまま数量で割り切れるか試し（例: ゴルフ打席の台数）、無理なら数量を保って単価を逆算する。
+ * 既定値どおり（saved = 既定単価×係数×既定数量）なら null を返す（手入力扱いにしない）。
+ */
+function solveUnitAndQuantity(
+  saved: number,
+  unit: number,
+  quantity: number,
+  factor: number,
+): { unit: number; quantity: number } | null {
+  if (Math.round(unit * factor * quantity) === saved) return null
+  if (factor <= 0) return null
+  if (unit > 0) {
+    const q = saved / (unit * factor)
+    if (Number.isInteger(q)) return { unit, quantity: q }
+  }
+  if (quantity > 0) return { unit: Math.round(saved / (factor * quantity)), quantity }
+  return { unit: Math.round(saved / factor), quantity: 1 }
+}
+
 export function SimulationForm({
   onSubmit,
   onSubmitWithData,
   submitLabel,
   activeTab: controlledActiveTab,
   onActiveTabChange,
+  initialRequest,
 }: SimulationFormProps) {
+  // 履歴から開いた場合の初期値。formState は下書きと同じ形式なので版が一致するときだけ使う。
+  const seedState =
+    initialRequest?.formState && (initialRequest.formState as FormDraft).version === DRAFT_VERSION
+      ? (initialRequest.formState as FormDraft)
+      : undefined
+  const seedRoyalty: "0" | "10" | "15" = (() => {
+    const r = String(seedState?.royaltyRate ?? initialRequest?.franchiseRate ?? initialRequest?.royaltyRate ?? "0")
+    return r === "10" ? "10" : r === "15" ? "15" : "0"
+  })()
   // activeTab は非制御が既定。呼び出し側が activeTab を渡した場合だけ制御コンポーネントになる。
   const [uncontrolledActiveTab, setUncontrolledActiveTab] = useState<TabId>("store")
   const activeTab = controlledActiveTab ?? uncontrolledActiveTab
@@ -360,23 +412,46 @@ export function SimulationForm({
   const [masterValues, setMasterValues] = useState<MasterValue[]>([])
 
   // 計算パラメータ
-  const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">("0")
-  const [competitorCount,  setCompetitorCount]  = useState("")
-  const [locationType,     setLocationType]     = useState<LocationType>("suburban")
+  // 履歴からの初期値（initialRequest）があれば、それを初期 state にする。
+  // マスタ読込（loadMasterDefaults）は初回レンダリング時点の値を参照するため、後から set するのでは間に合わない。
+  const [royaltyRate,      setRoyaltyRate]      = useState<"0" | "10" | "15">(seedRoyalty)
+  const [competitorCount,  setCompetitorCount]  = useState(
+    seedState?.competitorCount ??
+      (initialRequest?.competitorCount !== undefined ? String(initialRequest.competitorCount) : ""),
+  )
+  const [locationType,     setLocationType]     = useState<LocationType>(
+    seedState?.locationType ?? initialRequest?.locationType ?? "suburban",
+  )
 
   // 店舗基本情報
-  const [storeName,      setStoreName]      = useState("")
-  const [address,        setAddress]        = useState("")
-  const [floorArea,      setFloorArea]      = useState("")
-  const [rentPerTsubo,   setRentPerTsubo]   = useState("")
+  const [storeName,      setStoreName]      = useState(seedState?.storeName ?? initialRequest?.storeName ?? "")
+  const [address,        setAddress]        = useState(seedState?.address ?? initialRequest?.location ?? "")
+  const [floorArea,      setFloorArea]      = useState(
+    seedState?.floorArea ?? (initialRequest?.floorAreaTsubo !== undefined ? String(initialRequest.floorAreaTsubo) : ""),
+  )
+  const [rentPerTsubo,   setRentPerTsubo]   = useState(
+    seedState?.rentPerTsubo ?? (initialRequest?.rentPerTsubo !== undefined ? String(initialRequest.rentPerTsubo) : ""),
+  )
 
   // 商圏人口（元Excel 入力欄 E47:G54 = 5歳階級 × 半径1km/3km/5km の24セル）。
   // 各列は内側の圏を含む「累計」。小地域データからの自動集計値を初期値に入れ、手で上書きできる。
   // 元Excelは jSTAT MAP 等の画面を目視転記した値なので、そちらに合わせたい場合の逃げ道を残す。
-  const [popAges, setPopAges] = useState<string[][]>(() => POPULATION_AGE_BRACKETS.map(() => ["", "", ""]))
+  const [popAges, setPopAges] = useState<string[][]>(() =>
+    seedState?.popAges?.length === POPULATION_AGE_BRACKETS.length
+      ? seedState.popAges
+      : popAgesFromRequest(initialRequest),
+  )
   const [popAutoAges, setPopAutoAges] = useState<number[][] | null>(null)
   // 自動集計した1km圏の男女別人口（年齢階級ごとの [男, 女]）。PPTXの人口ピラミッドで使う。
-  const [popAutoSex1km, setPopAutoSex1km] = useState<Array<[number, number]> | null>(null)
+  // 履歴から開いた場合は保存済みの男女別内訳から比率を引き継ぐ（無い階級は [0,0] → 男女別なし）。
+  const [popAutoSex1km, setPopAutoSex1km] = useState<Array<[number, number]> | null>(() => {
+    const ages = initialRequest?.populationByAgeRadius
+    if (!ages?.some((a) => a.sex1km)) return null
+    return POPULATION_AGE_BRACKETS.map((bracket) => {
+      const sex = ages.find((a) => a.from === bracket.from)?.sex1km
+      return sex ? [sex.male, sex.female] : [0, 0]
+    })
+  })
   const [popMeta, setPopMeta] = useState<{ surveyYear: number; prefNames: string[]; areaCount: number[] } | null>(null)
   const [popLoading, setPopLoading] = useState(false)
   const [popError, setPopError] = useState("")
@@ -535,7 +610,12 @@ export function SimulationForm({
   const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null)
 
   // 起動時に下書きを読み込む（あれば復元を提示）。
+  // 履歴から開いた場合は履歴の条件が正なので、下書きの復元は提示しない。
   useEffect(() => {
+    if (initialRequest) {
+      setDraftChecked(true)
+      return
+    }
     try {
       const raw = localStorage.getItem(DRAFT_STORAGE_KEY)
       if (raw) {
@@ -563,6 +643,13 @@ export function SimulationForm({
   function restoreDraft() {
     const d = draftToRestore
     if (!d) return
+    applyFormState(d)
+    setAutoSavedAt(d.savedAt)
+    setDraftToRestore(null)
+  }
+
+  // 入力状態（下書き／試算履歴の formState）をフォームへ反映する。
+  function applyFormState(d: FormDraft) {
     setStoreName(d.storeName ?? "")
     setAddress(d.address ?? "")
     setPopAges(
@@ -587,13 +674,38 @@ export function SimulationForm({
     setIsFitnessMachineCostManual(Boolean(d.isFitnessMachineCostManual))
     setSecurityCameraUnitPrice(d.securityCameraUnitPrice ?? String(SECURITY_CAMERA_MONTHLY_UNIT_PRICE))
     setSecurityMonitorUnitPrice(d.securityMonitorUnitPrice ?? String(SECURITY_MONITOR_MONTHLY_UNIT_PRICE))
-    setAutoSavedAt(d.savedAt)
-    setDraftToRestore(null)
   }
 
   function discardDraft() {
     clearDraft()
     setDraftToRestore(null)
+  }
+
+  // 現在の入力状態のスナップショット（下書きの自動保存・試算履歴への保存で共用）。
+  function buildFormState(): FormDraft {
+    return {
+      version: DRAFT_VERSION,
+      savedAt: new Date().toISOString(),
+      storeName,
+      address,
+      popAges,
+      floorArea,
+      rentPerTsubo,
+      royaltyRate,
+      competitorCount,
+      locationType,
+      runningValues,
+      runningQuantities,
+      investmentValues,
+      investmentQuantities,
+      editedRunningFields: [...editedRunningFields],
+      editedInvestmentFields: [...editedInvestmentFields],
+      machineMaintenanceCost,
+      isMachineMaintenanceManual,
+      isFitnessMachineCostManual,
+      securityCameraUnitPrice,
+      securityMonitorUnitPrice,
+    }
   }
 
   // 入力変更をデバウンスして localStorage に自動保存（復元待ち・空入力のときは保存しない）。
@@ -603,29 +715,7 @@ export function SimulationForm({
     if (!hasContent) return
     const timer = setTimeout(() => {
       try {
-        const draft: FormDraft = {
-          version: DRAFT_VERSION,
-          savedAt: new Date().toISOString(),
-          storeName,
-          address,
-          popAges,
-          floorArea,
-          rentPerTsubo,
-          royaltyRate,
-          competitorCount,
-          locationType,
-          runningValues,
-          runningQuantities,
-          investmentValues,
-          investmentQuantities,
-          editedRunningFields: [...editedRunningFields],
-          editedInvestmentFields: [...editedInvestmentFields],
-          machineMaintenanceCost,
-          isMachineMaintenanceManual,
-          isFitnessMachineCostManual,
-          securityCameraUnitPrice,
-          securityMonitorUnitPrice,
-        }
+        const draft = buildFormState()
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
         setAutoSavedAt(draft.savedAt)
       } catch {
@@ -789,18 +879,149 @@ export function SimulationForm({
         const message = getErrorMessage(payload, "マスタ値の取得に失敗しました。")
         setMasterLoadError(message)
         toast.error(message)
+        // マスタが取れなくても、履歴の入力状態（formState）があれば復元する
+        applyHistorySeed([])
         return
       }
 
       const values = (Array.isArray(payload?.values) ? payload.values : []) as MasterValue[]
       setMasterValues(values)
       applyMasterDefaults(values, royaltyRate)
+      applyHistorySeed(values)
     } catch (error) {
       const message = error instanceof Error ? error.message : "マスタ値の取得に失敗しました。"
       setMasterLoadError(message)
       toast.error(message)
+      applyHistorySeed([])
     } finally {
       setIsMasterLoading(false)
+    }
+  }
+
+  // ── 試算履歴からの復元（「条件を変えて試算する」）──
+  // マスタ既定値を適用した直後に1回だけ呼ぶ。applyMasterDefaults が費目を既定値へリセットするため、その後に上書きする。
+  // 店舗情報・試算条件・商圏人口は初期 state で反映済み。ここでは費目（投資/ランニング/マシンメンテ）を戻す。
+  const historySeedAppliedRef = useRef(false)
+  function applyHistorySeed(values: MasterValue[]) {
+    if (!initialRequest || historySeedAppliedRef.current) return
+    historySeedAppliedRef.current = true
+    // 新しい履歴: 送信時の入力状態をそのまま復元（単価・数量・手入力フラグまで一致）
+    if (seedState) {
+      applyFormState(seedState)
+      return
+    }
+    restoreLegacyCosts(values, initialRequest)
+  }
+
+  // 旧履歴（formState なし）: 保存済みの費目別実効額から単価・数量を逆算して戻す。
+  // マスタ既定値と同額の費目は触らず、異なる費目だけ手入力扱いにする（ロイヤリティ等の再適用で消えないように）。
+  function restoreLegacyCosts(values: MasterValue[], req: SimulationRequestInput) {
+    const rate = parseInt(seedRoyalty, 10) as 0 | 10 | 15
+    const model = withAppManagedInvestmentItems(resolveMasterFormModel(values, rate))
+    const floor = Math.max(0, Number(req.floorAreaTsubo) || 0)
+
+    // 投資コスト
+    const savedInvestment = req.investmentBreakdown ?? {}
+    const invValues: Record<string, string> = {}
+    const invQuantities: Record<string, string> = {}
+    const invEdited = new Set<string>()
+    const appManaged = new Set([FITNESS_MACHINE_FIELD_ID, SECURITY_FIELD_ID, OPENING_PACKAGE_FIELD_ID])
+    for (const m of model.investment) {
+      const saved = Number(savedInvestment[m.fieldId])
+      if (!Number.isFinite(saved) || appManaged.has(m.fieldId)) continue
+      const savedAmount = Math.round(saved)
+      if (!hasQuantityInput(m.quantityBasis)) {
+        if (savedAmount !== Math.round(m.amount ?? 0)) {
+          invValues[m.fieldId] = String(savedAmount)
+          invEdited.add(m.fieldId)
+        }
+        continue
+      }
+      const factor =
+        m.quantityBasis === "perTsubo" ? floor
+          : m.quantityBasis === "perOccupancy" ? Math.max(0, m.tsuboPerUnit || 0)
+            : 1
+      const solved = solveUnitAndQuantity(savedAmount, m.unitAmount ?? 0, m.quantity ?? 0, factor)
+      if (solved) {
+        invValues[m.fieldId] = String(solved.unit)
+        invQuantities[m.fieldId] = String(solved.quantity)
+        invEdited.add(m.fieldId)
+      }
+    }
+
+    // アプリ側算出の投資費目（フィットネスマシン費・ALSOK・USEN導入費・開業前パッケージ費）は、自動算出値と違うときだけ固定する
+    const quantityNumbers = Object.fromEntries(
+      model.investment
+        .filter((m) => hasQuantityInput(m.quantityBasis))
+        .map((m) => [m.fieldId, Number(invQuantities[m.fieldId] ?? m.quantity ?? 0)]),
+    )
+    const autoInvestment: Record<string, number> = {
+      [FITNESS_MACHINE_FIELD_ID]: getAddressBasedFitnessMachineCost(
+        seedRoyalty, address, floorArea, resolveInvestmentTsuboReduction(values, quantityNumbers),
+      ),
+      [SECURITY_FIELD_ID]: computeSecurityIntroCost(floor, securityConfig),
+      [OPENING_PACKAGE_FIELD_ID]: computeOpeningPackageCost(floor, rate, openingPackageConfig),
+    }
+    let fitnessManual = false
+    for (const fieldId of appManaged) {
+      const saved = Number(savedInvestment[fieldId])
+      if (!Number.isFinite(saved) || Math.round(saved) === autoInvestment[fieldId]) continue
+      invValues[fieldId] = String(Math.round(saved))
+      invEdited.add(fieldId)
+      if (fieldId === FITNESS_MACHINE_FIELD_ID) fitnessManual = true
+    }
+
+    // ランニングコスト（runningCostBreakdown は坪数換算後の月額）
+    const savedRunning = Object.fromEntries((req.runningCostBreakdown ?? []).map((i) => [i.id, Number(i.monthlyAmount)]))
+    const runValues: Record<string, string> = {}
+    const runQuantities: Record<string, string> = {}
+    const runEdited = new Set<string>()
+    for (const m of model.running) {
+      const saved = savedRunning[m.fieldId]
+      if (!Number.isFinite(saved)) continue
+      const savedAmount = Math.round(saved)
+      // 実効額の算出（runningEffectiveByField）と同じ分岐: perTsubo=単価×坪×数量／fixed=単価×数量／その他=入力値
+      if (m.quantityBasis === "perTsubo" || m.quantityBasis === "fixed") {
+        const factor = m.quantityBasis === "perTsubo" ? floor : 1
+        const solved = solveUnitAndQuantity(savedAmount, m.unitAmount ?? 0, m.quantity ?? 1, factor)
+        if (solved) {
+          runValues[m.fieldId] = String(solved.unit)
+          runQuantities[m.fieldId] = String(solved.quantity)
+          runEdited.add(m.fieldId)
+        }
+        continue
+      }
+      const defaultRaw = hasQuantityInput(m.quantityBasis) ? m.unitAmount : m.amount
+      if (savedAmount !== Math.round(defaultRaw ?? 0)) {
+        runValues[m.fieldId] = String(savedAmount)
+        runEdited.add(m.fieldId)
+      }
+    }
+
+    // 防犯カメラ(USEN)・モニター(USEN)（固定枠）: 台数は坪数から自動算出なので単価だけ逆算する
+    const cameraCount = computeDeviceCount(floor, securityConfig.cameraCountRule)
+    const monitorCount = computeDeviceCount(floor, securityConfig.monitorCountRule)
+    const savedCamera = savedRunning[SECURITY_CAMERA_RUNNING_FIELD_ID]
+    const savedMonitor = savedRunning[SECURITY_MONITOR_RUNNING_FIELD_ID]
+
+    setInvestmentValues((prev) => ({ ...prev, ...invValues }))
+    setInvestmentQuantities((prev) => ({ ...prev, ...invQuantities }))
+    setEditedInvestmentFields(invEdited)
+    if (fitnessManual) setIsFitnessMachineCostManual(true)
+    setRunningValues((prev) => ({ ...prev, ...runValues }))
+    setRunningQuantities((prev) => ({ ...prev, ...runQuantities }))
+    setEditedRunningFields(runEdited)
+    if (Number.isFinite(savedCamera) && cameraCount > 0) setSecurityCameraUnitPrice(String(Math.round(savedCamera / cameraCount)))
+    if (Number.isFinite(savedMonitor) && monitorCount > 0) setSecurityMonitorUnitPrice(String(Math.round(savedMonitor / monitorCount)))
+
+    // マシンメンテナンス費（固定枠）: 自動算出値と違えば手入力扱いで固定する
+    const savedMaintenance = Number(req.machineMaintenanceCost)
+    if (Number.isFinite(savedMaintenance)) {
+      const autoMaintenance = getAutoMachineMaintenanceCost(address, floorArea, seedRoyalty, machineMaintenanceConfig)
+      if (Math.round(savedMaintenance) !== Math.round(autoMaintenance)) {
+        setMachineMaintenanceCost(String(Math.round(savedMaintenance)))
+        setIsMachineMaintenanceManual(true)
+      }
     }
   }
 
@@ -1241,6 +1462,8 @@ export function SimulationForm({
         demographicsError,
         populationByRadius,
         populationByAgeRadius,
+        // 試算履歴に保存し「条件を変えて試算する」で入力状態を完全復元するため
+        formState: buildFormState(),
       }
 
       await onSubmitWithData?.(formData)

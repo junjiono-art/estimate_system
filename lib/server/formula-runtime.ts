@@ -1,4 +1,5 @@
 import { MONTHLY_MEMBER_FEE_EX_TAX } from "@/lib/calc-constants"
+import { DEFAULT_CALC_PARAMS } from "@/lib/default-calc-params"
 import type { FormulaSetRecordLike, FormulaToken } from "@/lib/formula-types"
 import type { CalcParameterConfig, SimulationRequestInput } from "@/lib/types"
 
@@ -34,41 +35,49 @@ export function buildInitialPhaseContext(
   if (!input) return {}
 
   const { km1Ring = 0, km3Ring = 0, km5Ring = 0 } = input.populationByRadius ?? {}
+  const ci = calcParams?.competitorImpact
+  const defCi = DEFAULT_CALC_PARAMS.competitorImpact
+  const catchmentRate = (loc: "urban" | "suburban" | "rural", ring: "km1" | "km3" | "km5"): number =>
+    toNumber(calcParams?.catchment?.[loc]?.[ring], toNumber(DEFAULT_CALC_PARAMS.catchment?.[loc]?.[ring], 0))
 
   return {
     floorAreaTsubo: toNumber(input.floorAreaTsubo, 0),
     competitorCount: toNumber(input.competitorCount, 0),
     // locationType: 0=suburban, 1=urban, 2=rural
     locationType: input.locationType === "urban" ? 1 : input.locationType === "rural" ? 2 : 0,
-    populationKm1Ring: km1Ring,
-    populationKm3Ring: km3Ring,
-    populationKm5Ring: km5Ring,
+    // 数値化してから渡す（コード側 resolveInitialJoiners の Number() と揃える）。
+    // 文字列のまま渡すと "8234"+"60345" のような文字列連結になり、初月入会人数が狂う。
+    populationKm1Ring: toNumber(km1Ring, 0),
+    populationKm3Ring: toNumber(km3Ring, 0),
+    populationKm5Ring: toNumber(km5Ring, 0),
     rentPerTsubo: toNumber(input.rentPerTsubo, 0),
     runningCostTotal: toNumber(input.runningCostTotal, 0),
     // 競合影響率（initialJoiners 式が参照）。パラメータ連動維持。
     // 入力欄 E78 は件数ごとに個別（1件=5%/2件=10%/3件=15%/4件=20%/5件=25%、0件は0%）。
-    competitorImpactNone: toNumber(calcParams?.competitorImpact?.none, 0),
+    // 欠落時は 0 ではなく既定値で補う（コード側 resolveInitialJoiners と同じ挙動にするため）。
+    competitorImpactNone: toNumber(ci?.none, toNumber(defCi.none, 0)),
     competitorImpactFor1: toNumber(
-      calcParams?.competitorImpact?.for1,
+      ci?.for1,
       // for1 を持たない旧レコードは upTo2 にフォールバック（従来挙動）
-      toNumber(calcParams?.competitorImpact?.upTo2, 0),
+      toNumber(ci?.upTo2, toNumber(defCi.upTo2, 0)),
     ),
-    competitorImpactUpTo2: toNumber(calcParams?.competitorImpact?.upTo2, 0),
-    competitorImpactFor3: toNumber(calcParams?.competitorImpact?.for3, 0),
-    competitorImpactFor4: toNumber(calcParams?.competitorImpact?.for4, 0),
-    competitorImpactOver4: toNumber(calcParams?.competitorImpact?.over4, 0),
+    competitorImpactUpTo2: toNumber(ci?.upTo2, toNumber(defCi.upTo2, 0)),
+    competitorImpactFor3: toNumber(ci?.for3, toNumber(defCi.for3, 0)),
+    competitorImpactFor4: toNumber(ci?.for4, toNumber(defCi.for4, 0)),
+    competitorImpactOver4: toNumber(ci?.over4, toNumber(defCi.over4, 0)),
 
     // 商圏獲得率（入力欄 E59/F59/G59）。立地タイプで変わるため initialJoiners 式が参照する。
     // 以前は式セット側が郊外型の値を直値で持っており、都市型・田舎型で乖離していた（不具合一覧 #31）。
-    catchmentUrbanKm1: toNumber(calcParams?.catchment?.urban?.km1, 0),
-    catchmentUrbanKm3: toNumber(calcParams?.catchment?.urban?.km3, 0),
-    catchmentUrbanKm5: toNumber(calcParams?.catchment?.urban?.km5, 0),
-    catchmentSuburbanKm1: toNumber(calcParams?.catchment?.suburban?.km1, 0),
-    catchmentSuburbanKm3: toNumber(calcParams?.catchment?.suburban?.km3, 0),
-    catchmentSuburbanKm5: toNumber(calcParams?.catchment?.suburban?.km5, 0),
-    catchmentRuralKm1: toNumber(calcParams?.catchment?.rural?.km1, 0),
-    catchmentRuralKm3: toNumber(calcParams?.catchment?.rural?.km3, 0),
-    catchmentRuralKm5: toNumber(calcParams?.catchment?.rural?.km5, 0),
+    // 欠落時に 0 で埋めると初月入会人数が0になり会員数推移が大きく下振れするため、既定値で補う（不具合一覧 #41）。
+    catchmentUrbanKm1: catchmentRate("urban", "km1"),
+    catchmentUrbanKm3: catchmentRate("urban", "km3"),
+    catchmentUrbanKm5: catchmentRate("urban", "km5"),
+    catchmentSuburbanKm1: catchmentRate("suburban", "km1"),
+    catchmentSuburbanKm3: catchmentRate("suburban", "km3"),
+    catchmentSuburbanKm5: catchmentRate("suburban", "km5"),
+    catchmentRuralKm1: catchmentRate("rural", "km1"),
+    catchmentRuralKm3: catchmentRate("rural", "km3"),
+    catchmentRuralKm5: catchmentRate("rural", "km5"),
   }
 }
 
